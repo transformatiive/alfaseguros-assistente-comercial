@@ -100,13 +100,86 @@ export const GetConversationResponse = zod.object({
   runDate: zod.string(),
   customerPhone: zod.string(),
   callIds: zod.array(zod.string()),
+  agentId: zod.string().nullable(),
+  agentName: zod.string().nullable(),
+  durationSec: zod.number().nullable(),
+  recordingUrls: zod.array(zod.string()),
   analysis: zod.union([
     zod.object({
-      narrative: zod.string(),
-      proceduralFlags: zod.array(zod.string()),
-      coachingFeedback: zod.string(),
-      specialistSuggestions: zod.string(),
-      riskAssessment: zod.string(),
+      schemaVersion: zod
+        .number()
+        .optional()
+        .describe(
+          "1 = legacy string flags; 2 = structured flags + enriched fields",
+        ),
+      ringoverSummary: zod
+        .string()
+        .nullish()
+        .describe(
+          "Ringover's own AI-generated call summary, surfaced verbatim",
+        ),
+      narrative: zod
+        .string()
+        .describe(
+          "End-to-end story of the customer's request across all calls (and tickets, when linked)",
+        ),
+      proceduralFlags: zod.array(
+        zod.object({
+          severity: zod.enum(["alta", "media", "baixa"]),
+          label: zod.string(),
+          detail: zod.string(),
+        }),
+      ),
+      positivePoints: zod.array(zod.string()).optional(),
+      supervisorFeedback: zod
+        .string()
+        .describe(
+          "Coaching message addressed to the operator by name (EU-PT, coaching tone)",
+        ),
+      specialistSuggestions: zod
+        .string()
+        .describe("Cross-sell \/ product expertise suggestions"),
+      followUp: zod
+        .union([
+          zod.object({
+            action: zod.string(),
+            deadline: zod.string().nullable(),
+          }),
+          zod.null(),
+        ])
+        .optional(),
+      riskAssessment: zod
+        .string()
+        .describe(
+          'One-line verdict on the case (e.g., \"Lead em risco — sem prazo concreto\")',
+        ),
+      sentiment: zod
+        .union([
+          zod.literal("positivo"),
+          zod.literal("neutro"),
+          zod.literal("negativo"),
+          zod.literal(null),
+        ])
+        .nullish(),
+      riskLevel: zod
+        .union([
+          zod.literal("baixo"),
+          zod.literal("medio"),
+          zod.literal("alto"),
+          zod.literal(null),
+        ])
+        .nullish(),
+      leadTemperature: zod
+        .union([
+          zod.literal("quente"),
+          zod.literal("morno"),
+          zod.literal("frio"),
+          zod.literal("tire_kicker"),
+          zod.literal("ja_cliente"),
+          zod.literal(null),
+        ])
+        .nullish(),
+      tags: zod.array(zod.string()).optional(),
     }),
     zod.null(),
   ]),

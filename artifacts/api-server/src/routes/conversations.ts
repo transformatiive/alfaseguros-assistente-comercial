@@ -58,10 +58,39 @@ router.get("/conversations/:date/:conversationId", async (req, res): Promise<voi
     runDate: conversation.runDate,
     customerPhone: conversation.customerPhone,
     callIds: conversation.callIds ?? [],
-    analysis: conversation.analysisJson ?? null,
+    agentId: conversation.agentId ?? null,
+    agentName: conversation.agentName ?? null,
+    durationSec: conversation.durationSec ?? null,
+    recordingUrls: conversation.recordingUrls ?? [],
+    analysis: normalizeAnalysis(conversation.analysisJson),
     costUsd: conversation.costUsd ? Number(conversation.costUsd) : null,
     createdAt: conversation.createdAt.toISOString(),
   });
 });
+
+function normalizeAnalysis(raw: unknown): unknown {
+  if (raw == null || typeof raw !== "object") return null;
+  const a = raw as Record<string, unknown>;
+  const flags = Array.isArray(a.proceduralFlags)
+    ? a.proceduralFlags.map((f) =>
+        typeof f === "string" ? { severity: "media", label: f, detail: "" } : f,
+      )
+    : [];
+  return {
+    schemaVersion: typeof a.schemaVersion === "number" ? a.schemaVersion : 1,
+    ringoverSummary: a.ringoverSummary ?? null,
+    narrative: a.narrative ?? "",
+    proceduralFlags: flags,
+    positivePoints: Array.isArray(a.positivePoints) ? a.positivePoints : [],
+    supervisorFeedback: a.supervisorFeedback ?? a.coachingFeedback ?? "",
+    specialistSuggestions: a.specialistSuggestions ?? "",
+    followUp: a.followUp ?? null,
+    riskAssessment: a.riskAssessment ?? "",
+    sentiment: a.sentiment ?? null,
+    riskLevel: a.riskLevel ?? null,
+    leadTemperature: a.leadTemperature ?? null,
+    tags: Array.isArray(a.tags) ? a.tags : [],
+  };
+}
 
 export default router;

@@ -293,25 +293,82 @@ components:
         - costUsd
         - createdAt
 
+    ProceduralFlag:
+      type: object
+      properties:
+        severity:
+          type: string
+          enum: [alta, media, baixa]
+        label:
+          type: string
+        detail:
+          type: string
+      required:
+        - severity
+        - label
+        - detail
+
+    FollowUp:
+      type: object
+      properties:
+        action:
+          type: string
+        deadline:
+          type: ["string", "null"]
+      required:
+        - action
+        - deadline
+
     ConversationAnalysis:
       type: object
       properties:
+        schemaVersion:
+          type: integer
+          description: 1 = legacy string flags; 2 = structured flags + enriched fields
+        ringoverSummary:
+          type: ["string", "null"]
+          description: Ringover's own AI-generated call summary, surfaced verbatim
         narrative:
           type: string
+          description: End-to-end story of the customer's request across all calls (and tickets, when linked)
         proceduralFlags:
           type: array
           items:
+            $ref: "#/components/schemas/ProceduralFlag"
+        positivePoints:
+          type: array
+          items:
             type: string
-        coachingFeedback:
+        supervisorFeedback:
           type: string
+          description: Coaching message addressed to the operator by name (EU-PT, coaching tone)
         specialistSuggestions:
           type: string
+          description: Cross-sell / product expertise suggestions
+        followUp:
+          oneOf:
+            - $ref: "#/components/schemas/FollowUp"
+            - type: "null"
         riskAssessment:
           type: string
+          description: One-line verdict on the case (e.g., "Lead em risco — sem prazo concreto")
+        sentiment:
+          type: ["string", "null"]
+          enum: [positivo, neutro, negativo, null]
+        riskLevel:
+          type: ["string", "null"]
+          enum: [baixo, medio, alto, null]
+        leadTemperature:
+          type: ["string", "null"]
+          enum: [quente, morno, frio, tire_kicker, ja_cliente, null]
+        tags:
+          type: array
+          items:
+            type: string
       required:
         - narrative
         - proceduralFlags
-        - coachingFeedback
+        - supervisorFeedback
         - specialistSuggestions
         - riskAssessment
 
@@ -328,6 +385,16 @@ components:
           type: array
           items:
             type: string
+        agentId:
+          type: ["string", "null"]
+        agentName:
+          type: ["string", "null"]
+        durationSec:
+          type: ["integer", "null"]
+        recordingUrls:
+          type: array
+          items:
+            type: string
         analysis:
           oneOf:
             - $ref: "#/components/schemas/ConversationAnalysis"
@@ -341,6 +408,10 @@ components:
         - runDate
         - customerPhone
         - callIds
+        - agentId
+        - agentName
+        - durationSec
+        - recordingUrls
         - analysis
         - costUsd
         - createdAt

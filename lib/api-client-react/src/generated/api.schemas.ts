@@ -56,12 +56,94 @@ export interface ConversationSummary {
   createdAt: string;
 }
 
+export type ProceduralFlagSeverity =
+  (typeof ProceduralFlagSeverity)[keyof typeof ProceduralFlagSeverity];
+
+export const ProceduralFlagSeverity = {
+  alta: "alta",
+  media: "media",
+  baixa: "baixa",
+} as const;
+
+export interface ProceduralFlag {
+  severity: ProceduralFlagSeverity;
+  label: string;
+  detail: string;
+}
+
+export interface FollowUp {
+  action: string;
+  /** @nullable */
+  deadline: string | null;
+}
+
+/**
+ * @nullable
+ */
+export type ConversationAnalysisSentiment =
+  | (typeof ConversationAnalysisSentiment)[keyof typeof ConversationAnalysisSentiment]
+  | null;
+
+export const ConversationAnalysisSentiment = {
+  positivo: "positivo",
+  neutro: "neutro",
+  negativo: "negativo",
+} as const;
+
+/**
+ * @nullable
+ */
+export type ConversationAnalysisRiskLevel =
+  | (typeof ConversationAnalysisRiskLevel)[keyof typeof ConversationAnalysisRiskLevel]
+  | null;
+
+export const ConversationAnalysisRiskLevel = {
+  baixo: "baixo",
+  medio: "medio",
+  alto: "alto",
+} as const;
+
+/**
+ * @nullable
+ */
+export type ConversationAnalysisLeadTemperature =
+  | (typeof ConversationAnalysisLeadTemperature)[keyof typeof ConversationAnalysisLeadTemperature]
+  | null;
+
+export const ConversationAnalysisLeadTemperature = {
+  quente: "quente",
+  morno: "morno",
+  frio: "frio",
+  tire_kicker: "tire_kicker",
+  ja_cliente: "ja_cliente",
+} as const;
+
 export interface ConversationAnalysis {
+  /** 1 = legacy string flags; 2 = structured flags + enriched fields */
+  schemaVersion?: number;
+  /**
+   * Ringover's own AI-generated call summary, surfaced verbatim
+   * @nullable
+   */
+  ringoverSummary?: string | null;
+  /** End-to-end story of the customer's request across all calls (and tickets, when linked) */
   narrative: string;
-  proceduralFlags: string[];
-  coachingFeedback: string;
+  proceduralFlags: ProceduralFlag[];
+  positivePoints?: string[];
+  /** Coaching message addressed to the operator by name (EU-PT, coaching tone) */
+  supervisorFeedback: string;
+  /** Cross-sell / product expertise suggestions */
   specialistSuggestions: string;
+  followUp?: FollowUp | null;
+  /** One-line verdict on the case (e.g., "Lead em risco — sem prazo concreto") */
   riskAssessment: string;
+  /** @nullable */
+  sentiment?: ConversationAnalysisSentiment;
+  /** @nullable */
+  riskLevel?: ConversationAnalysisRiskLevel;
+  /** @nullable */
+  leadTemperature?: ConversationAnalysisLeadTemperature;
+  tags?: string[];
 }
 
 export interface ConversationDetail {
@@ -69,6 +151,13 @@ export interface ConversationDetail {
   runDate: string;
   customerPhone: string;
   callIds: string[];
+  /** @nullable */
+  agentId: string | null;
+  /** @nullable */
+  agentName: string | null;
+  /** @nullable */
+  durationSec: number | null;
+  recordingUrls: string[];
   analysis: ConversationAnalysis | null;
   /** @nullable */
   costUsd: number | null;
