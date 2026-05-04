@@ -55,16 +55,78 @@ export const GetDailySummaryParams = zod.object({
   date: zod.coerce.string(),
 });
 
-export const GetDailySummaryResponse = zod.object({
-  id: zod.number(),
-  date: zod.string(),
-  workingWell: zod.array(zod.string()),
-  toImprove: zod.array(zod.string()),
-  risks: zod.array(zod.string()),
-  closingRateRecommendations: zod.array(zod.string()),
-  automationOpportunities: zod.array(zod.string()),
-  createdAt: zod.string(),
-});
+export const GetDailySummaryResponse = zod
+  .object({
+    id: zod.number(),
+    date: zod.string(),
+    executiveSummary: zod
+      .string()
+      .describe("1-2 sentence intro shown in the black banner"),
+    workingWell: zod
+      .object({
+        paragraph: zod.string().describe("1-2 sentence framing, EU-PT"),
+        bullets: zod
+          .array(zod.string())
+          .describe(
+            "3-5 specific bullets with operator names and concrete examples",
+          ),
+      })
+      .describe(
+        "A single section of the daily summary (working well \/ to improve \/ risks \/ closing-rate recs)",
+      ),
+    toImprove: zod
+      .object({
+        paragraph: zod.string().describe("1-2 sentence framing, EU-PT"),
+        bullets: zod
+          .array(zod.string())
+          .describe(
+            "3-5 specific bullets with operator names and concrete examples",
+          ),
+      })
+      .describe(
+        "A single section of the daily summary (working well \/ to improve \/ risks \/ closing-rate recs)",
+      ),
+    risks: zod
+      .object({
+        paragraph: zod.string().describe("1-2 sentence framing, EU-PT"),
+        bullets: zod
+          .array(zod.string())
+          .describe(
+            "3-5 specific bullets with operator names and concrete examples",
+          ),
+      })
+      .describe(
+        "A single section of the daily summary (working well \/ to improve \/ risks \/ closing-rate recs)",
+      ),
+    closingRateRecommendations: zod
+      .object({
+        paragraph: zod.string().describe("1-2 sentence framing, EU-PT"),
+        bullets: zod
+          .array(zod.string())
+          .describe(
+            "3-5 specific bullets with operator names and concrete examples",
+          ),
+      })
+      .describe(
+        "A single section of the daily summary (working well \/ to improve \/ risks \/ closing-rate recs)",
+      ),
+    automationOpportunities: zod.object({
+      paragraph: zod.string(),
+      items: zod.array(
+        zod.object({
+          pattern: zod
+            .string()
+            .describe("The recurring query \/ interaction pattern"),
+          conversationCountEstimate: zod.number(),
+          channel: zod.string().describe("e.g. Telefone, Email, Self-service"),
+          feasibility: zod.enum(["alta", "media", "baixa"]),
+          notes: zod.string(),
+        }),
+      ),
+    }),
+    createdAt: zod.string(),
+  })
+  .describe("Daily executive summary (canonical structure per HANDOVER §2)");
 
 /**
  * Returns a list of all analyzed conversations for the given date (YYYY-MM-DD).
@@ -95,6 +157,8 @@ export const GetConversationParams = zod.object({
   conversationId: zod.coerce.number(),
 });
 
+export const getConversationResponseAnalysisOneQualidadeGlobalMax = 5;
+
 export const GetConversationResponse = zod.object({
   id: zod.number(),
   runDate: zod.string(),
@@ -105,82 +169,87 @@ export const GetConversationResponse = zod.object({
   durationSec: zod.number().nullable(),
   recordingUrls: zod.array(zod.string()),
   analysis: zod.union([
-    zod.object({
-      schemaVersion: zod
-        .number()
-        .optional()
-        .describe(
-          "1 = legacy string flags; 2 = structured flags + enriched fields",
+    zod
+      .object({
+        categoria: zod
+          .string()
+          .describe("e.g. Cotação, Renovação, Sinistro, Informação, Pós-venda"),
+        produto: zod
+          .string()
+          .describe(
+            "e.g. TVDE, Multirriscos, Auto, Saúde, Condomínio, Empresas",
+          ),
+        narrativaConversa: zod
+          .string()
+          .describe(
+            "End-to-end story of the customer's request across all legs",
+          ),
+        arcoConversa: zod
+          .string()
+          .describe(
+            'Short phrase describing the arc, e.g. \"Frio→Quente\", \"Estagnado\", \"Direto ao Fecho\", \"Esfriou\"',
+          ),
+        sentimentoClienteEvolucao: zod
+          .string()
+          .describe(
+            "Evolution of customer sentiment across legs (rendered in italic)",
+          ),
+        qualidadeGlobal: zod
+          .number()
+          .min(1)
+          .max(getConversationResponseAnalysisOneQualidadeGlobalMax)
+          .describe("Overall quality stars (1-5)"),
+        continuidade: zod
+          .string()
+          .describe(
+            "Continuity assessment — empty if single-leg, warning text if handoffs failed",
+          ),
+        desviosProcedimento: zod.array(
+          zod
+            .object({
+              severidade: zod.enum(["alta", "media", "baixa"]),
+              titulo: zod
+                .string()
+                .describe(
+                  'Short label, e.g. \"Sem confirmação de identidade\"',
+                ),
+              detalhe: zod
+                .string()
+                .describe(
+                  "Concrete description of what was missed and why it matters",
+                ),
+              chamadaEspecifica: zod
+                .string()
+                .nullable()
+                .describe(
+                  'Reference to a specific leg\/time, e.g. \"16:06 (chamada 1)\"',
+                ),
+            })
+            .describe(
+              "A specific deviation from expected procedure observed in the conversation.",
+            ),
         ),
-      ringoverSummary: zod
-        .string()
-        .nullish()
-        .describe(
-          "Ringover's own AI-generated call summary, surfaced verbatim",
-        ),
-      narrative: zod
-        .string()
-        .describe(
-          "End-to-end story of the customer's request across all calls (and tickets, when linked)",
-        ),
-      proceduralFlags: zod.array(
-        zod.object({
-          severity: zod.enum(["alta", "media", "baixa"]),
-          label: zod.string(),
-          detail: zod.string(),
-        }),
+        pontosPositivos: zod.array(zod.string()),
+        feedbackSupervisor: zod
+          .string()
+          .describe(
+            "Coaching message addressed to the operator by name (EU-PT, coaching tone)",
+          ),
+        sugestaoEspecialista: zod
+          .string()
+          .describe("Cross-sell \/ product-expertise suggestion"),
+        followUpNecessario: zod.boolean(),
+        followUpDescricao: zod
+          .string()
+          .describe(
+            "What to do and by when (empty when followUpNecessario is false)",
+          ),
+        riscoPerdaLead: zod.enum(["baixo", "medio", "alto"]),
+        tags: zod.array(zod.string()),
+      })
+      .describe(
+        "Per-conversation analysis (canonical schema — EU-PT field names per HANDOVER §2)",
       ),
-      positivePoints: zod.array(zod.string()).optional(),
-      supervisorFeedback: zod
-        .string()
-        .describe(
-          "Coaching message addressed to the operator by name (EU-PT, coaching tone)",
-        ),
-      specialistSuggestions: zod
-        .string()
-        .describe("Cross-sell \/ product expertise suggestions"),
-      followUp: zod
-        .union([
-          zod.object({
-            action: zod.string(),
-            deadline: zod.string().nullable(),
-          }),
-          zod.null(),
-        ])
-        .optional(),
-      riskAssessment: zod
-        .string()
-        .describe(
-          'One-line verdict on the case (e.g., \"Lead em risco — sem prazo concreto\")',
-        ),
-      sentiment: zod
-        .union([
-          zod.literal("positivo"),
-          zod.literal("neutro"),
-          zod.literal("negativo"),
-          zod.literal(null),
-        ])
-        .nullish(),
-      riskLevel: zod
-        .union([
-          zod.literal("baixo"),
-          zod.literal("medio"),
-          zod.literal("alto"),
-          zod.literal(null),
-        ])
-        .nullish(),
-      leadTemperature: zod
-        .union([
-          zod.literal("quente"),
-          zod.literal("morno"),
-          zod.literal("frio"),
-          zod.literal("tire_kicker"),
-          zod.literal("ja_cliente"),
-          zod.literal(null),
-        ])
-        .nullish(),
-      tags: zod.array(zod.string()).optional(),
-    }),
     zod.null(),
   ]),
   costUsd: zod.number().nullable(),
@@ -194,17 +263,24 @@ export const ListOperatorSummariesParams = zod.object({
   date: zod.coerce.string(),
 });
 
-export const ListOperatorSummariesResponseItem = zod.object({
-  id: zod.number(),
-  date: zod.string(),
-  operatorId: zod.string(),
-  operatorName: zod.string(),
-  strengths: zod.array(zod.string()),
-  blindSpots: zod.array(zod.string()),
-  closingObservations: zod.string(),
-  recommendations: zod.array(zod.string()),
-  createdAt: zod.string(),
-});
+export const ListOperatorSummariesResponseItem = zod
+  .object({
+    id: zod.number(),
+    date: zod.string(),
+    operatorId: zod.string(),
+    operatorName: zod.string(),
+    paragraphOverview: zod
+      .string()
+      .describe("2-3 sentence overview of the operator's day"),
+    strengths: zod.array(zod.string()),
+    blindSpots: zod.array(zod.string()),
+    closingRateObservations: zod
+      .string()
+      .describe("1-2 sentence note on closing-rate behavior"),
+    coachingRecommendations: zod.array(zod.string()),
+    createdAt: zod.string(),
+  })
+  .describe("Per-operator coaching summary (canonical schema per HANDOVER §2)");
 export const ListOperatorSummariesResponse = zod.array(
   ListOperatorSummariesResponseItem,
 );

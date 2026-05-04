@@ -43,11 +43,21 @@ export default function Operadores() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Closing observations */}
-                {op.closingObservations && (
-                  <div className="flex items-start gap-2.5 p-3 rounded-md bg-muted/50">
-                    <TrendingUp className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-                    <p className="text-sm text-foreground/80 leading-relaxed">{op.closingObservations}</p>
+                {op.paragraphOverview && (
+                  <div className="rounded-md bg-stone-900 text-stone-50 p-4">
+                    <p
+                      className="text-sm leading-relaxed italic"
+                      style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+                    >
+                      {op.paragraphOverview}
+                    </p>
+                  </div>
+                )}
+
+                {op.closingRateObservations && (
+                  <div className="flex items-start gap-2.5 p-3 rounded-md bg-blue-50 border border-blue-200">
+                    <TrendingUp className="h-4 w-4 text-blue-700 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-foreground/80 leading-relaxed">{op.closingRateObservations}</p>
                   </div>
                 )}
 
@@ -89,15 +99,14 @@ export default function Operadores() {
                   )}
                 </div>
 
-                {/* Recommendations */}
-                {op.recommendations.length > 0 && (
+                {op.coachingRecommendations.length > 0 && (
                   <div>
                     <div className="flex items-center gap-1.5 mb-2">
                       <Lightbulb className="h-3.5 w-3.5 text-blue-500" />
-                      <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Recomendações</p>
+                      <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Recomendações de Coaching</p>
                     </div>
                     <ul className="space-y-1">
-                      {op.recommendations.map((r, i) => (
+                      {op.coachingRecommendations.map((r, i) => (
                         <li key={i} className="text-sm text-foreground/80 flex items-start gap-2">
                           <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-blue-400 flex-shrink-0" />
                           {r}

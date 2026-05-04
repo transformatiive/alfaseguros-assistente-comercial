@@ -1,6 +1,6 @@
 import { format, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarIcon, RefreshCw, CheckCircle2, AlertTriangle, AlertOctagon, Target, Bot, Loader2, TrendingUp, MessageSquare, DollarSign } from "lucide-react";
+import { CalendarIcon, RefreshCw, Loader2, TrendingUp, MessageSquare, DollarSign } from "lucide-react";
 import { useDateContext } from "@/lib/date-context";
 import {
   useGetDailySummary,
@@ -18,43 +18,42 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 
-const summarySection = [
+const sectionStyles = [
   {
     key: "workingWell" as const,
     icon: "✓",
     label: "O que está a funcionar bem",
-    color: "text-emerald-600",
+    color: "text-emerald-700",
     bg: "bg-emerald-50 border-emerald-200",
   },
   {
     key: "toImprove" as const,
     icon: "⚠",
     label: "O que pode ser melhorado",
-    color: "text-amber-600",
+    color: "text-amber-700",
     bg: "bg-amber-50 border-amber-200",
   },
   {
     key: "risks" as const,
     icon: "🚨",
     label: "Riscos identificados",
-    color: "text-red-600",
+    color: "text-red-700",
     bg: "bg-red-50 border-red-200",
   },
   {
     key: "closingRateRecommendations" as const,
     icon: "🎯",
     label: "Recomendações para fechar mais",
-    color: "text-blue-600",
+    color: "text-blue-700",
     bg: "bg-blue-50 border-blue-200",
   },
-  {
-    key: "automationOpportunities" as const,
-    icon: "🤖",
-    label: "Oportunidades de Automação",
-    color: "text-violet-600",
-    bg: "bg-violet-50 border-violet-200",
-  },
 ];
+
+const FEASIBILITY_STYLES: Record<string, string> = {
+  alta: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  media: "bg-amber-100 text-amber-700 border-amber-200",
+  baixa: "bg-stone-100 text-stone-700 border-stone-200",
+};
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -227,30 +226,95 @@ export default function Dashboard() {
             ))}
           </div>
         ) : summary ? (
-          <div className="space-y-3">
-            {summarySection.map((section) => {
-              const items = summary[section.key];
-              if (!items || items.length === 0) return null;
-              return (
-                <div
-                  key={section.key}
-                  className={cn("rounded-lg border p-4", section.bg)}
+          <div className="space-y-4">
+            {summary.executiveSummary && (
+              <div className="rounded-lg bg-stone-900 text-stone-50 p-5">
+                <p
+                  className="text-base leading-relaxed italic"
+                  style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
                 >
-                  <div className={cn("flex items-center gap-2 mb-2 font-medium text-sm", section.color)}>
-                    <span className="text-base">{section.icon}</span>
-                    {section.label}
+                  {summary.executiveSummary}
+                </p>
+              </div>
+            )}
+
+            <div className="grid gap-3 lg:grid-cols-2">
+              {sectionStyles.map((section) => {
+                const sec = summary[section.key];
+                if (!sec || (!sec.paragraph && sec.bullets.length === 0)) return null;
+                return (
+                  <div
+                    key={section.key}
+                    className={cn("rounded-lg border p-4", section.bg)}
+                  >
+                    <div className={cn("flex items-center gap-2 mb-2 font-semibold text-sm uppercase tracking-wide", section.color)}>
+                      <span className="text-base">{section.icon}</span>
+                      {section.label}
+                    </div>
+                    {sec.paragraph && (
+                      <p className="text-sm text-foreground/80 leading-relaxed mb-2">
+                        {sec.paragraph}
+                      </p>
+                    )}
+                    {sec.bullets.length > 0 && (
+                      <ul className="space-y-1">
+                        {sec.bullets.map((b, i) => (
+                          <li key={i} className="text-sm text-foreground/80 flex items-start gap-2">
+                            <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-current flex-shrink-0 opacity-60" />
+                            {b}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
-                  <ul className="space-y-1">
-                    {items.map((item, i) => (
-                      <li key={i} className="text-sm text-foreground/80 flex items-start gap-2">
-                        <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-current flex-shrink-0 opacity-60" />
-                        {item}
-                      </li>
+                );
+              })}
+            </div>
+
+            {summary.automationOpportunities &&
+              (summary.automationOpportunities.paragraph ||
+                summary.automationOpportunities.items.length > 0) && (
+                <div className="rounded-lg border bg-violet-50 border-violet-200 p-4">
+                  <div className="flex items-center gap-2 mb-2 font-semibold text-sm uppercase tracking-wide text-violet-700">
+                    <span className="text-base">🤖</span>
+                    Oportunidades de Automação
+                  </div>
+                  {summary.automationOpportunities.paragraph && (
+                    <p className="text-sm text-foreground/80 leading-relaxed mb-3">
+                      {summary.automationOpportunities.paragraph}
+                    </p>
+                  )}
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {summary.automationOpportunities.items.map((item, i) => (
+                      <div key={i} className="rounded-md bg-white border border-violet-200 p-3">
+                        <div className="flex items-start justify-between gap-2 flex-wrap">
+                          <p className="text-sm font-medium text-foreground">{item.pattern}</p>
+                          <Badge
+                            variant="outline"
+                            className={cn("text-[10px]", FEASIBILITY_STYLES[item.feasibility] ?? "")}
+                          >
+                            {item.feasibility}
+                          </Badge>
+                        </div>
+                        <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                          {item.channel && <span>{item.channel}</span>}
+                          {item.conversationCountEstimate > 0 && (
+                            <>
+                              <span>·</span>
+                              <span>~{item.conversationCountEstimate} conversas</span>
+                            </>
+                          )}
+                        </div>
+                        {item.notes && (
+                          <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                            {item.notes}
+                          </p>
+                        )}
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 </div>
-              );
-            })}
+              )}
           </div>
         ) : (
           <div className="rounded-lg border border-dashed p-8 text-center">

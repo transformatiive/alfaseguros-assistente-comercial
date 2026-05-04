@@ -71,24 +71,56 @@ router.get("/conversations/:date/:conversationId", async (req, res): Promise<voi
 function normalizeAnalysis(raw: unknown): unknown {
   if (raw == null || typeof raw !== "object") return null;
   const a = raw as Record<string, unknown>;
-  const flags = Array.isArray(a.proceduralFlags)
-    ? a.proceduralFlags.map((f) =>
-        typeof f === "string" ? { severity: "media", label: f, detail: "" } : f,
-      )
+  const desviosRaw = a.desviosProcedimento ?? a.proceduralFlags ?? [];
+  const desvios = Array.isArray(desviosRaw)
+    ? desviosRaw.map((f) => {
+        if (typeof f === "string") {
+          return { severidade: "media", titulo: f, detalhe: "", chamadaEspecifica: null };
+        }
+        if (f && typeof f === "object") {
+          const o = f as Record<string, unknown>;
+          return {
+            severidade: (o.severidade ?? o.severity ?? "media") as string,
+            titulo: (o.titulo ?? o.label ?? "") as string,
+            detalhe: (o.detalhe ?? o.detail ?? "") as string,
+            chamadaEspecifica: (o.chamadaEspecifica ?? null) as string | null,
+          };
+        }
+        return { severidade: "media", titulo: "", detalhe: "", chamadaEspecifica: null };
+      })
     : [];
+  const followUpObj =
+    typeof a.followUp === "object" && a.followUp != null
+      ? (a.followUp as Record<string, unknown>)
+      : null;
   return {
-    schemaVersion: typeof a.schemaVersion === "number" ? a.schemaVersion : 1,
-    ringoverSummary: a.ringoverSummary ?? null,
-    narrative: a.narrative ?? "",
-    proceduralFlags: flags,
-    positivePoints: Array.isArray(a.positivePoints) ? a.positivePoints : [],
-    supervisorFeedback: a.supervisorFeedback ?? a.coachingFeedback ?? "",
-    specialistSuggestions: a.specialistSuggestions ?? "",
-    followUp: a.followUp ?? null,
-    riskAssessment: a.riskAssessment ?? "",
-    sentiment: a.sentiment ?? null,
-    riskLevel: a.riskLevel ?? null,
-    leadTemperature: a.leadTemperature ?? null,
+    categoria: (a.categoria as string) ?? "",
+    produto: (a.produto as string) ?? "",
+    narrativaConversa: (a.narrativaConversa ?? a.narrative ?? "") as string,
+    arcoConversa: (a.arcoConversa as string) ?? "",
+    sentimentoClienteEvolucao: (a.sentimentoClienteEvolucao as string) ?? "",
+    qualidadeGlobal: typeof a.qualidadeGlobal === "number" ? a.qualidadeGlobal : 3,
+    continuidade: (a.continuidade as string) ?? "",
+    desviosProcedimento: desvios,
+    pontosPositivos: Array.isArray(a.pontosPositivos)
+      ? a.pontosPositivos
+      : Array.isArray(a.positivePoints)
+      ? a.positivePoints
+      : [],
+    feedbackSupervisor: (a.feedbackSupervisor ?? a.supervisorFeedback ?? a.coachingFeedback ?? "") as string,
+    sugestaoEspecialista: (a.sugestaoEspecialista ?? a.specialistSuggestions ?? "") as string,
+    followUpNecessario:
+      typeof a.followUpNecessario === "boolean"
+        ? a.followUpNecessario
+        : followUpObj != null,
+    followUpDescricao:
+      (a.followUpDescricao as string) ??
+      (followUpObj && typeof followUpObj.action === "string" ? followUpObj.action : "") ??
+      "",
+    riscoPerdaLead:
+      (a.riscoPerdaLead as string) ??
+      (a.riskLevel as string) ??
+      "baixo",
     tags: Array.isArray(a.tags) ? a.tags : [],
   };
 }

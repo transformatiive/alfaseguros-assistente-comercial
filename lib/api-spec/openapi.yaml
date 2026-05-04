@@ -293,84 +293,97 @@ components:
         - costUsd
         - createdAt
 
-    ProceduralFlag:
+    DesvioProcedimento:
       type: object
+      description: A specific deviation from expected procedure observed in the conversation.
       properties:
-        severity:
+        severidade:
           type: string
           enum: [alta, media, baixa]
-        label:
+        titulo:
           type: string
-        detail:
+          description: Short label, e.g. "Sem confirmação de identidade"
+        detalhe:
           type: string
-      required:
-        - severity
-        - label
-        - detail
-
-    FollowUp:
-      type: object
-      properties:
-        action:
-          type: string
-        deadline:
+          description: Concrete description of what was missed and why it matters
+        chamadaEspecifica:
           type: ["string", "null"]
+          description: Reference to a specific leg/time, e.g. "16:06 (chamada 1)"
       required:
-        - action
-        - deadline
+        - severidade
+        - titulo
+        - detalhe
+        - chamadaEspecifica
 
     ConversationAnalysis:
       type: object
+      description: Per-conversation analysis (canonical schema — EU-PT field names per HANDOVER §2)
       properties:
-        schemaVersion:
-          type: integer
-          description: 1 = legacy string flags; 2 = structured flags + enriched fields
-        ringoverSummary:
-          type: ["string", "null"]
-          description: Ringover's own AI-generated call summary, surfaced verbatim
-        narrative:
+        categoria:
           type: string
-          description: End-to-end story of the customer's request across all calls (and tickets, when linked)
-        proceduralFlags:
+          description: e.g. Cotação, Renovação, Sinistro, Informação, Pós-venda
+        produto:
+          type: string
+          description: e.g. TVDE, Multirriscos, Auto, Saúde, Condomínio, Empresas
+        narrativaConversa:
+          type: string
+          description: End-to-end story of the customer's request across all legs
+        arcoConversa:
+          type: string
+          description: Short phrase describing the arc, e.g. "Frio→Quente", "Estagnado", "Direto ao Fecho", "Esfriou"
+        sentimentoClienteEvolucao:
+          type: string
+          description: Evolution of customer sentiment across legs (rendered in italic)
+        qualidadeGlobal:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: Overall quality stars (1-5)
+        continuidade:
+          type: string
+          description: Continuity assessment — empty if single-leg, warning text if handoffs failed
+        desviosProcedimento:
           type: array
           items:
-            $ref: "#/components/schemas/ProceduralFlag"
-        positivePoints:
+            $ref: "#/components/schemas/DesvioProcedimento"
+        pontosPositivos:
           type: array
           items:
             type: string
-        supervisorFeedback:
+        feedbackSupervisor:
           type: string
           description: Coaching message addressed to the operator by name (EU-PT, coaching tone)
-        specialistSuggestions:
+        sugestaoEspecialista:
           type: string
-          description: Cross-sell / product expertise suggestions
-        followUp:
-          oneOf:
-            - $ref: "#/components/schemas/FollowUp"
-            - type: "null"
-        riskAssessment:
+          description: Cross-sell / product-expertise suggestion
+        followUpNecessario:
+          type: boolean
+        followUpDescricao:
           type: string
-          description: One-line verdict on the case (e.g., "Lead em risco — sem prazo concreto")
-        sentiment:
-          type: ["string", "null"]
-          enum: [positivo, neutro, negativo, null]
-        riskLevel:
-          type: ["string", "null"]
-          enum: [baixo, medio, alto, null]
-        leadTemperature:
-          type: ["string", "null"]
-          enum: [quente, morno, frio, tire_kicker, ja_cliente, null]
+          description: What to do and by when (empty when followUpNecessario is false)
+        riscoPerdaLead:
+          type: string
+          enum: [baixo, medio, alto]
         tags:
           type: array
           items:
             type: string
       required:
-        - narrative
-        - proceduralFlags
-        - supervisorFeedback
-        - specialistSuggestions
-        - riskAssessment
+        - categoria
+        - produto
+        - narrativaConversa
+        - arcoConversa
+        - sentimentoClienteEvolucao
+        - qualidadeGlobal
+        - continuidade
+        - desviosProcedimento
+        - pontosPositivos
+        - feedbackSupervisor
+        - sugestaoEspecialista
+        - followUpNecessario
+        - followUpDescricao
+        - riscoPerdaLead
+        - tags
 
     ConversationDetail:
       type: object
@@ -416,38 +429,85 @@ components:
         - costUsd
         - createdAt
 
+    SummarySection:
+      type: object
+      description: A single section of the daily summary (working well / to improve / risks / closing-rate recs)
+      properties:
+        paragraph:
+          type: string
+          description: 1-2 sentence framing, EU-PT
+        bullets:
+          type: array
+          items:
+            type: string
+          description: 3-5 specific bullets with operator names and concrete examples
+      required:
+        - paragraph
+        - bullets
+
+    AutomationItem:
+      type: object
+      properties:
+        pattern:
+          type: string
+          description: The recurring query / interaction pattern
+        conversationCountEstimate:
+          type: integer
+        channel:
+          type: string
+          description: e.g. Telefone, Email, Self-service
+        feasibility:
+          type: string
+          enum: [alta, media, baixa]
+        notes:
+          type: string
+      required:
+        - pattern
+        - conversationCountEstimate
+        - channel
+        - feasibility
+        - notes
+
+    AutomationOpportunities:
+      type: object
+      properties:
+        paragraph:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutomationItem"
+      required:
+        - paragraph
+        - items
+
     DailySummary:
       type: object
+      description: Daily executive summary (canonical structure per HANDOVER §2)
       properties:
         id:
           type: integer
         date:
           type: string
+        executiveSummary:
+          type: string
+          description: 1-2 sentence intro shown in the black banner
         workingWell:
-          type: array
-          items:
-            type: string
+          $ref: "#/components/schemas/SummarySection"
         toImprove:
-          type: array
-          items:
-            type: string
+          $ref: "#/components/schemas/SummarySection"
         risks:
-          type: array
-          items:
-            type: string
+          $ref: "#/components/schemas/SummarySection"
         closingRateRecommendations:
-          type: array
-          items:
-            type: string
+          $ref: "#/components/schemas/SummarySection"
         automationOpportunities:
-          type: array
-          items:
-            type: string
+          $ref: "#/components/schemas/AutomationOpportunities"
         createdAt:
           type: string
       required:
         - id
         - date
+        - executiveSummary
         - workingWell
         - toImprove
         - risks
@@ -457,6 +517,7 @@ components:
 
     OperatorSummary:
       type: object
+      description: Per-operator coaching summary (canonical schema per HANDOVER §2)
       properties:
         id:
           type: integer
@@ -466,6 +527,9 @@ components:
           type: string
         operatorName:
           type: string
+        paragraphOverview:
+          type: string
+          description: 2-3 sentence overview of the operator's day
         strengths:
           type: array
           items:
@@ -474,9 +538,10 @@ components:
           type: array
           items:
             type: string
-        closingObservations:
+        closingRateObservations:
           type: string
-        recommendations:
+          description: 1-2 sentence note on closing-rate behavior
+        coachingRecommendations:
           type: array
           items:
             type: string
@@ -487,8 +552,9 @@ components:
         - date
         - operatorId
         - operatorName
+        - paragraphOverview
         - strengths
         - blindSpots
-        - closingObservations
-        - recommendations
+        - closingRateObservations
+        - coachingRecommendations
         - createdAt

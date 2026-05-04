@@ -7,10 +7,11 @@ export const operatorSummariesTable = pgTable("operator_summaries", {
   date: text("date").notNull(),
   operatorId: text("operator_id").notNull(),
   operatorName: text("operator_name").notNull(),
+  paragraphOverview: text("paragraph_overview").notNull().default(""),
   strengths: text("strengths").array().notNull().default([]),
   blindSpots: text("blind_spots").array().notNull().default([]),
-  closingObservations: text("closing_observations").notNull().default(""),
-  recommendations: text("recommendations").array().notNull().default([]),
+  closingRateObservations: text("closing_rate_observations").notNull().default(""),
+  coachingRecommendations: text("coaching_recommendations").array().notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

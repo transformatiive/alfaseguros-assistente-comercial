@@ -1,15 +1,19 @@
-import { pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, jsonb, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+
+const emptySection = { paragraph: "", bullets: [] };
+const emptyAutomation = { paragraph: "", items: [] };
 
 export const dailySummariesTable = pgTable("daily_summaries", {
   id: serial("id").primaryKey(),
   date: text("date").notNull().unique(),
-  workingWell: text("working_well").array().notNull().default([]),
-  toImprove: text("to_improve").array().notNull().default([]),
-  risks: text("risks").array().notNull().default([]),
-  closingRateRecommendations: text("closing_rate_recommendations").array().notNull().default([]),
-  automationOpportunities: text("automation_opportunities").array().notNull().default([]),
+  executiveSummary: text("executive_summary").notNull().default(""),
+  workingWell: jsonb("working_well").notNull().default(emptySection),
+  toImprove: jsonb("to_improve").notNull().default(emptySection),
+  risks: jsonb("risks").notNull().default(emptySection),
+  closingRateRecommendations: jsonb("closing_rate_recommendations").notNull().default(emptySection),
+  automationOpportunities: jsonb("automation_opportunities").notNull().default(emptyAutomation),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
