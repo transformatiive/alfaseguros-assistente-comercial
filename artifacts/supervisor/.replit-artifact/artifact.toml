@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Alfaseguros Supervisor Virtual"
+version = "1.0.0"
+id = "artifacts/supervisor"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21898
+
+[services.development]
+run = "pnpm --filter @workspace/supervisor run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/supervisor", "run", "build" ]
+publicDir = "artifacts/supervisor/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21898"
+BASE_PATH = "/"

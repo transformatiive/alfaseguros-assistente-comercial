@@ -3,13 +3,22 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Alfaseguros Supervisor Virtual — daily AI analysis of phone conversations
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: runs
+    description: Analysis run operations
+  - name: conversations
+    description: Conversation operations
+  - name: summary
+    description: Daily summary operations
+  - name: operators
+    description: Operator coaching operations
+
 paths:
   /healthz:
     get:
@@ -24,6 +33,177 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /run:
+    post:
+      operationId: triggerRun
+      tags: [runs]
+      summary: Trigger analysis for a date
+      description: Starts a new analysis run for the given date. Returns immediately; use GET /run/{date} to poll status.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TriggerRunBody"
+      responses:
+        "202":
+          description: Run accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Run already in progress for this date
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /run/{date}:
+    get:
+      operationId: getRunStatus
+      tags: [runs]
+      summary: Get run status for a date
+      description: Returns the status of the analysis run for the given date (YYYY-MM-DD).
+      parameters:
+        - name: date
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Date in YYYY-MM-DD format
+      responses:
+        "200":
+          description: Run status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "404":
+          description: No run found for this date
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /summary/{date}:
+    get:
+      operationId: getDailySummary
+      tags: [summary]
+      summary: Get daily executive summary
+      description: Returns the AI-generated executive summary for the given date (YYYY-MM-DD).
+      parameters:
+        - name: date
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Daily summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailySummary"
+        "404":
+          description: No summary found for this date
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /conversations/{date}:
+    get:
+      operationId: listConversations
+      tags: [conversations]
+      summary: List conversations for a date
+      description: Returns a list of all analyzed conversations for the given date (YYYY-MM-DD).
+      parameters:
+        - name: date
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ConversationSummary"
+        "404":
+          description: No conversations found for this date
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /conversations/{date}/{conversationId}:
+    get:
+      operationId: getConversation
+      tags: [conversations]
+      summary: Get a single conversation with full analysis
+      parameters:
+        - name: date
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: conversationId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Conversation detail with full analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationDetail"
+        "404":
+          description: Conversation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /operators/{date}:
+    get:
+      operationId: listOperatorSummaries
+      tags: [operators]
+      summary: Get per-operator coaching summaries for a date
+      parameters:
+        - name: date
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of operator coaching summaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OperatorSummary"
+        "404":
+          description: No operator summaries found for this date
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +214,210 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    TriggerRunBody:
+      type: object
+      properties:
+        date:
+          type: string
+          description: Date to analyze in YYYY-MM-DD format
+        force:
+          type: boolean
+          description: If true, re-analyze conversations that already have analysis
+      required:
+        - date
+
+    Run:
+      type: object
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        totalConversations:
+          type: ["integer", "null"]
+        analyzedConversations:
+          type: ["integer", "null"]
+        totalCostUsd:
+          type: ["number", "null"]
+        errorMessage:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - date
+        - status
+        - totalConversations
+        - analyzedConversations
+        - totalCostUsd
+        - errorMessage
+        - createdAt
+        - updatedAt
+
+    ConversationSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        runDate:
+          type: string
+        customerPhone:
+          type: string
+        callCount:
+          type: integer
+        hasAnalysis:
+          type: boolean
+        costUsd:
+          type: ["number", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - runDate
+        - customerPhone
+        - callCount
+        - hasAnalysis
+        - costUsd
+        - createdAt
+
+    ConversationAnalysis:
+      type: object
+      properties:
+        narrative:
+          type: string
+        proceduralFlags:
+          type: array
+          items:
+            type: string
+        coachingFeedback:
+          type: string
+        specialistSuggestions:
+          type: string
+        riskAssessment:
+          type: string
+      required:
+        - narrative
+        - proceduralFlags
+        - coachingFeedback
+        - specialistSuggestions
+        - riskAssessment
+
+    ConversationDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        runDate:
+          type: string
+        customerPhone:
+          type: string
+        callIds:
+          type: array
+          items:
+            type: string
+        analysis:
+          oneOf:
+            - $ref: "#/components/schemas/ConversationAnalysis"
+            - type: "null"
+        costUsd:
+          type: ["number", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - runDate
+        - customerPhone
+        - callIds
+        - analysis
+        - costUsd
+        - createdAt
+
+    DailySummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+        workingWell:
+          type: array
+          items:
+            type: string
+        toImprove:
+          type: array
+          items:
+            type: string
+        risks:
+          type: array
+          items:
+            type: string
+        closingRateRecommendations:
+          type: array
+          items:
+            type: string
+        automationOpportunities:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - date
+        - workingWell
+        - toImprove
+        - risks
+        - closingRateRecommendations
+        - automationOpportunities
+        - createdAt
+
+    OperatorSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+        operatorId:
+          type: string
+        operatorName:
+          type: string
+        strengths:
+          type: array
+          items:
+            type: string
+        blindSpots:
+          type: array
+          items:
+            type: string
+        closingObservations:
+          type: string
+        recommendations:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - date
+        - operatorId
+        - operatorName
+        - strengths
+        - blindSpots
+        - closingObservations
+        - recommendations
+        - createdAt
