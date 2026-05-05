@@ -7,7 +7,7 @@ Devolve **apenas** JSON válido (sem markdown, sem comentários) com a seguinte 
 {
   "categoria": string,                       // Cotação | Renovação | Sinistro | Informação | Pós-venda | Outro
   "produto": string,                         // TVDE | Auto | Multirriscos | Condomínio | Saúde | Empresas | Outro
-  "narrativaConversa": string,               // 3-8 frases em ordem cronológica. A história completa: o que o cliente queria, o que aconteceu nas chamadas e nos tickets Zoho Desk (se existirem), em que ponto ficou. Se existirem tickets, integra-os temporalmente na narrativa (ex: "No mesmo dia foi aberto o ticket #X onde...").
+  "narrativaConversa": string,               // 3-8 frases em ordem cronológica. A história completa: o que o cliente queria, o que aconteceu nas chamadas e — se houver tickets Zoho Desk realmente relacionados com ESTA chamada — como se integram temporalmente (ex: "No mesmo dia foi aberto o ticket #X onde..."). IGNORA tickets que, após leres o conteúdo, não estejam relacionados com esta conversa específica (mesmo cliente, assunto diferente).
   "arcoConversa": string,                    // ex: "Frio→Quente", "Estagnado", "Quente→Esfriou", "Direto ao Fecho"
   "sentimentoClienteEvolucao": string,       // 1-2 frases sobre como o sentimento do cliente evoluiu ao longo das chamadas e interações
   "qualidadeGlobal": number,                 // inteiro 1-5 (1=má, 5=excelente)
@@ -109,7 +109,9 @@ function formatDuration(sec: number): string {
 
 function formatTickets(tickets: RelatedTicketForPrompt[]): string {
   const lines: string[] = [
-    "## Contexto Zoho Desk (tickets associados a este número de telefone)",
+    "## Contexto Zoho Desk (tickets selecionados por proximidade temporal com esta conversa)",
+    "",
+    "ATENÇÃO: Estes tickets foram pré-selecionados por estarem temporalmente próximos desta chamada (criados ou com atividade recente dentro de ±14 dias). Verifica no conteúdo de cada ticket se está de facto relacionado com esta conversa específica — pode ser o mesmo cliente mas sobre assunto diferente. Só inclui na narrativa os tickets que forem genuinamente relevantes para esta chamada.",
     "",
   ];
 

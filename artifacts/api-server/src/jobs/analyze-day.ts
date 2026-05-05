@@ -38,6 +38,39 @@ export interface AnalyzeDayOptions {
   force?: boolean;
 }
 
+const CASE_PROXIMITY_MS = CASE_PROXIMITY_DAYS * 86_400_000;
+
+/**
+ * Returns true if the ticket has any activity (creation or comments) within
+ * ±CASE_PROXIMITY_DAYS of the given conversation start time.
+ * This ensures only tickets genuinely related to THIS call are included in the
+ * LLM prompt — not every historical ticket for the same phone number.
+ */
+function isTicketRelevantToConversation(
+  ticket: RelatedTicketForPrompt,
+  convStartTime: string | null,
+): boolean {
+  if (!convStartTime) return true; // no call timestamp → pass through defensively
+  const callTs = new Date(convStartTime).getTime();
+  if (Number.isNaN(callTs)) return true;
+
+  // 1. Ticket created within the proximity window
+  if (ticket.createdTime) {
+    const diff = Math.abs(new Date(ticket.createdTime).getTime() - callTs);
+    if (diff <= CASE_PROXIMITY_MS) return true;
+  }
+
+  // 2. Any comment/thread within the proximity window (ticket active around the call)
+  for (const c of ticket.comments) {
+    if (c.commentedTime) {
+      const diff = Math.abs(new Date(c.commentedTime).getTime() - callTs);
+      if (diff <= CASE_PROXIMITY_MS) return true;
+    }
+  }
+
+  return false;
+}
+
 /**
  * Full daily orchestrator: fetch → group → upsert → analyze (cached) →
  * daily summary → per-agent summaries. Updates the `runs` row and emits SSE
@@ -245,7 +278,12 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
 
       try {
         const fp = phoneFingerprint(conv.customerPhone);
-        const ticketsForPrompt = fp ? (ticketsByFpForPrompt.get(fp) ?? []) : [];
+        const allTicketsForPhone = fp ? (ticketsByFpForPrompt.get(fp) ?? []) : [];
+        // Filter to tickets temporally proximate to THIS conversation's start time.
+        // Avoids polluting the LLM context with unrelated tickets from the same customer.
+        const ticketsForPrompt = allTicketsForPhone.filter((t) =>
+          isTicketRelevantToConversation(t, conv.startTime ?? null),
+        );
         const outcome = await analyzeConversation(conv, {
           client: openrouter,
           model,
