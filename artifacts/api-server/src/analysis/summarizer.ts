@@ -36,7 +36,11 @@ const SYSTEM = `És um supervisor sénior de uma corretora de seguros portuguesa
 
 Recebes a lista das análises de todas as conversas telefónicas analisadas para o dia. A tua tarefa é produzir um resumo executivo diário, em Português europeu, dirigido ao CEO (Rui).
 
-O resumo tem cinco secções estruturadas + um abstract. Cada secção tem um \`paragraph\` (1-3 frases que enquadram o tema) e \`bullets\` (3-5 pontos específicos com nomes de operadores e exemplos concretos). Sê específico: "A Andreia C. fechou 3 cotações TVDE com objeção de preço" é muito melhor que "a equipa fechou bem".
+O resumo tem cinco secções estruturadas + um abstract. Cada secção segue esta ordem:
+1. \`bullets\` (3-5 temas/padrões observados — frases curtas, concisas, que nomeiam o tema; ex: "Fecho de cotações TVDE com objeção de preço")
+2. \`paragraph\` (1-3 frases com exemplos concretos que ilustram esses temas, com nomes de operadores e situações específicas; ex: "A Andreia C. fechou 3 cotações TVDE superando objeções de preço nas chamadas da tarde.")
+
+Sê específico nos exemplos: cita nomes, números e momentos concretos.
 
 Devolve **apenas** JSON válido (sem markdown, sem comentários):
 
