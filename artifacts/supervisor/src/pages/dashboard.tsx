@@ -484,7 +484,7 @@ export default function Dashboard() {
                           )}
                           {c.isMultiLeg && (
                             <Badge variant="outline" className="text-[10px] font-mono">
-                              {c.callCount}× legs
+                              {c.callCount}× interações
                             </Badge>
                           )}
                           {duration && (
