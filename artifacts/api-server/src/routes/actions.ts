@@ -52,6 +52,8 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
     const customerPhone = conv.customerPhone;
     const conversationId = conv.id;
     const runDate = conv.runDate;
+    const categoria = typeof a.categoria === "string" ? a.categoria.trim() : "";
+    const followUpNecessario = a.followUpNecessario === true;
 
     // 1. Follow-up pendente
     if (a.followUpNecessario === true) {
@@ -72,18 +74,28 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
       });
     }
 
-    // 2. Risco de perda de lead
+    // 2. Risco de perda de lead / cliente
+    // Para sinistros, a pessoa já é cliente — o risco é de churn, não de perda de lead.
+    // Só surfacia se a categoria NÃO for Sinistro, ou se for sinistro mas com risco alto
+    // (insatisfação grave pode fazer o cliente mudar de seguradora).
     const risco = a.riscoPerdaLead as string | undefined;
-    if (risco === "alto" || risco === "medio") {
+    const ehSinistro = categoria === "Sinistro";
+    if (risco === "alto" || (risco === "medio" && !ehSinistro)) {
+      const tituloBase = ehSinistro
+        ? risco === "alto" ? "Risco alto de perda de cliente" : "Risco médio de perda de cliente"
+        : risco === "alto" ? "Risco alto de perda de lead" : "Risco médio de perda de lead";
+      const descricaoFallback = ehSinistro
+        ? "Atendimento de sinistro com potencial insatisfação — risco de o cliente mudar de seguradora."
+        : "Potencial perda de lead identificada pela análise.";
       items.push({
         id: `${conversationId}-risco`,
         tipo: "risco_perda_lead",
         prioridade: risco === "alto" ? "alta" : "media",
-        titulo: risco === "alto" ? "Risco alto de perda de lead" : "Risco médio de perda de lead",
+        titulo: tituloBase,
         descricao:
           typeof a.narrativaConversa === "string" && a.narrativaConversa.trim()
-            ? a.narrativaConversa.slice(0, 220)
-            : "Potencial perda de lead identificada pela análise.",
+            ? a.narrativaConversa
+            : descricaoFallback,
         conversationId,
         agentName,
         customerPhone,
@@ -120,7 +132,7 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
         titulo: `Qualidade crítica — ${qualidade}/5`,
         descricao:
           typeof a.feedbackSupervisor === "string" && a.feedbackSupervisor.trim()
-            ? a.feedbackSupervisor.slice(0, 220)
+            ? a.feedbackSupervisor
             : "Chamada com qualidade muito abaixo do esperado. Recomenda-se ouvir a gravação.",
         conversationId,
         agentName,
@@ -138,7 +150,7 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
         tipo: "oportunidade_cross_sell",
         prioridade: "baixa",
         titulo: "Oportunidade de cross-sell identificada",
-        descricao: sugestao.slice(0, 220),
+        descricao: sugestao,
         conversationId,
         agentName,
         customerPhone,
@@ -148,8 +160,6 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
 
     // 6. Cotação sem seguimento
     // Pedido de cotação terminado sem follow-up marcado — falha frequente no fecho
-    const categoria = typeof a.categoria === "string" ? a.categoria.trim() : "";
-    const followUpNecessario = a.followUpNecessario === true;
     if (categoria === "Cotação" && !followUpNecessario) {
       items.push({
         id: `${conversationId}-cotacao_sem_seguimento`,
@@ -158,7 +168,7 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
         titulo: "Cotação sem seguimento marcado",
         descricao:
           typeof a.narrativaConversa === "string" && a.narrativaConversa.trim()
-            ? a.narrativaConversa.slice(0, 220)
+            ? a.narrativaConversa
             : "Chamada de cotação encerrada sem follow-up registado. Risco de o lead esfriar.",
         conversationId,
         agentName,
@@ -184,7 +194,7 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
         titulo: "Lead quente — fecho não aproveitado",
         descricao:
           typeof a.narrativaConversa === "string" && a.narrativaConversa.trim()
-            ? a.narrativaConversa.slice(0, 220)
+            ? a.narrativaConversa
             : `Arco: ${arco}. Chamada de alta qualidade com cliente receptivo, sem próximo passo definido.`,
         conversationId,
         agentName,
