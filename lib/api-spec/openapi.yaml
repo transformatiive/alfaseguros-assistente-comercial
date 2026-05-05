@@ -716,6 +716,11 @@ components:
           type: array
           items:
             type: string
+        conversationIds:
+          type: array
+          items:
+            type: integer
+          description: DB ids of all conversations analysed for this operator on this date
         createdAt:
           type: string
       required:
@@ -728,6 +733,7 @@ components:
         - blindSpots
         - closingRateObservations
         - coachingRecommendations
+        - conversationIds
         - createdAt
 
     CaseLeg:

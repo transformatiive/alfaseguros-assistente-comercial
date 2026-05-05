@@ -1,10 +1,12 @@
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { User, TrendingUp, Eye, Star, Lightbulb } from "lucide-react";
+import { Link } from "wouter";
+import { User, TrendingUp, Eye, Star, Lightbulb, ArrowUpRight } from "lucide-react";
 import { useDateContext } from "@/lib/date-context";
 import { useListOperatorSummaries, getListOperatorSummariesQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { RichText } from "@/components/rich-text";
 
 export default function Operadores() {
@@ -33,14 +35,36 @@ export default function Operadores() {
           {operators.map((op) => (
             <Card key={op.id} className="border">
               <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <User className="h-4 w-4 text-primary" />
+                <CardTitle className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <User className="h-4 w-4 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-base">{op.operatorName}</p>
+                      <p className="text-xs text-muted-foreground font-normal">ID: {op.operatorId}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-semibold text-base">{op.operatorName}</p>
-                    <p className="text-xs text-muted-foreground font-normal">ID: {op.operatorId}</p>
-                  </div>
+
+                  {/* Conversation links */}
+                  {op.conversationIds.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 items-center">
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mr-0.5">
+                        Conversas:
+                      </span>
+                      {op.conversationIds.map((id) => (
+                        <Link key={id} href={`/conversas/${id}`}>
+                          <Badge
+                            variant="outline"
+                            className="font-mono text-[10px] cursor-pointer hover:bg-muted transition-colors gap-1"
+                          >
+                            #{id}
+                            <ArrowUpRight className="h-2.5 w-2.5" />
+                          </Badge>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">

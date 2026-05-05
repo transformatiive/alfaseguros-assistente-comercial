@@ -12,7 +12,42 @@ function ticket(o: Partial<ZohoTicket> & { id?: string } = {}): ZohoTicket {
   };
 }
 
-describe("classifyOutcome (stub rules — replace after probe)", () => {
+describe("classifyOutcome — cf_estado_do_negocio (primary field)", () => {
+  it("GANHO → won", () => {
+    const out = classifyOutcome(ticket({ cf: { cf_estado_do_negocio: "GANHO" } }));
+    expect(out.status).toBe("won");
+    expect(out.reason).toContain("GANHO");
+  });
+
+  it("PERDIDO → lost", () => {
+    const out = classifyOutcome(ticket({ cf: { cf_estado_do_negocio: "PERDIDO" } }));
+    expect(out.status).toBe("lost");
+    expect(out.reason).toContain("PERDIDO");
+  });
+
+  it("EM TRATAMENTO → open", () => {
+    const out = classifyOutcome(ticket({ cf: { cf_estado_do_negocio: "EM TRATAMENTO" } }));
+    expect(out.status).toBe("open");
+    expect(out.reason).toContain("EM TRATAMENTO");
+  });
+
+  it("EM ESPERA → open", () => {
+    const out = classifyOutcome(ticket({ cf: { cf_estado_do_negocio: "EM ESPERA" } }));
+    expect(out.status).toBe("open");
+  });
+
+  it("TRATADO → open", () => {
+    const out = classifyOutcome(ticket({ cf: { cf_estado_do_negocio: "TRATADO" } }));
+    expect(out.status).toBe("open");
+  });
+
+  it("case-insensitive match on ganho", () => {
+    const out = classifyOutcome(ticket({ cf: { cf_estado_do_negocio: "Ganho" } }));
+    expect(out.status).toBe("won");
+  });
+});
+
+describe("classifyOutcome — fallback rules (no cf_estado_do_negocio)", () => {
   it("won when cf_apolice_emitida is 'Sim'", () => {
     const out = classifyOutcome(ticket({ cf: { cf_apolice_emitida: "Sim" } }));
     expect(out.status).toBe("won");
@@ -25,12 +60,6 @@ describe("classifyOutcome (stub rules — replace after probe)", () => {
     );
     expect(out.status).toBe("lost");
     expect(out.reason).toContain("Preço");
-  });
-
-  it("won/lost via cf_estado_negociacao keywords", () => {
-    expect(classifyOutcome(ticket({ cf: { cf_estado_negociacao: "Fechado-Ganho" } })).status).toBe("won");
-    expect(classifyOutcome(ticket({ cf: { cf_estado_negociacao: "Perdido" } })).status).toBe("lost");
-    expect(classifyOutcome(ticket({ cf: { cf_estado_negociacao: "Em curso" } })).status).toBe("open");
   });
 
   it("open when ticket is not closed and no cf signals", () => {
