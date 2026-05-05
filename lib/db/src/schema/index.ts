@@ -4,3 +4,4 @@ export * from "./daily_summaries";
 export * from "./operator_summaries";
 export * from "./tickets";
 export * from "./cases";
+export * from "./users";
