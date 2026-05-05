@@ -1,29 +1,37 @@
+import { useState } from "react";
 import { format, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarIcon, RefreshCw, Loader2, TrendingUp, MessageSquare, DollarSign } from "lucide-react";
+import {
+  CalendarIcon, RefreshCw, Loader2, TrendingUp, MessageSquare,
+  DollarSign, Phone, ArrowRight, Star, AlertTriangle, Sparkles,
+  User, Eye, Lightbulb,
+} from "lucide-react";
+import { Link } from "wouter";
 import { useDateContext } from "@/lib/date-context";
 import { useRunProgress } from "@/lib/use-run-progress";
 import {
   useGetDailySummary,
   useGetRunStatus,
   useListConversations,
+  useListOperatorSummaries,
   useTriggerRun,
   getGetDailySummaryQueryKey,
   getGetRunStatusQueryKey,
   getListConversationsQueryKey,
+  getListOperatorSummariesQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 
 /** Convert a raw error message (possibly a JSON Zod blob) into a readable string. */
 function friendlyError(msg: string): string {
-  // Zod errors are JSON arrays — detect and summarise them.
   if (msg.trim().startsWith("[")) {
     try {
       const issues = JSON.parse(msg) as Array<{ message?: string; path?: unknown[] }>;
@@ -36,13 +44,13 @@ function friendlyError(msg: string): string {
         return `Erro de validação${path}: ${first.message ?? "tipo inválido"}${extra}`;
       }
     } catch {
-      // fall through to plain truncation
+      // fall through
     }
   }
   return msg.length > 200 ? `${msg.slice(0, 200)}…` : msg;
 }
 
-const sectionStyles = [
+const summarySections = [
   {
     key: "workingWell" as const,
     icon: "✓",
@@ -79,6 +87,12 @@ const FEASIBILITY_STYLES: Record<string, string> = {
   baixa: "bg-stone-100 text-stone-700 border-stone-200",
 };
 
+const RISK_PILL: Record<string, string> = {
+  baixo: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  medio: "bg-amber-50 text-amber-700 border-amber-200",
+  alto: "bg-red-50 text-red-700 border-red-200",
+};
+
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
     pending: { label: "Pendente", variant: "secondary" },
@@ -90,9 +104,30 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge variant={config.variant}>{config.label}</Badge>;
 }
 
+function formatDuration(sec: number | null | undefined): string | null {
+  if (sec == null) return null;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}m${s.toString().padStart(2, "0")}s`;
+}
+
+function Stars({ value }: { value: number }) {
+  return (
+    <span className="inline-flex items-center" aria-label={`${value}/5`}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Star
+          key={n}
+          className={`h-3 w-3 ${n <= value ? "fill-amber-400 text-amber-400" : "text-stone-300"}`}
+        />
+      ))}
+    </span>
+  );
+}
+
 export default function Dashboard() {
   const { selectedDate, setSelectedDate, dateStr } = useDateContext();
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState("resumo");
 
   const { data: run, isLoading: runLoading } = useGetRunStatus(dateStr, {
     query: { enabled: !!dateStr, queryKey: getGetRunStatusQueryKey(dateStr) },
@@ -102,11 +137,14 @@ export default function Dashboard() {
     query: { enabled: !!dateStr, queryKey: getGetDailySummaryQueryKey(dateStr) },
   });
 
-  const { data: conversations } = useListConversations(dateStr, {
+  const { data: conversations, isLoading: convsLoading } = useListConversations(dateStr, {
     query: { enabled: !!dateStr, queryKey: getListConversationsQueryKey(dateStr) },
   });
 
-  // Live updates while a run is in flight (Server-Sent Events).
+  const { data: operators, isLoading: opsLoading } = useListOperatorSummaries(dateStr, {
+    query: { enabled: !!dateStr, queryKey: getListOperatorSummariesQueryKey(dateStr) },
+  });
+
   useRunProgress(run?.status === "running" || run?.status === "pending" ? dateStr : null);
 
   const trigger = useTriggerRun({
@@ -114,6 +152,8 @@ export default function Dashboard() {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetRunStatusQueryKey(dateStr) });
         queryClient.invalidateQueries({ queryKey: getGetDailySummaryQueryKey(dateStr) });
+        queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey(dateStr) });
+        queryClient.invalidateQueries({ queryKey: getListOperatorSummariesQueryKey(dateStr) });
       },
     },
   });
@@ -251,117 +291,333 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* Stats strip — Rui's at-a-glance health of the day */}
+      {/* Stats strip */}
       {conversations && conversations.length > 0 && <StatsStrip conversations={conversations} />}
 
-      {/* Daily summary */}
-      <div>
-        <h2 className="text-base font-semibold text-foreground mb-3">Resumo Executivo</h2>
-        {summaryLoading ? (
-          <div className="space-y-3">
-            {[...Array(5)].map((_, i) => (
-              <Skeleton key={i} className="h-24 w-full rounded-lg" />
-            ))}
-          </div>
-        ) : summary ? (
-          <div className="space-y-4">
-            {summary.executiveSummary && (
-              <div className="rounded-lg bg-stone-900 text-stone-50 p-5">
-                <p
-                  className="text-base leading-relaxed italic"
-                  style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
-                >
-                  {summary.executiveSummary}
-                </p>
-              </div>
+      {/* Tabs: Resumo | Conversas | Operadores */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="mb-4">
+          <TabsTrigger value="resumo">Resumo Executivo</TabsTrigger>
+          <TabsTrigger value="conversas">
+            Conversas
+            {conversations && conversations.length > 0 && (
+              <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-mono">
+                {conversations.length}
+              </span>
             )}
+          </TabsTrigger>
+          <TabsTrigger value="operadores">
+            Operadores
+            {operators && operators.length > 0 && (
+              <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-mono">
+                {operators.length}
+              </span>
+            )}
+          </TabsTrigger>
+        </TabsList>
 
-            <div className="grid gap-3 lg:grid-cols-2">
-              {sectionStyles.map((section) => {
-                const sec = summary[section.key];
-                if (!sec || (!sec.paragraph && sec.bullets.length === 0)) return null;
-                return (
-                  <div
-                    key={section.key}
-                    className={cn("rounded-lg border p-4", section.bg)}
+        {/* ── TAB 1: Resumo Executivo ── */}
+        <TabsContent value="resumo">
+          {summaryLoading ? (
+            <div className="space-y-3">
+              {[...Array(4)].map((_, i) => (
+                <Skeleton key={i} className="h-24 w-full rounded-lg" />
+              ))}
+            </div>
+          ) : summary ? (
+            <div className="space-y-4">
+              {summary.executiveSummary && (
+                <div className="rounded-lg bg-stone-900 text-stone-50 p-5">
+                  <p
+                    className="text-base leading-relaxed italic"
+                    style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
                   >
-                    <div className={cn("flex items-center gap-2 mb-2 font-semibold text-sm uppercase tracking-wide", section.color)}>
-                      <span className="text-base">{section.icon}</span>
-                      {section.label}
+                    {summary.executiveSummary}
+                  </p>
+                </div>
+              )}
+
+              <div className="grid gap-3 lg:grid-cols-2">
+                {summarySections.map((section) => {
+                  const sec = summary[section.key];
+                  if (!sec || (!sec.paragraph && sec.bullets.length === 0)) return null;
+                  return (
+                    <div key={section.key} className={cn("rounded-lg border p-4", section.bg)}>
+                      <div className={cn("flex items-center gap-2 mb-2 font-semibold text-sm uppercase tracking-wide", section.color)}>
+                        <span className="text-base">{section.icon}</span>
+                        {section.label}
+                      </div>
+                      {sec.paragraph && (
+                        <p className="text-sm text-foreground/80 leading-relaxed mb-2">{sec.paragraph}</p>
+                      )}
+                      {sec.bullets.length > 0 && (
+                        <ul className="space-y-1">
+                          {sec.bullets.map((b, i) => (
+                            <li key={i} className="text-sm text-foreground/80 flex items-start gap-2">
+                              <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-current flex-shrink-0 opacity-60" />
+                              {b}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
-                    {sec.paragraph && (
-                      <p className="text-sm text-foreground/80 leading-relaxed mb-2">
-                        {sec.paragraph}
+                  );
+                })}
+              </div>
+
+              {summary.automationOpportunities &&
+                (summary.automationOpportunities.paragraph || summary.automationOpportunities.items.length > 0) && (
+                  <div className="rounded-lg border bg-violet-50 border-violet-200 p-4">
+                    <div className="flex items-center gap-2 mb-2 font-semibold text-sm uppercase tracking-wide text-violet-700">
+                      <span className="text-base">🤖</span>
+                      Oportunidades de Automação
+                    </div>
+                    {summary.automationOpportunities.paragraph && (
+                      <p className="text-sm text-foreground/80 leading-relaxed mb-3">
+                        {summary.automationOpportunities.paragraph}
                       </p>
                     )}
-                    {sec.bullets.length > 0 && (
-                      <ul className="space-y-1">
-                        {sec.bullets.map((b, i) => (
-                          <li key={i} className="text-sm text-foreground/80 flex items-start gap-2">
-                            <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-current flex-shrink-0 opacity-60" />
-                            {b}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {summary.automationOpportunities.items.map((item, i) => (
+                        <div key={i} className="rounded-md bg-white border border-violet-200 p-3">
+                          <div className="flex items-start justify-between gap-2 flex-wrap">
+                            <p className="text-sm font-medium text-foreground">{item.pattern}</p>
+                            <Badge variant="outline" className={cn("text-[10px]", FEASIBILITY_STYLES[item.feasibility] ?? "")}>
+                              {item.feasibility}
+                            </Badge>
+                          </div>
+                          <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                            {item.channel && <span>{item.channel}</span>}
+                            {item.conversationCountEstimate > 0 && (
+                              <>
+                                <span>·</span>
+                                <span>~{item.conversationCountEstimate} conversas</span>
+                              </>
+                            )}
+                          </div>
+                          {item.notes && (
+                            <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{item.notes}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
+                )}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed p-8 text-center">
+              <p className="text-sm text-muted-foreground">
+                Nenhum resumo disponível para esta data. Clique em "Analisar este dia" para gerar a análise.
+              </p>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── TAB 2: Conversas ── */}
+        <TabsContent value="conversas">
+          {convsLoading ? (
+            <div className="space-y-2">
+              {[...Array(6)].map((_, i) => (
+                <Skeleton key={i} className="h-20 w-full rounded-lg" />
+              ))}
+            </div>
+          ) : conversations && conversations.length > 0 ? (
+            <div className="space-y-2">
+              {conversations.map((c) => {
+                const riscoClass = c.riscoPerdaLead ? RISK_PILL[c.riscoPerdaLead] : null;
+                const duration = formatDuration(c.durationSec);
+                return (
+                  <Link
+                    key={c.id}
+                    href={`/conversas/${c.id}`}
+                    className={cn(
+                      "block rounded-md border bg-card hover:bg-muted/40 transition-colors px-4 py-3",
+                      c.isMultiLeg && "border-l-[3px] border-l-blue-700",
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="h-8 w-8 rounded-full bg-stone-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <Phone className="h-3.5 w-3.5 text-stone-600" />
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="font-medium text-sm">{c.customerPhone}</span>
+                          {c.agentName && (
+                            <>
+                              <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span className="text-sm">{c.agentName}</span>
+                            </>
+                          )}
+                          {c.isMultiLeg && (
+                            <Badge variant="outline" className="text-[10px] font-mono">
+                              {c.callCount}× legs
+                            </Badge>
+                          )}
+                          {duration && (
+                            <span className="text-xs text-muted-foreground font-mono">{duration}</span>
+                          )}
+                        </div>
+
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          {c.produto && (
+                            <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">
+                              {c.produto}
+                            </Badge>
+                          )}
+                          {c.categoria && (
+                            <Badge variant="outline" className="text-[10px]">
+                              {c.categoria}
+                            </Badge>
+                          )}
+                          {c.qualidadeGlobal != null && <Stars value={c.qualidadeGlobal} />}
+                          {c.desviosCount > 0 && (
+                            <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 border-amber-200 gap-1">
+                              <AlertTriangle className="h-3 w-3" />
+                              {c.desviosCount} {c.desviosCount === 1 ? "desvio" : "desvios"}
+                            </Badge>
+                          )}
+                          {c.riscoPerdaLead && riscoClass && (
+                            <Badge variant="outline" className={`text-[10px] ${riscoClass}`}>
+                              Risco {c.riscoPerdaLead}
+                            </Badge>
+                          )}
+                          {c.followUpNecessario && (
+                            <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200 gap-1">
+                              <Sparkles className="h-3 w-3" />
+                              follow-up
+                            </Badge>
+                          )}
+                          {!c.hasAnalysis && (
+                            <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                              análise pendente
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="text-xs text-muted-foreground text-right flex-shrink-0">
+                        {format(new Date(c.startTime ?? c.createdAt), "HH:mm")}
+                        {c.costUsd != null && <div className="font-mono">${c.costUsd.toFixed(4)}</div>}
+                      </div>
+                    </div>
+                  </Link>
                 );
               })}
             </div>
+          ) : (
+            <div className="rounded-lg border border-dashed p-8 text-center">
+              <p className="text-sm text-muted-foreground">
+                Nenhuma conversa encontrada para esta data.
+              </p>
+            </div>
+          )}
+        </TabsContent>
 
-            {summary.automationOpportunities &&
-              (summary.automationOpportunities.paragraph ||
-                summary.automationOpportunities.items.length > 0) && (
-                <div className="rounded-lg border bg-violet-50 border-violet-200 p-4">
-                  <div className="flex items-center gap-2 mb-2 font-semibold text-sm uppercase tracking-wide text-violet-700">
-                    <span className="text-base">🤖</span>
-                    Oportunidades de Automação
-                  </div>
-                  {summary.automationOpportunities.paragraph && (
-                    <p className="text-sm text-foreground/80 leading-relaxed mb-3">
-                      {summary.automationOpportunities.paragraph}
-                    </p>
-                  )}
-                  <div className="grid gap-2 md:grid-cols-2">
-                    {summary.automationOpportunities.items.map((item, i) => (
-                      <div key={i} className="rounded-md bg-white border border-violet-200 p-3">
-                        <div className="flex items-start justify-between gap-2 flex-wrap">
-                          <p className="text-sm font-medium text-foreground">{item.pattern}</p>
-                          <Badge
-                            variant="outline"
-                            className={cn("text-[10px]", FEASIBILITY_STYLES[item.feasibility] ?? "")}
-                          >
-                            {item.feasibility}
-                          </Badge>
-                        </div>
-                        <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
-                          {item.channel && <span>{item.channel}</span>}
-                          {item.conversationCountEstimate > 0 && (
-                            <>
-                              <span>·</span>
-                              <span>~{item.conversationCountEstimate} conversas</span>
-                            </>
-                          )}
-                        </div>
-                        {item.notes && (
-                          <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
-                            {item.notes}
-                          </p>
-                        )}
+        {/* ── TAB 3: Operadores ── */}
+        <TabsContent value="operadores">
+          {opsLoading ? (
+            <div className="space-y-4">
+              {[...Array(3)].map((_, i) => (
+                <Skeleton key={i} className="h-48 w-full rounded-lg" />
+              ))}
+            </div>
+          ) : operators && operators.length > 0 ? (
+            <div className="space-y-4">
+              {operators.map((op) => (
+                <Card key={op.id} className="border">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                        <User className="h-4 w-4 text-primary" />
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-          </div>
-        ) : (
-          <div className="rounded-lg border border-dashed p-8 text-center">
-            <p className="text-sm text-muted-foreground">
-              Nenhum resumo disponível para esta data. Clique em "Analisar este dia" para gerar a análise.
-            </p>
-          </div>
-        )}
-      </div>
+                      <div>
+                        <p className="font-semibold text-base">{op.operatorName}</p>
+                        <p className="text-xs text-muted-foreground font-normal">ID: {op.operatorId}</p>
+                      </div>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {op.paragraphOverview && (
+                      <div className="rounded-md bg-stone-900 text-stone-50 p-4">
+                        <p className="text-sm leading-relaxed italic" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
+                          {op.paragraphOverview}
+                        </p>
+                      </div>
+                    )}
+
+                    {op.closingRateObservations && (
+                      <div className="flex items-start gap-2.5 p-3 rounded-md bg-blue-50 border border-blue-200">
+                        <TrendingUp className="h-4 w-4 text-blue-700 mt-0.5 flex-shrink-0" />
+                        <p className="text-sm text-foreground/80 leading-relaxed">{op.closingRateObservations}</p>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {op.strengths.length > 0 && (
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Star className="h-3.5 w-3.5 text-emerald-500" />
+                            <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Pontos Fortes</p>
+                          </div>
+                          <ul className="space-y-1">
+                            {op.strengths.map((s, i) => (
+                              <li key={i} className="text-sm text-foreground/80 flex items-start gap-2">
+                                <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
+                                {s}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {op.blindSpots.length > 0 && (
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Eye className="h-3.5 w-3.5 text-amber-500" />
+                            <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Pontos Cegos</p>
+                          </div>
+                          <ul className="space-y-1">
+                            {op.blindSpots.map((b, i) => (
+                              <li key={i} className="text-sm text-foreground/80 flex items-start gap-2">
+                                <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                                {b}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+
+                    {op.coachingRecommendations.length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <Lightbulb className="h-3.5 w-3.5 text-blue-500" />
+                          <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Recomendações de Coaching</p>
+                        </div>
+                        <ul className="space-y-1">
+                          {op.coachingRecommendations.map((r, i) => (
+                            <li key={i} className="text-sm text-foreground/80 flex items-start gap-2">
+                              <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+                              {r}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed p-8 text-center">
+              <p className="text-sm text-muted-foreground">
+                Nenhum resumo de operador disponível para esta data.
+              </p>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
@@ -401,10 +657,7 @@ function StatsStrip({ conversations }: { conversations: StatsStripConv[] }) {
             {s.label}
           </p>
           <p
-            className={cn(
-              "mt-1 text-3xl tabular-nums leading-none",
-              s.alert ? "text-red-600" : "text-foreground",
-            )}
+            className={cn("mt-1 text-3xl tabular-nums leading-none", s.alert ? "text-red-600" : "text-foreground")}
             style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
           >
             {s.value}
