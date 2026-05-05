@@ -3,9 +3,10 @@ import { format, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   CalendarIcon, RefreshCw, Loader2, TrendingUp, MessageSquare,
-  DollarSign, Phone, ArrowRight, Star, AlertTriangle, Sparkles,
+  Euro, Phone, ArrowRight, Star, AlertTriangle, Sparkles,
   User, Eye, Lightbulb,
 } from "lucide-react";
+import { useExchangeRate, formatEur } from "@/lib/use-exchange-rate";
 import { Link } from "wouter";
 import { useDateContext } from "@/lib/date-context";
 import { useRunProgress } from "@/lib/use-run-progress";
@@ -149,6 +150,10 @@ export default function Dashboard() {
 
   useRunProgress(run?.status === "running" || run?.status === "pending" ? dateStr : null);
 
+  const { data: fxData } = useExchangeRate();
+  const eurRate = fxData?.rate ?? null;
+  const fxDate = fxData?.rateDate ?? null;
+
   const trigger = useTriggerRun({
     mutation: {
       onSuccess: () => {
@@ -254,12 +259,17 @@ export default function Dashboard() {
               </div>
               <div className="flex items-center gap-3">
                 <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center">
-                  <DollarSign className="h-4 w-4 text-primary" />
+                  <Euro className="h-4 w-4 text-primary" />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Custo total</p>
+                  <p className="text-xs text-muted-foreground">
+                    Custo total
+                    {fxDate && (
+                      <span className="ml-1 opacity-50" title={`Taxa EUR/USD de ${fxDate}`}>({fxDate})</span>
+                    )}
+                  </p>
                   <p className="font-semibold text-sm">
-                    {run.totalCostUsd != null ? `$${run.totalCostUsd.toFixed(4)}` : "—"}
+                    {run.totalCostUsd != null ? formatEur(run.totalCostUsd, eurRate) : "—"}
                   </p>
                 </div>
               </div>
@@ -500,7 +510,9 @@ export default function Dashboard() {
 
                       <div className="text-xs text-muted-foreground text-right flex-shrink-0">
                         {format(new Date(c.startTime ?? c.createdAt), "HH:mm")}
-                        {c.costUsd != null && <div className="font-mono">${c.costUsd.toFixed(4)}</div>}
+                        {c.costUsd != null && (
+                          <div className="font-mono">{formatEur(c.costUsd, eurRate)}</div>
+                        )}
                       </div>
                     </div>
                   </Link>
