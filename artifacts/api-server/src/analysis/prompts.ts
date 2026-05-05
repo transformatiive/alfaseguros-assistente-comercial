@@ -7,9 +7,9 @@ Devolve **apenas** JSON válido (sem markdown, sem comentários) com a seguinte 
 {
   "categoria": string,                       // Cotação | Renovação | Sinistro | Informação | Pós-venda | Outro
   "produto": string,                         // TVDE | Auto | Multirriscos | Condomínio | Saúde | Empresas | Outro
-  "narrativaConversa": string,               // 3-6 frases. A história completa: o que o cliente queria, o que aconteceu, em que ponto ficou.
+  "narrativaConversa": string,               // 3-8 frases em ordem cronológica. A história completa: o que o cliente queria, o que aconteceu nas chamadas e nos tickets Zoho Desk (se existirem), em que ponto ficou. Se existirem tickets, integra-os temporalmente na narrativa (ex: "No mesmo dia foi aberto o ticket #X onde...").
   "arcoConversa": string,                    // ex: "Frio→Quente", "Estagnado", "Quente→Esfriou", "Direto ao Fecho"
-  "sentimentoClienteEvolucao": string,       // 1-2 frases sobre como o sentimento do cliente evoluiu ao longo das chamadas
+  "sentimentoClienteEvolucao": string,       // 1-2 frases sobre como o sentimento do cliente evoluiu ao longo das chamadas e interações
   "qualidadeGlobal": number,                 // inteiro 1-5 (1=má, 5=excelente)
   "continuidade": string,                    // se a conversa for multi-leg: como ficou a continuidade entre legs/operadores. Vazio "" se single-leg.
   "desviosProcedimento": [
@@ -57,6 +57,23 @@ export function buildSystemPrompt(): string {
   ].join("\n");
 }
 
+export interface RelatedTicketForPrompt {
+  ticketNumber: string | null;
+  subject: string | null;
+  status: string | null;
+  category: string | null;
+  assigneeName: string | null;
+  createdTime: string | null;
+  closedTime: string | null;
+  comments: Array<{
+    commentedTime: string | null;
+    authorType: string | null;
+    authorName: string | null;
+    channel: string | null;
+    content: string | null;
+  }>;
+}
+
 function formatDirection(dir: string | null | undefined): string {
   if (!dir) return "Chamada";
   if (dir === "in" || dir === "inbound") return "Chamada Inbound";
@@ -66,12 +83,22 @@ function formatDirection(dir: string | null | undefined): string {
 
 function formatTime(iso: string | null): string {
   if (!iso) return "(sem hora)";
-  // Display HH:mm in UTC fallback if not parseable as Date.
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   const hh = d.getUTCHours().toString().padStart(2, "0");
   const mm = d.getUTCMinutes().toString().padStart(2, "0");
   return `${hh}:${mm}`;
+}
+
+function formatShortDateTime(iso: string | null | undefined): string {
+  if (!iso) return "(sem data)";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const day = d.getUTCDate().toString().padStart(2, "0");
+  const mon = (d.getUTCMonth() + 1).toString().padStart(2, "0");
+  const hh = d.getUTCHours().toString().padStart(2, "0");
+  const mm = d.getUTCMinutes().toString().padStart(2, "0");
+  return `${day}/${mon} ${hh}:${mm}`;
 }
 
 function formatDuration(sec: number): string {
@@ -80,7 +107,46 @@ function formatDuration(sec: number): string {
   return `${m}m${s.toString().padStart(2, "0")}s`;
 }
 
-export function buildConversationUserMessage(conv: GroupedConversation): string {
+function formatTickets(tickets: RelatedTicketForPrompt[]): string {
+  const lines: string[] = [
+    "## Contexto Zoho Desk (tickets associados a este número de telefone)",
+    "",
+  ];
+
+  for (const t of tickets) {
+    const header = [
+      `### Ticket #${t.ticketNumber ?? "?"} — "${t.subject ?? "(sem assunto)"}"`,
+      `Estado: ${t.status ?? "?"} | Categoria: ${t.category ?? "—"} | Atribuído: ${t.assigneeName ?? "—"}`,
+      `Criado: ${formatShortDateTime(t.createdTime)}${t.closedTime ? ` | Fechado: ${formatShortDateTime(t.closedTime)}` : ""}`,
+    ];
+    lines.push(...header);
+
+    if (t.comments.length === 0) {
+      lines.push("(sem comentários registados)");
+    } else {
+      lines.push("");
+      for (const c of t.comments) {
+        const ts = formatShortDateTime(c.commentedTime);
+        const who = c.authorName ?? (c.authorType === "END_USER" ? "Cliente" : "Agente");
+        const type = c.authorType === "END_USER" ? "Mensagem do cliente" : "Nota interna";
+        const channel = c.channel ? ` [${c.channel}]` : "";
+        lines.push(`  [${ts}${channel}] ${type} — ${who}`);
+        if (c.content) {
+          lines.push(`  "${c.content.trim()}"`);
+        }
+        lines.push("");
+      }
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n").trimEnd();
+}
+
+export function buildConversationUserMessage(
+  conv: GroupedConversation,
+  tickets?: RelatedTicketForPrompt[],
+): string {
   const agents = conv.agentsInvolved.length > 0
     ? conv.agentsInvolved.map((a) => a.name || `(user_id ${a.id})`).join(", ")
     : "(operador desconhecido)";
@@ -101,5 +167,14 @@ export function buildConversationUserMessage(conv: GroupedConversation): string 
     return lines.join("\n");
   });
 
-  return [header, "", ...legBlocks].join("\n");
+  const ticketSection = tickets && tickets.length > 0
+    ? formatTickets(tickets)
+    : null;
+
+  return [
+    header,
+    "",
+    ...legBlocks,
+    ...(ticketSection ? ["", ticketSection] : []),
+  ].join("\n");
 }

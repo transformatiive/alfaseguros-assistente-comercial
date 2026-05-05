@@ -9,6 +9,7 @@ import {
   caseTicketsTable,
   caseCallsTable,
   ticketsTable,
+  ticketCommentsTable,
 } from "@workspace/db";
 import { OpenRouterClient } from "@workspace/openrouter";
 import { RingoverClient } from "@workspace/ringover";
@@ -20,6 +21,7 @@ import {
   generateDailySummary,
   type AnalyzedConversationRef,
 } from "../analysis/summarizer.js";
+import type { RelatedTicketForPrompt } from "../analysis/prompts.js";
 import { bucketByAgent, generateAgentSummary } from "../analysis/agent-summarizer.js";
 import { analyzeCase } from "../analysis/case-analyzer.js";
 import { lisbonDayBoundsISO } from "../lib/dates.js";
@@ -143,6 +145,55 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
       return;
     }
 
+    // Pre-fetch any existing Zoho Desk tickets + comment threads from the DB
+    // (populated by previous Zoho syncs) so the LLM can build a richer,
+    // temporally-coherent narrative. On first-ever run this is a no-op.
+    const allFingerprints = [
+      ...new Set(
+        groups
+          .map((g) => phoneFingerprint(g.customerPhone))
+          .filter((fp): fp is string => !!fp),
+      ),
+    ];
+    const prefetchedTickets = allFingerprints.length > 0
+      ? await db.select().from(ticketsTable).where(inArray(ticketsTable.phoneFingerprint, allFingerprints))
+      : [];
+    const prefetchedTicketIds = prefetchedTickets.map((t) => t.id);
+    const prefetchedComments = prefetchedTicketIds.length > 0
+      ? await db
+          .select()
+          .from(ticketCommentsTable)
+          .where(inArray(ticketCommentsTable.ticketId, prefetchedTicketIds))
+      : [];
+    const prefetchedCommentsByTicketId = new Map<string, typeof prefetchedComments>();
+    for (const c of prefetchedComments) {
+      const list = prefetchedCommentsByTicketId.get(c.ticketId) ?? [];
+      list.push(c);
+      prefetchedCommentsByTicketId.set(c.ticketId, list);
+    }
+    const ticketsByFpForPrompt = new Map<string, RelatedTicketForPrompt[]>();
+    for (const t of prefetchedTickets) {
+      if (!t.phoneFingerprint) continue;
+      const list = ticketsByFpForPrompt.get(t.phoneFingerprint) ?? [];
+      list.push({
+        ticketNumber: t.ticketNumber ?? null,
+        subject: t.subject ?? null,
+        status: t.status ?? null,
+        category: t.category ?? null,
+        assigneeName: t.assigneeName ?? null,
+        createdTime: t.createdTime ? t.createdTime.toISOString() : null,
+        closedTime: t.closedTime ? t.closedTime.toISOString() : null,
+        comments: (prefetchedCommentsByTicketId.get(t.id) ?? []).map((c) => ({
+          commentedTime: c.commentedTime ? c.commentedTime.toISOString() : null,
+          authorType: c.authorType ?? null,
+          authorName: c.authorName ?? null,
+          channel: c.channel ?? null,
+          content: c.contentSanitized,
+        })),
+      });
+      ticketsByFpForPrompt.set(t.phoneFingerprint, list);
+    }
+
     // Analyze each conversation (skip cached unless force)
     const analyzed: Array<
       AnalyzedConversationRef & {
@@ -189,7 +240,13 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
       }
 
       try {
-        const outcome = await analyzeConversation(conv, { client: openrouter, model });
+        const fp = phoneFingerprint(conv.customerPhone);
+        const ticketsForPrompt = fp ? (ticketsByFpForPrompt.get(fp) ?? []) : [];
+        const outcome = await analyzeConversation(conv, {
+          client: openrouter,
+          model,
+          relatedTickets: ticketsForPrompt.length > 0 ? ticketsForPrompt : undefined,
+        });
         if (outcome.ok) {
           totalCost += outcome.cost.costUsd;
           analyzedCount += 1;
@@ -253,7 +310,9 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
         .where(eq(runsTable.date, date));
     });
 
-    // Enrich analyzed conversations with related Zoho tickets (for summaries)
+    // Enrich analyzed conversations with related Zoho tickets + comment threads
+    // (for daily summary and operator coaching). Re-fetched after Phase 2A so
+    // newly synced tickets are included.
     const fingerprints = [
       ...new Set(
         analyzed
@@ -268,6 +327,20 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
             .from(ticketsTable)
             .where(inArray(ticketsTable.phoneFingerprint, fingerprints))
         : [];
+    const relatedTicketIds = relatedTicketRows.map((t) => t.id);
+    const relatedCommentRows =
+      relatedTicketIds.length > 0
+        ? await db
+            .select()
+            .from(ticketCommentsTable)
+            .where(inArray(ticketCommentsTable.ticketId, relatedTicketIds))
+        : [];
+    const enrichCommentsByTicketId = new Map<string, typeof relatedCommentRows>();
+    for (const c of relatedCommentRows) {
+      const list = enrichCommentsByTicketId.get(c.ticketId) ?? [];
+      list.push(c);
+      enrichCommentsByTicketId.set(c.ticketId, list);
+    }
     const ticketsByFp = new Map<string, typeof relatedTicketRows>();
     for (const t of relatedTicketRows) {
       if (!t.phoneFingerprint) continue;
@@ -287,6 +360,12 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
           category: t.category ?? null,
           createdTime: t.createdTime ? t.createdTime.toISOString() : null,
           closedTime: t.closedTime ? t.closedTime.toISOString() : null,
+          comments: (enrichCommentsByTicketId.get(t.id) ?? []).map((c) => ({
+            commentedTime: c.commentedTime ? c.commentedTime.toISOString() : null,
+            authorType: c.authorType ?? null,
+            authorName: c.authorName ?? null,
+            content: c.contentSanitized,
+          })),
         })),
       };
     });

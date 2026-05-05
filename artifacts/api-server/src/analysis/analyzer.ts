@@ -11,6 +11,7 @@ import {
 import {
   buildConversationUserMessage,
   buildSystemPrompt,
+  type RelatedTicketForPrompt,
 } from "./prompts.js";
 
 export interface AnalyzeOptions {
@@ -26,6 +27,12 @@ export interface AnalyzeOptions {
    * On truncation the call is retried once with MAX_TOKENS_RETRY.
    */
   maxTokens?: number;
+  /**
+   * Zoho Desk tickets (with comment threads) associated with this conversation's
+   * phone number. When provided they are appended to the user message so the
+   * LLM can build a richer, temporally-coherent narrative.
+   */
+  relatedTickets?: RelatedTicketForPrompt[];
 }
 
 /** Token ceiling used on the automatic retry when a truncated JSON is detected. */
@@ -54,7 +61,7 @@ async function callOnce(
   const model = opts.model ?? DEFAULT_MODEL;
   const cache = opts.cacheSystemPrompt ?? true;
   const systemText = buildSystemPrompt();
-  const userText = buildConversationUserMessage(conv);
+  const userText = buildConversationUserMessage(conv, opts.relatedTickets);
 
   const systemMessage: ChatMessage = cache
     ? {
