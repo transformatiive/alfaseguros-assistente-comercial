@@ -788,6 +788,9 @@ components:
           type: ["string", "null"]
         customerPhone:
           type: string
+        contactName:
+          type: ["string", "null"]
+          description: Contact name from Zoho Desk, if known.
         runDate:
           type: string
       required:
@@ -799,6 +802,7 @@ components:
         - conversationId
         - agentName
         - customerPhone
+        - contactName
         - runDate
 
     CaseLeg:

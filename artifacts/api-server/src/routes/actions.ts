@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
-import { db, conversationsTable } from "@workspace/db";
+import { eq, inArray } from "drizzle-orm";
+import { db, conversationsTable, ticketsTable } from "@workspace/db";
 import { ListConversationsParams } from "@workspace/api-zod";
+import { phoneFingerprint } from "@workspace/phone";
 
 const router: IRouter = Router();
 
@@ -24,6 +25,7 @@ interface ActionItem {
   conversationId: number;
   agentName: string | null;
   customerPhone: string;
+  contactName: string | null;
   runDate: string;
 }
 
@@ -52,6 +54,27 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
     .from(conversationsTable)
     .where(eq(conversationsTable.runDate, date));
 
+  // Batch-fetch the most recent contact name per phone fingerprint (single query, no N+1)
+  const fingerprints = [
+    ...new Set(
+      conversations
+        .map((c) => phoneFingerprint(c.customerPhone))
+        .filter((fp): fp is string => !!fp),
+    ),
+  ];
+  const contactNameByFp = new Map<string, string>();
+  if (fingerprints.length > 0) {
+    const rows = await db
+      .select({ fp: ticketsTable.phoneFingerprint, name: ticketsTable.contactName })
+      .from(ticketsTable)
+      .where(inArray(ticketsTable.phoneFingerprint, fingerprints))
+      .orderBy(ticketsTable.createdTime);
+    // Later rows (more recent) overwrite earlier ones, giving the most recent name
+    for (const row of rows) {
+      if (row.fp && row.name) contactNameByFp.set(row.fp, row.name);
+    }
+  }
+
   const items: ActionItem[] = [];
 
   for (const conv of conversations) {
@@ -64,6 +87,8 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
     const runDate = conv.runDate;
     const categoria = typeof a.categoria === "string" ? a.categoria.trim() : "";
     const followUpNecessario = a.followUpNecessario === true;
+    const fp = phoneFingerprint(customerPhone);
+    const contactName = (fp && contactNameByFp.get(fp)) || null;
 
     // 1. Follow-up pendente
     if (a.followUpNecessario === true) {
@@ -80,6 +105,7 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
         conversationId,
         agentName,
         customerPhone,
+        contactName,
         runDate,
       });
     }
@@ -109,6 +135,7 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
         conversationId,
         agentName,
         customerPhone,
+        contactName,
         runDate,
       });
     }
@@ -128,6 +155,7 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
         conversationId,
         agentName,
         customerPhone,
+        contactName,
         runDate,
       });
     }
@@ -147,6 +175,7 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
         conversationId,
         agentName,
         customerPhone,
+        contactName,
         runDate,
       });
     }
@@ -164,6 +193,7 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
         conversationId,
         agentName,
         customerPhone,
+        contactName,
         runDate,
       });
     }
@@ -183,6 +213,7 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
         conversationId,
         agentName,
         customerPhone,
+        contactName,
         runDate,
       });
     }
@@ -209,6 +240,7 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
         conversationId,
         agentName,
         customerPhone,
+        contactName,
         runDate,
       });
     }

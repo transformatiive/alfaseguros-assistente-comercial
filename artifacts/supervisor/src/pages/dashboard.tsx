@@ -689,6 +689,7 @@ type ActionItem = {
   conversationId: number;
   agentName: string | null;
   customerPhone: string;
+  contactName: string | null;
   runDate: string;
 };
 
@@ -785,6 +786,9 @@ function ActionCard({ item }: { item: ActionItem }) {
           >
             {PRIORIDADE_LABEL[item.prioridade]}
           </span>
+          {item.contactName ? (
+            <span className="text-[10px] font-medium text-foreground">{item.contactName}</span>
+          ) : null}
           <span className="text-[10px] text-muted-foreground font-mono">{item.customerPhone}</span>
         </div>
         <p className="text-sm font-medium leading-snug">{item.titulo}</p>

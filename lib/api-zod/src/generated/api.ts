@@ -363,6 +363,10 @@ export const ListActionsResponseItem = zod
     conversationId: zod.number(),
     agentName: zod.string().nullable(),
     customerPhone: zod.string(),
+    contactName: zod
+      .string()
+      .nullable()
+      .describe("Contact name from Zoho Desk, if known."),
     runDate: zod.string(),
   })
   .describe(
