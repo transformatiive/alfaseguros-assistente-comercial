@@ -774,7 +774,7 @@ components:
           description: Unique id (e.g. "42-follow_up")
         tipo:
           type: string
-          enum: [follow_up_pendente, risco_perda_lead, desvio_procedimento, qualidade_critica, oportunidade_cross_sell]
+          enum: [follow_up_pendente, risco_perda_lead, desvio_procedimento, qualidade_critica, oportunidade_cross_sell, cotacao_sem_seguimento, lead_quente_sem_fecho]
         prioridade:
           type: string
           enum: [alta, media, baixa]

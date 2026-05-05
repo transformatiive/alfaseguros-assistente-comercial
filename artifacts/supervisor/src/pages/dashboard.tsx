@@ -6,6 +6,7 @@ import {
   Euro, Phone, ArrowRight, Star, AlertTriangle, Sparkles,
   User, Eye, Lightbulb, BookOpen, Bell, PhoneCall, ShieldAlert,
   ChevronDown, ChevronRight, TrendingDown, Sparkles as SparklesIcon,
+  FileQuestion, Flame,
 } from "lucide-react";
 import { useExchangeRate, formatEur } from "@/lib/use-exchange-rate";
 import { Link } from "wouter";
@@ -675,7 +676,9 @@ type ActionTipo =
   | "risco_perda_lead"
   | "desvio_procedimento"
   | "qualidade_critica"
-  | "oportunidade_cross_sell";
+  | "oportunidade_cross_sell"
+  | "cotacao_sem_seguimento"
+  | "lead_quente_sem_fecho";
 
 type ActionItem = {
   id: string;
@@ -692,6 +695,8 @@ type ActionItem = {
 const TIPO_ORDER: ActionTipo[] = [
   "follow_up_pendente",
   "risco_perda_lead",
+  "lead_quente_sem_fecho",
+  "cotacao_sem_seguimento",
   "desvio_procedimento",
   "qualidade_critica",
   "oportunidade_cross_sell",
@@ -738,6 +743,20 @@ const TIPO_CONFIG: Record<ActionTipo, {
     color: "text-emerald-700",
     bg: "bg-emerald-50 border-emerald-200",
     iconColor: "text-emerald-500",
+  },
+  cotacao_sem_seguimento: {
+    label: "Cotação sem seguimento",
+    icon: FileQuestion,
+    color: "text-violet-700",
+    bg: "bg-violet-50 border-violet-200",
+    iconColor: "text-violet-500",
+  },
+  lead_quente_sem_fecho: {
+    label: "Lead quente sem fecho",
+    icon: Flame,
+    color: "text-orange-700",
+    bg: "bg-orange-50 border-orange-200",
+    iconColor: "text-orange-500",
   },
 };
 

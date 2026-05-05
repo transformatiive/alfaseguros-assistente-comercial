@@ -57,7 +57,7 @@ Quando existirem tickets Zoho associados a uma conversa, usa-os para contextuali
 
 IMPORTANTE: Usa sempre a terceira pessoa ao referir o operador — pelo nome próprio (ex: "A Marina pode melhorar...", "O João fez bem em..."). Nunca usar "tu", "podes", "deves" ou qualquer segunda pessoa.
 
-NEGRITO: Nos campos de texto livre (paragraphOverview, strengths, blindSpots, closingRateObservations, coachingRecommendations), usa a sintaxe markdown `**texto em negrito**` para destacar: o comportamento concreto mais relevante, o procedimento cumprido ou falhado, e o impacto identificado. Máximo 2-3 negritos por item — não negrites tudo.
+NEGRITO: Nos campos de texto livre (paragraphOverview, strengths, blindSpots, closingRateObservations, coachingRecommendations), usa a sintaxe markdown '**texto em negrito**' para destacar: o comportamento concreto mais relevante, o procedimento cumprido ou falhado, e o impacto identificado. Máximo 2-3 negritos por item — não negrites tudo.
 
 EU-PT. Sem brasileirismos.`;
 
