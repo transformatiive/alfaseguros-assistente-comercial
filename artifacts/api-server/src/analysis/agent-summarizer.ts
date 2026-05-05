@@ -39,7 +39,7 @@ const DEFAULT_MODEL = "anthropic/claude-sonnet-4";
 
 const SYSTEM = `És um supervisor sénior de uma corretora de seguros portuguesa (Alfaseguros), equipa Não Vida (360).
 
-Recebes a lista das análises de conversas de UM operador específico para o dia. Produz coaching personalizado, em tom construtivo e específico (não policial), em Português europeu.
+Recebes a lista das análises de conversas de UM operador específico para o dia, enriquecidas com tickets do Zoho Desk quando disponíveis. Produz coaching personalizado, em tom construtivo e específico (não policial), em Português europeu.
 
 Devolve **apenas** JSON válido:
 
@@ -53,13 +53,15 @@ Devolve **apenas** JSON válido:
 
 Distinguir entre conversas SOLO (este operador foi o principal) e JOINT (participou junto com outros). O coaching deve ser justo: erros em chamadas joint não são totalmente atribuíveis a este operador.
 
+Quando existirem tickets Zoho associados a uma conversa, usa-os para contextualizar: o cliente já tinha contactado por outro canal? O ticket foi resolvido? Há padrão de recorrência?
+
 IMPORTANTE: Usa sempre a terceira pessoa ao referir o operador — pelo nome próprio (ex: "A Marina pode melhorar...", "O João fez bem em..."). Nunca usar "tu", "podes", "deves" ou qualquer segunda pessoa.
 
 EU-PT. Sem brasileirismos.`;
 
 function describeConv(c: AnalyzedConversationRef): string {
   const a = c.analysis;
-  return [
+  const lines = [
     `- Conversa ${c.rowId} | Cliente ${c.customerPhone} | ${a.categoria} ${a.produto} | qualidade ${a.qualidadeGlobal}/5 | risco ${a.riscoPerdaLead}`,
     `  Narrativa: ${a.narrativaConversa}`,
     a.desviosProcedimento.length > 0
@@ -71,7 +73,17 @@ function describeConv(c: AnalyzedConversationRef): string {
       ? `  Positivos: ${a.pontosPositivos.join("; ")}`
       : "  Positivos: (nada destacado)",
     `  Feedback existente: ${a.feedbackSupervisor}`,
-  ].join("\n");
+  ];
+  if (c.relatedTickets && c.relatedTickets.length > 0) {
+    const ticketLines = c.relatedTickets
+      .map(
+        (t) =>
+          `#${t.ticketNumber ?? "?"} "${t.subject ?? "(sem assunto)"}" [${t.status ?? "?"}${t.closedTime ? " — fechado" : ""}]`,
+      )
+      .join(" | ");
+    lines.push(`  Tickets Zoho: ${ticketLines}`);
+  }
+  return lines.join("\n");
 }
 
 export async function generateAgentSummary(

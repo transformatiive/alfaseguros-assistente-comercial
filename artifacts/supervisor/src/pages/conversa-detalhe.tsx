@@ -16,12 +16,18 @@ import {
   ExternalLink,
   User,
   RefreshCw,
+  PhoneIncoming,
+  PhoneOutgoing,
+  Clock,
+  Mail,
 } from "lucide-react";
 import { useDateContext } from "@/lib/date-context";
 import {
   useGetConversation,
   getGetConversationQueryKey,
   type DeskTicket,
+  type DeskTicketComment,
+  type ConversationLeg,
 } from "@workspace/api-client-react";
 import { useExchangeRate, formatEur } from "@/lib/use-exchange-rate";
 import { Badge } from "@/components/ui/badge";
@@ -95,15 +101,101 @@ function SectionTitle({
   );
 }
 
-function TicketCard({ ticket }: { ticket: DeskTicket }) {
-  const outcome = ticket.outcomeStatus ? OUTCOME_STYLES[ticket.outcomeStatus] ?? OUTCOME_STYLES.unknown : null;
+// ── Unified Timeline ──────────────────────────────────────────────────────────
+
+type TimelineEvent =
+  | { kind: "call"; time: Date; leg: ConversationLeg }
+  | { kind: "ticket"; time: Date; ticket: DeskTicket }
+  | { kind: "comment"; time: Date; comment: DeskTicketComment; ticketSubject: string | null; ticketNumber: string | null };
+
+function buildTimeline(
+  legs: ConversationLeg[],
+  tickets: DeskTicket[],
+  convCreatedAt: string,
+): TimelineEvent[] {
+  const events: TimelineEvent[] = [];
+
+  for (const leg of legs) {
+    const t = leg.startTime ? new Date(leg.startTime) : new Date(convCreatedAt);
+    events.push({ kind: "call", time: t, leg });
+  }
+
+  for (const ticket of tickets) {
+    if (ticket.createdTime) {
+      events.push({ kind: "ticket", time: new Date(ticket.createdTime), ticket });
+    }
+    for (const comment of ticket.comments) {
+      if (comment.commentedTime) {
+        events.push({
+          kind: "comment",
+          time: new Date(comment.commentedTime),
+          comment,
+          ticketSubject: ticket.subject ?? null,
+          ticketNumber: ticket.ticketNumber ?? null,
+        });
+      }
+    }
+  }
+
+  events.sort((a, b) => a.time.getTime() - b.time.getTime());
+  return events;
+}
+
+function CallEventRow({ leg }: { leg: ConversationLeg }) {
+  const isInbound =
+    leg.direction === "in" ||
+    leg.direction === "inbound" ||
+    leg.direction === "incoming";
+  const Icon = isInbound ? PhoneIncoming : PhoneOutgoing;
+  const iconCls = isInbound ? "text-emerald-600" : "text-blue-600";
+  const label = isInbound ? "Chamada Entrada" : "Chamada Saída";
+  const duration = formatDuration(leg.durationSec);
+
   return (
-    <div className="rounded-md border bg-card p-3 space-y-2">
-      <div className="flex items-start justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2">
+    <div className="flex items-start gap-3 py-2.5">
+      <div className="flex-shrink-0 w-6 flex items-center justify-center mt-0.5">
+        <Icon className={cn("h-4 w-4", iconCls)} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-medium">{label}</span>
+          {leg.agentName && (
+            <span className="text-xs text-muted-foreground">{leg.agentName}</span>
+          )}
+          {duration && (
+            <Badge variant="outline" className="font-mono text-[10px]">
+              {duration}
+            </Badge>
+          )}
+        </div>
+        {leg.startTime && (
+          <p className="text-[10px] font-mono text-muted-foreground mt-0.5">
+            {formatShortDate(leg.startTime)}
+          </p>
+        )}
+        {leg.ringoverSummary && (
+          <p className="mt-1 text-xs text-muted-foreground leading-relaxed italic">
+            {leg.ringoverSummary}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TicketEventRow({ ticket }: { ticket: DeskTicket }) {
+  const outcome = ticket.outcomeStatus ? OUTCOME_STYLES[ticket.outcomeStatus] ?? null : null;
+  return (
+    <div className="flex items-start gap-3 py-2.5">
+      <div className="flex-shrink-0 w-6 flex items-center justify-center mt-0.5">
+        <Ticket className="h-4 w-4 text-violet-600" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
           {ticket.ticketNumber && (
             <span className="font-mono text-xs text-muted-foreground">#{ticket.ticketNumber}</span>
           )}
+          <span className="text-sm font-medium">{ticket.subject ?? "(sem assunto)"}</span>
           {outcome && (
             <Badge variant="outline" className={cn("text-[10px]", outcome.cls)}>
               {outcome.label}
@@ -115,42 +207,153 @@ function TicketCard({ ticket }: { ticket: DeskTicket }) {
             </Badge>
           )}
         </div>
-        {ticket.ticketNumber && (
-          <a
-            href={`https://desk.zoho.eu/agent/alfaseguros/tickets/${ticket.ticketNumber}`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ExternalLink className="h-3 w-3" />
-            Zoho Desk
-          </a>
-        )}
+        <div className="flex flex-wrap gap-x-3 mt-0.5 text-[10px] text-muted-foreground">
+          {ticket.createdTime && <span className="font-mono">{formatShortDate(ticket.createdTime)}</span>}
+          {ticket.category && <span>{ticket.category}</span>}
+          {ticket.assigneeName && <span>→ {ticket.assigneeName}</span>}
+          {ticket.ticketNumber && (
+            <a
+              href={`https://desk.zoho.eu/agent/alfaseguros/tickets/${ticket.ticketNumber}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-0.5 text-primary hover:underline"
+            >
+              <ExternalLink className="h-2.5 w-2.5" />
+              Zoho Desk
+            </a>
+          )}
+        </div>
       </div>
-      {ticket.subject && (
-        <p className="text-sm font-medium text-foreground leading-snug">{ticket.subject}</p>
-      )}
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-        {ticket.category && <span>{ticket.category}</span>}
-        {ticket.productName && <span>{ticket.productName}</span>}
-        {ticket.contactName && (
-          <span className="flex items-center gap-1">
-            <User className="h-3 w-3" />
-            {ticket.contactName}
+    </div>
+  );
+}
+
+function CommentEventRow({
+  comment,
+  ticketSubject,
+  ticketNumber,
+}: {
+  comment: DeskTicketComment;
+  ticketSubject: string | null;
+  ticketNumber: string | null;
+}) {
+  const isClient = comment.authorType === "END_USER";
+  const channelIcon = comment.channel?.toLowerCase().includes("mail") ? (
+    <Mail className="h-3.5 w-3.5 text-indigo-500" />
+  ) : (
+    <MessageSquare className="h-3.5 w-3.5 text-indigo-500" />
+  );
+
+  return (
+    <div className="flex items-start gap-3 py-2.5">
+      <div className="flex-shrink-0 w-6 flex items-center justify-center mt-0.5">
+        {channelIcon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-medium">
+            {isClient ? "Mensagem do cliente" : "Resposta interna"}
           </span>
+          {comment.authorName && (
+            <span className="text-xs text-muted-foreground">{comment.authorName}</span>
+          )}
+          {comment.channel && (
+            <Badge variant="outline" className="text-[10px]">
+              {comment.channel}
+            </Badge>
+          )}
+          {ticketNumber && (
+            <span className="text-[10px] font-mono text-muted-foreground">#{ticketNumber}</span>
+          )}
+        </div>
+        {comment.commentedTime && (
+          <p className="text-[10px] font-mono text-muted-foreground mt-0.5">
+            {formatShortDate(comment.commentedTime)}
+          </p>
         )}
-        {ticket.assigneeName && <span>Atribuído a: {ticket.assigneeName}</span>}
-        {ticket.createdTime && <span>{formatShortDate(ticket.createdTime)}</span>}
-        {ticket.modifiedTime && ticket.modifiedTime !== ticket.createdTime && (
-          <span className="flex items-center gap-1">
-            <RefreshCw className="h-3 w-3" />
-            {formatShortDate(ticket.modifiedTime)}
-          </span>
+        {comment.content && (
+          <p className="mt-1 text-xs text-muted-foreground leading-relaxed line-clamp-3">
+            {comment.content}
+          </p>
         )}
       </div>
     </div>
   );
 }
+
+function InterleaveTimeline({
+  legs,
+  tickets,
+  convCreatedAt,
+}: {
+  legs: ConversationLeg[];
+  tickets: DeskTicket[];
+  convCreatedAt: string;
+}) {
+  const events = buildTimeline(legs, tickets, convCreatedAt);
+  const hasContent = events.length > 0;
+
+  const callCount = events.filter((e) => e.kind === "call").length;
+  const ticketCount = events.filter((e) => e.kind === "ticket").length;
+  const commentCount = events.filter((e) => e.kind === "comment").length;
+
+  return (
+    <div className="rounded-lg border bg-card p-4">
+      <SectionTitle
+        icon={<Clock className="h-3.5 w-3.5" />}
+        label={`Linha do Tempo${hasContent ? ` · ${events.length} eventos` : ""}`}
+        color="text-violet-700"
+      />
+
+      {hasContent ? (
+        <>
+          {/* Legend */}
+          <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-[10px] text-muted-foreground">
+            {callCount > 0 && (
+              <span className="flex items-center gap-1">
+                <PhoneIncoming className="h-3 w-3 text-emerald-600" />
+                {callCount} {callCount === 1 ? "chamada" : "chamadas"}
+              </span>
+            )}
+            {ticketCount > 0 && (
+              <span className="flex items-center gap-1">
+                <Ticket className="h-3 w-3 text-violet-600" />
+                {ticketCount} ticket{ticketCount !== 1 ? "s" : ""}
+              </span>
+            )}
+            {commentCount > 0 && (
+              <span className="flex items-center gap-1">
+                <MessageSquare className="h-3 w-3 text-indigo-500" />
+                {commentCount} {commentCount === 1 ? "comentário" : "comentários"}
+              </span>
+            )}
+          </div>
+
+          <div className="divide-y divide-border/50">
+            {events.map((ev, i) => {
+              if (ev.kind === "call") return <CallEventRow key={i} leg={ev.leg} />;
+              if (ev.kind === "ticket") return <TicketEventRow key={i} ticket={ev.ticket} />;
+              return (
+                <CommentEventRow
+                  key={i}
+                  comment={ev.comment}
+                  ticketSubject={ev.ticketSubject}
+                  ticketNumber={ev.ticketNumber}
+                />
+              );
+            })}
+          </div>
+        </>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Nenhum evento de linha do tempo disponível. Os dados detalhados de chamadas e tickets ficam disponíveis após a próxima análise.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── Main Component ─────────────────────────────────────────────────────────────
 
 export default function ConversaDetalhe() {
   const params = useParams<{ id: string }>();
@@ -199,6 +402,7 @@ export default function ConversaDetalhe() {
   const duration = formatDuration(conv.durationSec);
   const riscoClass = a?.riscoPerdaLead ? RISCO_STYLES[a.riscoPerdaLead] : null;
   const tickets = conv.tickets ?? [];
+  const legs = conv.legs ?? [];
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -237,6 +441,12 @@ export default function ConversaDetalhe() {
             <span>
               {conv.callIds.length} {conv.callIds.length === 1 ? "chamada" : "chamadas"}
             </span>
+            {tickets.length > 0 && (
+              <>
+                <span>·</span>
+                <span>{tickets.length} ticket{tickets.length !== 1 ? "s" : ""} Zoho</span>
+              </>
+            )}
             {conv.costUsd != null && (
               <>
                 <span>·</span>
@@ -427,25 +637,12 @@ export default function ConversaDetalhe() {
             </div>
           )}
 
-          {/* ── 4. TICKETS ZOHO DESK ── */}
-          <div className="rounded-lg border bg-card p-4">
-            <SectionTitle
-              icon={<Ticket className="h-3.5 w-3.5" />}
-              label={`Tickets Zoho Desk${tickets.length > 0 ? ` (${tickets.length})` : ""}`}
-              color="text-violet-700"
-            />
-            {tickets.length > 0 ? (
-              <div className="space-y-2">
-                {tickets.map((t) => (
-                  <TicketCard key={t.id} ticket={t} />
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Nenhum ticket Zoho Desk encontrado para este número de telefone. Os tickets são sincronizados automaticamente durante a análise do dia.
-              </p>
-            )}
-          </div>
+          {/* ── 4. TIMELINE (calls + tickets + comments interleaved) ── */}
+          <InterleaveTimeline
+            legs={legs}
+            tickets={tickets}
+            convCreatedAt={conv.createdAt}
+          />
 
           {/* ── 5. RECORDINGS + CALL IDs ── */}
           {(conv.recordingUrls.length > 0 || conv.callIds.length > 0) && (
@@ -473,11 +670,22 @@ export default function ConversaDetalhe() {
           )}
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed p-8 text-center">
-          <p className="text-sm text-muted-foreground">
-            Análise ainda não disponível para esta conversa.
-          </p>
-        </div>
+        <>
+          {/* Even without analysis, show the timeline if we have tickets/legs */}
+          {(legs.length > 0 || tickets.length > 0) && (
+            <InterleaveTimeline
+              legs={legs}
+              tickets={tickets}
+              convCreatedAt={conv.createdAt}
+            />
+          )}
+
+          <div className="rounded-lg border border-dashed p-8 text-center">
+            <p className="text-sm text-muted-foreground">
+              Análise ainda não disponível para esta conversa.
+            </p>
+          </div>
+        </>
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import {
   db,
   conversationsTable,
@@ -8,10 +8,12 @@ import {
   casesTable,
   caseTicketsTable,
   caseCallsTable,
+  ticketsTable,
 } from "@workspace/db";
 import { OpenRouterClient } from "@workspace/openrouter";
 import { RingoverClient } from "@workspace/ringover";
 import { ZohoAuth, ZohoDeskClient } from "@workspace/zoho-desk";
+import { phoneFingerprint } from "@workspace/phone";
 import { groupIntoConversations, type GroupedConversation } from "../grouping/conversations.js";
 import { analyzeConversation } from "../analysis/analyzer.js";
 import {
@@ -78,6 +80,16 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
           ),
         );
 
+      // Serialise legs to plain JSON for storage
+      const legsJson = g.legs.map((l) => ({
+        callId: l.callId,
+        agentName: l.agentName,
+        direction: l.direction,
+        startTime: l.startTime,
+        durationSec: l.durationSec,
+        ringoverSummary: l.ringoverSummary,
+      }));
+
       if (existing.length > 0) {
         const row = existing[0];
         await db
@@ -88,6 +100,7 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
             agentName: g.agentName,
             durationSec: g.durationSec,
             recordingUrls: g.recordingUrls,
+            legsJson,
             ...(force ? { analysisJson: null, costUsd: null } : {}),
           })
           .where(eq(conversationsTable.id, row.id));
@@ -103,6 +116,7 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
             agentName: g.agentName,
             durationSec: g.durationSec,
             recordingUrls: g.recordingUrls,
+            legsJson,
           })
           .returning();
         rowIdByPhone.set(g.customerPhone, inserted.id);
@@ -239,6 +253,44 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
         .where(eq(runsTable.date, date));
     });
 
+    // Enrich analyzed conversations with related Zoho tickets (for summaries)
+    const fingerprints = [
+      ...new Set(
+        analyzed
+          .map((a) => phoneFingerprint(a.customerPhone))
+          .filter((fp): fp is string => !!fp),
+      ),
+    ];
+    const relatedTicketRows =
+      fingerprints.length > 0
+        ? await db
+            .select()
+            .from(ticketsTable)
+            .where(inArray(ticketsTable.phoneFingerprint, fingerprints))
+        : [];
+    const ticketsByFp = new Map<string, typeof relatedTicketRows>();
+    for (const t of relatedTicketRows) {
+      if (!t.phoneFingerprint) continue;
+      const list = ticketsByFp.get(t.phoneFingerprint) ?? [];
+      list.push(t);
+      ticketsByFp.set(t.phoneFingerprint, list);
+    }
+    const analyzedEnriched = analyzed.map((a) => {
+      const fp = phoneFingerprint(a.customerPhone);
+      const tickets = fp ? (ticketsByFp.get(fp) ?? []) : [];
+      return {
+        ...a,
+        relatedTickets: tickets.map((t) => ({
+          ticketNumber: t.ticketNumber ?? null,
+          subject: t.subject ?? null,
+          status: t.status ?? null,
+          category: t.category ?? null,
+          createdTime: t.createdTime ? t.createdTime.toISOString() : null,
+          closedTime: t.closedTime ? t.closedTime.toISOString() : null,
+        })),
+      };
+    });
+
     // Phase 2A — sync Zoho Desk tickets, build cross-channel cases, analyze each.
     // Gated on Zoho credentials being configured; otherwise the run stays
     // call-only and the Pipeline view will simply be empty.
@@ -345,9 +397,9 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
       }
     }
 
-    // Daily executive summary
-    if (analyzed.length > 0) {
-      const summaryOutcome = await generateDailySummary(analyzed, date, {
+    // Daily executive summary (enriched with ticket context)
+    if (analyzedEnriched.length > 0) {
+      const summaryOutcome = await generateDailySummary(analyzedEnriched, date, {
         client: openrouter,
         model,
       });
@@ -386,11 +438,11 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
       }
     }
 
-    // Per-operator coaching
+    // Per-operator coaching (enriched with ticket context)
     let agentsCount = 0;
     let agentsCost = 0;
-    if (analyzed.length > 0) {
-      const buckets = bucketByAgent(analyzed);
+    if (analyzedEnriched.length > 0) {
+      const buckets = bucketByAgent(analyzedEnriched);
       // Reset operator summaries for this date so renames/removals don't linger
       await db.delete(operatorSummariesTable).where(eq(operatorSummariesTable.date, date));
       for (const bucket of buckets) {

@@ -158,6 +158,25 @@ export interface ConversationAnalysis {
 }
 
 /**
+ * A comment on a Zoho Desk ticket.
+ */
+export interface DeskTicketComment {
+  id: string;
+  /** @nullable */
+  commentedTime: string | null;
+  /** @nullable */
+  channel: string | null;
+  /**
+   * AGENT | END_USER | SYSTEM
+   * @nullable
+   */
+  authorType: string | null;
+  /** @nullable */
+  authorName: string | null;
+  content: string;
+}
+
+/**
  * A Zoho Desk ticket matched to this conversation via phone fingerprint.
  */
 export interface DeskTicket {
@@ -182,6 +201,27 @@ export interface DeskTicket {
   createdTime: string | null;
   /** @nullable */
   modifiedTime: string | null;
+  /** Comments on this ticket, sorted chronologically */
+  comments: DeskTicketComment[];
+}
+
+/**
+ * A single call leg within a grouped conversation.
+ */
+export interface ConversationLeg {
+  callId: string;
+  /** @nullable */
+  agentName: string | null;
+  /**
+   * inbound | outbound
+   * @nullable
+   */
+  direction: string | null;
+  /** @nullable */
+  startTime: string | null;
+  durationSec: number;
+  /** AI-generated or manual note from Ringover */
+  ringoverSummary: string;
 }
 
 export interface ConversationDetail {
@@ -197,7 +237,9 @@ export interface ConversationDetail {
   durationSec: number | null;
   recordingUrls: string[];
   analysis: ConversationAnalysis | null;
-  /** Zoho Desk tickets matched via phone fingerprint */
+  /** Individual call legs in chronological order (empty for older records) */
+  legs: ConversationLeg[];
+  /** Zoho Desk tickets matched via phone fingerprint (with comments) */
   tickets: DeskTicket[];
   /** @nullable */
   costUsd: number | null;
@@ -270,4 +312,63 @@ export interface OperatorSummary {
   closingRateObservations: string;
   coachingRecommendations: string[];
   createdAt: string;
+}
+
+export type CaseLegKind = (typeof CaseLegKind)[keyof typeof CaseLegKind];
+
+export const CaseLegKind = {
+  call: "call",
+  ticket_event: "ticket_event",
+  ticket_comment: "ticket_comment",
+} as const;
+
+/**
+ * A single event in a cross-channel case timeline.
+ */
+export interface CaseLeg {
+  kind: CaseLegKind;
+  /** ISO 8601 timestamp */
+  at: string;
+  /** ticket id, comment id, or conversation row id */
+  refId: string;
+  label: string;
+  detail: string;
+  /** @nullable */
+  agentName: string | null;
+  /** @nullable */
+  channel: string | null;
+  /**
+   * For call legs, the linked conversation DB id
+   * @nullable
+   */
+  conversationId: number | null;
+}
+
+/**
+ * A cross-channel case (calls + tickets) linked to a date.
+ */
+export interface CaseSummary {
+  id: string;
+  /** @nullable */
+  customerPhone: string | null;
+  /** @nullable */
+  customerName: string | null;
+  /** @nullable */
+  productName: string | null;
+  /** @nullable */
+  primaryAgentName: string | null;
+  /** @nullable */
+  firstActivityAt: string | null;
+  /** @nullable */
+  lastActivityAt: string | null;
+  /** won | lost | open | unknown */
+  outcomeStatus: string;
+  legCount: number;
+  /** Conversation DB ids linked to this case */
+  conversationIds: number[];
+  ticketIds: string[];
+  timeline: CaseLeg[];
+  analysis: ConversationAnalysis | null;
+  /** @nullable */
+  costUsd: number | null;
 }

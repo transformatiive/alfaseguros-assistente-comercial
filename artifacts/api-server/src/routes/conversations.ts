@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
-import { db, conversationsTable, ticketsTable } from "@workspace/db";
+import { eq, and, inArray } from "drizzle-orm";
+import { db, conversationsTable, ticketsTable, ticketCommentsTable } from "@workspace/db";
 import { ListConversationsParams, GetConversationParams } from "@workspace/api-zod";
 import { phoneFingerprint } from "@workspace/phone";
 
@@ -82,6 +82,38 @@ router.get("/conversations/:date/:conversationId", async (req, res): Promise<voi
         .where(eq(ticketsTable.phoneFingerprint, fp))
     : [];
 
+  // Fetch comments for all matched tickets
+  const ticketIds = tickets.map((t) => t.id);
+  const comments =
+    ticketIds.length > 0
+      ? await db
+          .select()
+          .from(ticketCommentsTable)
+          .where(inArray(ticketCommentsTable.ticketId, ticketIds))
+          .orderBy(ticketCommentsTable.commentedTime)
+      : [];
+
+  const commentsByTicket = new Map<string, typeof comments>();
+  for (const c of comments) {
+    const list = commentsByTicket.get(c.ticketId) ?? [];
+    list.push(c);
+    commentsByTicket.set(c.ticketId, list);
+  }
+
+  // Normalize stored legsJson
+  const legsRaw = Array.isArray(conversation.legsJson) ? conversation.legsJson : [];
+  const legs = legsRaw.map((l: unknown) => {
+    const leg = l as Record<string, unknown>;
+    return {
+      callId: String(leg.callId ?? ""),
+      agentName: (leg.agentName as string | null) ?? null,
+      direction: (leg.direction as string | null) ?? null,
+      startTime: (leg.startTime as string | null) ?? null,
+      durationSec: typeof leg.durationSec === "number" ? leg.durationSec : 0,
+      ringoverSummary: String(leg.ringoverSummary ?? ""),
+    };
+  });
+
   res.json({
     id: conversation.id,
     runDate: conversation.runDate,
@@ -92,6 +124,7 @@ router.get("/conversations/:date/:conversationId", async (req, res): Promise<voi
     durationSec: conversation.durationSec ?? null,
     recordingUrls: conversation.recordingUrls ?? [],
     analysis: normalizeAnalysis(conversation.analysisJson),
+    legs,
     tickets: tickets.map((t) => ({
       id: t.id,
       ticketNumber: t.ticketNumber ?? null,
@@ -104,6 +137,14 @@ router.get("/conversations/:date/:conversationId", async (req, res): Promise<voi
       outcomeStatus: t.outcomeStatus ?? null,
       createdTime: t.createdTime ? t.createdTime.toISOString() : null,
       modifiedTime: t.modifiedTime ? t.modifiedTime.toISOString() : null,
+      comments: (commentsByTicket.get(t.id) ?? []).map((c) => ({
+        id: c.id,
+        commentedTime: c.commentedTime ? c.commentedTime.toISOString() : null,
+        channel: c.channel ?? null,
+        authorType: c.authorType ?? null,
+        authorName: c.authorName ?? null,
+        content: c.contentSanitized,
+      })),
     })),
     costUsd: conversation.costUsd ? Number(conversation.costUsd) : null,
     createdAt: conversation.createdAt.toISOString(),
