@@ -8,13 +8,20 @@ export interface Outcome {
 }
 
 /**
- * Classify a Zoho Desk ticket as won / lost / open / unknown by reading its
- * custom fields. **Currently a stub** — the real Alfaseguros mapping is
- * blocked on a probe of live tickets (HANDOVER §5).
+ * Classify a Zoho Desk ticket as won / lost / open / unknown.
  *
- * Order matters: the first rule that matches wins. When no rule fits, return
- * `unknown` with a reason explaining what was missing — we deliberately never
- * guess outcomes.
+ * Primary signal: cf_estado_do_negocio
+ *   "GANHO"         → won
+ *   "PERDIDO"       → lost
+ *   "EM TRATAMENTO" | "EM ESPERA" | "TRATADO" → open
+ *
+ * Fallback signals (kept for tickets that pre-date the cf field):
+ *   cf_apolice_emitida = "Sim" → won
+ *   cf_motivo_perda populated   → lost
+ *   ticket status open          → open
+ *   ticket closed, no rule      → unknown
+ *
+ * Order matters: the first rule that matches wins.
  */
 export function classifyOutcome(ticket: ZohoTicket): Outcome {
   const cf = (ticket.cf ?? {}) as Record<string, unknown>;
@@ -22,35 +29,35 @@ export function classifyOutcome(ticket: ZohoTicket): Outcome {
   const statusType = (ticket.statusType ?? "").trim().toLowerCase();
   const isClosed = statusType === "closed" || /closed|resolved|fechad/i.test(status);
 
-  // --- Strawman rules. Replace these with real cf_* mappings after the probe. ---
+  // ── 1. cf_estado_do_negocio — primary field confirmed by Alfaseguros ────────
+  const estadoNegocio = stringValue(
+    cf.cf_estado_do_negocio ?? cf.cf_Estado_do_Negocio ?? cf.cf_Estado_Do_Negocio,
+  );
+  if (estadoNegocio) {
+    const norm = estadoNegocio.toUpperCase().trim();
+    if (norm === "GANHO") {
+      return { status: "won", reason: `cf_estado_do_negocio = "${estadoNegocio}"` };
+    }
+    if (norm === "PERDIDO") {
+      return { status: "lost", reason: `cf_estado_do_negocio = "${estadoNegocio}"` };
+    }
+    // "EM TRATAMENTO" | "EM ESPERA" | "TRATADO" and any other value → open
+    return { status: "open", reason: `cf_estado_do_negocio = "${estadoNegocio}"` };
+  }
 
-  // 1. Apólice emitida = Sim → won
+  // ── 2. Fallback: apólice emitida = Sim → won ────────────────────────────────
   const apolice = stringValue(cf.cf_apolice_emitida ?? cf.cf_Apolice_Emitida);
   if (apolice && /^sim|true|y(es)?$/i.test(apolice)) {
     return { status: "won", reason: `cf_apolice_emitida = "${apolice}"` };
   }
 
-  // 2. Motivo perda preenchido → lost
+  // ── 3. Fallback: motivo perda preenchido → lost ─────────────────────────────
   const motivoPerda = stringValue(cf.cf_motivo_perda ?? cf.cf_Motivo_Perda);
   if (motivoPerda && motivoPerda.length > 0) {
     return { status: "lost", reason: `cf_motivo_perda = "${motivoPerda}"` };
   }
 
-  // 3. Estado negociação explicit
-  const estado = stringValue(cf.cf_estado_negociacao ?? cf.cf_Estado_Negociacao);
-  if (estado) {
-    if (/fechad|ganho|won/i.test(estado)) {
-      return { status: "won", reason: `cf_estado_negociacao = "${estado}"` };
-    }
-    if (/perdid|lost/i.test(estado)) {
-      return { status: "lost", reason: `cf_estado_negociacao = "${estado}"` };
-    }
-    if (/curso|aberto|aguarda|pending/i.test(estado)) {
-      return { status: "open", reason: `cf_estado_negociacao = "${estado}"` };
-    }
-  }
-
-  // 4. Falling back to ticket status alone.
+  // ── 4. Ticket ainda aberto → open ──────────────────────────────────────────
   if (!isClosed) return { status: "open", reason: `status="${status || statusType}"` };
 
   return {
