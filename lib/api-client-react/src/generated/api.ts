@@ -17,6 +17,7 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  ActionItem,
   CaseSummary,
   ConversationDetail,
   ConversationSummary,
@@ -557,6 +558,94 @@ export function useGetConversation<
     conversationId,
     options,
   );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns a consolidated list of action items (follow-ups, risks, deviations) extracted from all conversation analyses for the given date (YYYY-MM-DD). No LLM cost — data comes from stored analysis.
+ * @summary Get daily action items for a date
+ */
+export const getListActionsUrl = (date: string) => {
+  return `/api/actions/${date}`;
+};
+
+export const listActions = async (
+  date: string,
+  options?: RequestInit,
+): Promise<ActionItem[]> => {
+  return customFetch<ActionItem[]>(getListActionsUrl(date), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListActionsQueryKey = (date: string) => {
+  return [`/api/actions/${date}`] as const;
+};
+
+export const getListActionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listActions>>,
+  TError = ErrorType<unknown>,
+>(
+  date: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listActions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListActionsQueryKey(date);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listActions>>> = ({
+    signal,
+  }) => listActions(date, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!date,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listActions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListActionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listActions>>
+>;
+export type ListActionsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get daily action items for a date
+ */
+
+export function useListActions<
+  TData = Awaited<ReturnType<typeof listActions>>,
+  TError = ErrorType<unknown>,
+>(
+  date: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listActions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListActionsQueryOptions(date, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

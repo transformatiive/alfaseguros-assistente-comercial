@@ -7,6 +7,7 @@ import conversationsRouter from "./conversations.js";
 import summaryRouter from "./summary.js";
 import operatorsRouter from "./operators.js";
 import casesRouter from "./cases.js";
+import actionsRouter from "./actions.js";
 import { requireAuth } from "../middleware/require-auth.js";
 
 const router: IRouter = Router();
@@ -23,5 +24,6 @@ router.use(conversationsRouter);
 router.use(summaryRouter);
 router.use(operatorsRouter);
 router.use(casesRouter);
+router.use(actionsRouter);
 
 export default router;
