@@ -8,6 +8,10 @@ const envSchema = z.object({
   CRON_SECRET: z.string().optional(),
   PUBLIC_APP_URL: z.string().optional(),
   ANALYSIS_CONCURRENCY: z.coerce.number().int().positive().default(4),
+  ZOHO_DESK_CLIENT_ID: z.string().optional(),
+  ZOHO_DESK_CLIENT_SECRET: z.string().optional(),
+  ZOHO_DESK_REFRESH_TOKEN: z.string().optional(),
+  ZOHO_DESK_ORG_ID: z.string().optional(),
 });
 
 let cached: z.infer<typeof envSchema> | null = null;
