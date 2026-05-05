@@ -900,8 +900,9 @@ function StatsStrip({ conversations }: { conversations: StatsStripConv[] }) {
                   <Info className="h-3 w-3" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-[200px] text-xs leading-relaxed">
-                {s.hint}
+              <TooltipContent side="top" className="max-w-[260px]">
+                <p className="text-xs font-semibold mb-1">{s.label}</p>
+                <p className="text-xs leading-relaxed text-muted-foreground">{s.hint}</p>
               </TooltipContent>
             </Tooltip>
           </div>
