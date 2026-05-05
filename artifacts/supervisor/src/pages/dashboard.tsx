@@ -4,26 +4,25 @@ import { ptBR } from "date-fns/locale";
 import {
   CalendarIcon, RefreshCw, Loader2, TrendingUp, MessageSquare,
   Euro, Phone, ArrowRight, Star, AlertTriangle, Sparkles,
-  User, Eye, Lightbulb, BookOpen, Layers,
+  User, Eye, Lightbulb, BookOpen, Bell, PhoneCall, ShieldAlert,
 } from "lucide-react";
 import { useExchangeRate, formatEur } from "@/lib/use-exchange-rate";
 import { Link } from "wouter";
 import { useDateContext } from "@/lib/date-context";
 import Metodologia from "@/pages/metodologia";
-import Pipeline from "@/pages/pipeline";
 import { useRunProgress } from "@/lib/use-run-progress";
 import {
   useGetDailySummary,
   useGetRunStatus,
   useListConversations,
   useListOperatorSummaries,
-  useListCases,
+  useListActions,
   useTriggerRun,
   getGetDailySummaryQueryKey,
   getGetRunStatusQueryKey,
   getListConversationsQueryKey,
   getListOperatorSummariesQueryKey,
-  getListCasesQueryKey,
+  getListActionsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -153,8 +152,8 @@ export default function Dashboard() {
     query: { enabled: !!dateStr, queryKey: getListOperatorSummariesQueryKey(dateStr) },
   });
 
-  const { data: cases } = useListCases(dateStr, {
-    query: { enabled: !!dateStr, queryKey: getListCasesQueryKey(dateStr) },
+  const { data: actions } = useListActions(dateStr, {
+    query: { enabled: !!dateStr, queryKey: getListActionsQueryKey(dateStr) },
   });
 
   useRunProgress(run?.status === "running" || run?.status === "pending" ? dateStr : null);
@@ -335,12 +334,12 @@ export default function Dashboard() {
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="pipeline" className="gap-1.5">
-            <Layers className="h-3.5 w-3.5" />
-            Pipeline
-            {cases && cases.length > 0 && (
-              <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-mono">
-                {cases.length}
+          <TabsTrigger value="acoes" className="gap-1.5">
+            <Bell className="h-3.5 w-3.5" />
+            Ações do Dia
+            {actions && actions.filter(a => a.prioridade !== "baixa").length > 0 && (
+              <span className="ml-1.5 rounded-full bg-destructive text-destructive-foreground px-1.5 py-0.5 text-[10px] font-mono">
+                {actions.filter(a => a.prioridade !== "baixa").length}
               </span>
             )}
           </TabsTrigger>
@@ -654,9 +653,9 @@ export default function Dashboard() {
           )}
         </TabsContent>
 
-        {/* ── TAB 5: Pipeline (cross-channel cases) ── */}
-        <TabsContent value="pipeline">
-          <Pipeline />
+        {/* ── TAB 5: Ações do Dia ── */}
+        <TabsContent value="acoes">
+          <AcoesTab actions={actions ?? []} dateStr={dateStr} />
         </TabsContent>
 
         {/* ── TAB 6: Guia de Leitura ── */}
@@ -664,6 +663,168 @@ export default function Dashboard() {
           <Metodologia />
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+// ── Ações do Dia component ─────────────────────────────────────────────────
+
+type ActionItem = {
+  id: string;
+  tipo: "follow_up_pendente" | "risco_perda_lead" | "desvio_procedimento";
+  prioridade: "alta" | "media" | "baixa";
+  titulo: string;
+  descricao: string;
+  conversationId: number;
+  agentName: string | null;
+  customerPhone: string;
+  runDate: string;
+};
+
+const TIPO_CONFIG = {
+  follow_up_pendente: {
+    label: "Follow-up pendente",
+    icon: PhoneCall,
+    color: "text-sky-700",
+    bg: "bg-sky-50 border-sky-200",
+    iconColor: "text-sky-500",
+  },
+  risco_perda_lead: {
+    label: "Risco de perda de lead",
+    icon: AlertTriangle,
+    color: "text-red-700",
+    bg: "bg-red-50 border-red-200",
+    iconColor: "text-red-500",
+  },
+  desvio_procedimento: {
+    label: "Desvio de procedimento",
+    icon: ShieldAlert,
+    color: "text-amber-700",
+    bg: "bg-amber-50 border-amber-200",
+    iconColor: "text-amber-500",
+  },
+} as const;
+
+const PRIORIDADE_PILL: Record<string, string> = {
+  alta: "bg-red-100 text-red-700 border border-red-200",
+  media: "bg-amber-100 text-amber-700 border border-amber-200",
+  baixa: "bg-stone-100 text-stone-600 border border-stone-200",
+};
+
+const PRIORIDADE_LABEL: Record<string, string> = {
+  alta: "Alta",
+  media: "Média",
+  baixa: "Baixa",
+};
+
+function AcoesTab({ actions, dateStr }: { actions: ActionItem[]; dateStr: string }) {
+  if (actions.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed p-10 text-center">
+        <Bell className="h-8 w-8 mx-auto mb-3 text-muted-foreground/40" />
+        <p className="text-sm text-muted-foreground">
+          Nenhuma ação pendente para esta data.
+        </p>
+        <p className="text-xs text-muted-foreground/60 mt-1">
+          As ações aparecem quando existe follow-up necessário, risco de lead ou desvios de procedimento.
+        </p>
+      </div>
+    );
+  }
+
+  // Group by agent
+  const byAgent = new Map<string, ActionItem[]>();
+  for (const item of actions) {
+    const key = item.agentName ?? "Sem operador";
+    const list = byAgent.get(key) ?? [];
+    list.push(item);
+    byAgent.set(key, list);
+  }
+
+  const agentKeys = [...byAgent.keys()].sort((a, b) => a.localeCompare(b, "pt"));
+
+  const altaCount = actions.filter((a) => a.prioridade === "alta").length;
+  const mediaCount = actions.filter((a) => a.prioridade === "media").length;
+
+  return (
+    <div className="space-y-6">
+      {/* Summary bar */}
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 px-4 py-3">
+        <Bell className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm font-medium">{actions.length} ações identificadas</span>
+        <span className="text-muted-foreground">·</span>
+        {altaCount > 0 && (
+          <span className="text-xs rounded-full bg-red-100 text-red-700 border border-red-200 px-2 py-0.5 font-medium">
+            {altaCount} alta prioridade
+          </span>
+        )}
+        {mediaCount > 0 && (
+          <span className="text-xs rounded-full bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 font-medium">
+            {mediaCount} média prioridade
+          </span>
+        )}
+        <span className="text-xs text-muted-foreground ml-auto">
+          Extraído da análise do dia — sem custo adicional de IA
+        </span>
+      </div>
+
+      {/* Per-agent sections */}
+      {agentKeys.map((agent) => {
+        const items = byAgent.get(agent)!;
+        return (
+          <div key={agent} className="space-y-2">
+            <div className="flex items-center gap-2 mb-3">
+              <User className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold">{agent}</h3>
+              <span className="text-xs text-muted-foreground">({items.length})</span>
+            </div>
+            <div className="space-y-2 pl-6">
+              {items.map((item) => {
+                const cfg = TIPO_CONFIG[item.tipo];
+                const Icon = cfg.icon;
+                return (
+                  <div
+                    key={item.id}
+                    className={cn("rounded-lg border p-4 flex items-start gap-3", cfg.bg)}
+                  >
+                    <Icon className={cn("h-4 w-4 mt-0.5 flex-shrink-0", cfg.iconColor)} />
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={cn("text-xs font-semibold", cfg.color)}>
+                          {cfg.label}
+                        </span>
+                        <span
+                          className={cn(
+                            "text-[10px] rounded-full px-1.5 py-0.5 font-medium",
+                            PRIORIDADE_PILL[item.prioridade],
+                          )}
+                        >
+                          {PRIORIDADE_LABEL[item.prioridade]}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-mono">
+                          {item.customerPhone}
+                        </span>
+                      </div>
+                      <p className="text-sm font-medium leading-snug">{item.titulo}</p>
+                      {item.descricao && (
+                        <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
+                          {item.descricao}
+                        </p>
+                      )}
+                    </div>
+                    <Link
+                      href={`/conversas/${dateStr}/${item.conversationId}`}
+                      className="text-xs text-primary hover:underline flex-shrink-0 mt-0.5"
+                    >
+                      Ver conversa →
+                    </Link>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

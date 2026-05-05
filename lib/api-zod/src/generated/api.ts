@@ -338,6 +338,35 @@ export const GetConversationResponse = zod.object({
 });
 
 /**
+ * Returns a consolidated list of action items (follow-ups, risks, deviations) extracted from all conversation analyses for the given date (YYYY-MM-DD). No LLM cost — data comes from stored analysis.
+ * @summary Get daily action items for a date
+ */
+export const ListActionsParams = zod.object({
+  date: zod.coerce.string(),
+});
+
+export const ListActionsResponseItem = zod
+  .object({
+    id: zod.string().describe('Unique id (e.g. \"42-follow_up\")'),
+    tipo: zod.enum([
+      "follow_up_pendente",
+      "risco_perda_lead",
+      "desvio_procedimento",
+    ]),
+    prioridade: zod.enum(["alta", "media", "baixa"]),
+    titulo: zod.string(),
+    descricao: zod.string(),
+    conversationId: zod.number(),
+    agentName: zod.string().nullable(),
+    customerPhone: zod.string(),
+    runDate: zod.string(),
+  })
+  .describe(
+    "A single action item extracted from conversation analysis (follow-up, risk, or deviation).",
+  );
+export const ListActionsResponse = zod.array(ListActionsResponseItem);
+
+/**
  * Returns cases that have at least one call on the given date (YYYY-MM-DD).
  * @summary Get cross-channel cases for a date
  */

@@ -20,6 +20,8 @@ tags:
     description: Operator coaching operations
   - name: cases
     description: Cross-channel case pipeline operations
+  - name: actions
+    description: Daily action items aggregated from conversation analysis
   - name: auth
     description: Authentication operations
   - name: admin
@@ -182,6 +184,29 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /actions/{date}:
+    get:
+      operationId: listActions
+      tags: [actions]
+      summary: Get daily action items for a date
+      description: Returns a consolidated list of action items (follow-ups, risks, deviations) extracted from all conversation analyses for the given date (YYYY-MM-DD). No LLM cost — data comes from stored analysis.
+      parameters:
+        - name: date
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Date in YYYY-MM-DD format
+      responses:
+        "200":
+          description: List of action items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActionItem"
 
   /cases/{date}:
     get:
@@ -739,6 +764,42 @@ components:
         - coachingRecommendations
         - conversationIds
         - createdAt
+
+    ActionItem:
+      type: object
+      description: A single action item extracted from conversation analysis (follow-up, risk, or deviation).
+      properties:
+        id:
+          type: string
+          description: Unique id (e.g. "42-follow_up")
+        tipo:
+          type: string
+          enum: [follow_up_pendente, risco_perda_lead, desvio_procedimento]
+        prioridade:
+          type: string
+          enum: [alta, media, baixa]
+        titulo:
+          type: string
+        descricao:
+          type: string
+        conversationId:
+          type: integer
+        agentName:
+          type: ["string", "null"]
+        customerPhone:
+          type: string
+        runDate:
+          type: string
+      required:
+        - id
+        - tipo
+        - prioridade
+        - titulo
+        - descricao
+        - conversationId
+        - agentName
+        - customerPhone
+        - runDate
 
     CaseLeg:
       type: object

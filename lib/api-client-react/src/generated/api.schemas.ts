@@ -318,6 +318,41 @@ export interface OperatorSummary {
   createdAt: string;
 }
 
+export type ActionItemTipo =
+  (typeof ActionItemTipo)[keyof typeof ActionItemTipo];
+
+export const ActionItemTipo = {
+  follow_up_pendente: "follow_up_pendente",
+  risco_perda_lead: "risco_perda_lead",
+  desvio_procedimento: "desvio_procedimento",
+} as const;
+
+export type ActionItemPrioridade =
+  (typeof ActionItemPrioridade)[keyof typeof ActionItemPrioridade];
+
+export const ActionItemPrioridade = {
+  alta: "alta",
+  media: "media",
+  baixa: "baixa",
+} as const;
+
+/**
+ * A single action item extracted from conversation analysis (follow-up, risk, or deviation).
+ */
+export interface ActionItem {
+  /** Unique id (e.g. "42-follow_up") */
+  id: string;
+  tipo: ActionItemTipo;
+  prioridade: ActionItemPrioridade;
+  titulo: string;
+  descricao: string;
+  conversationId: number;
+  /** @nullable */
+  agentName: string | null;
+  customerPhone: string;
+  runDate: string;
+}
+
 export type CaseLegKind = (typeof CaseLegKind)[keyof typeof CaseLegKind];
 
 export const CaseLegKind = {
