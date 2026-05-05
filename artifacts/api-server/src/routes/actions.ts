@@ -69,7 +69,7 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
     if (a.followUpNecessario === true) {
       const descricao =
         typeof a.followUpDescricao === "string" && a.followUpDescricao.trim()
-          ? a.followUpDescricao
+          ? firstSentence(a.followUpDescricao)
           : "Follow-up necessário — sem descrição registada.";
       items.push({
         id: `${conversationId}-follow_up`,
@@ -104,7 +104,7 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
         titulo: tituloBase,
         descricao:
           typeof a.narrativaConversa === "string" && a.narrativaConversa.trim()
-            ? a.narrativaConversa
+            ? firstSentence(a.narrativaConversa)
             : descricaoFallback,
         conversationId,
         agentName,
@@ -124,7 +124,7 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
         tipo: "desvio_procedimento",
         prioridade: sev === "alta" ? "alta" : "media",
         titulo: typeof d.titulo === "string" ? d.titulo : "Desvio de procedimento",
-        descricao: typeof d.detalhe === "string" ? d.detalhe : "",
+        descricao: typeof d.detalhe === "string" ? firstSentence(d.detalhe) : "",
         conversationId,
         agentName,
         customerPhone,
@@ -160,7 +160,7 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
         tipo: "oportunidade_cross_sell",
         prioridade: "baixa",
         titulo: "Oportunidade de cross-sell identificada",
-        descricao: sugestao,
+        descricao: firstSentence(sugestao),
         conversationId,
         agentName,
         customerPhone,
@@ -178,7 +178,7 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
         titulo: "Cotação sem seguimento marcado",
         descricao:
           typeof a.narrativaConversa === "string" && a.narrativaConversa.trim()
-            ? a.narrativaConversa
+            ? firstSentence(a.narrativaConversa)
             : "Chamada de cotação encerrada sem follow-up registado. Risco de o lead esfriar.",
         conversationId,
         agentName,
@@ -204,7 +204,7 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
         titulo: "Lead quente — fecho não aproveitado",
         descricao:
           typeof a.narrativaConversa === "string" && a.narrativaConversa.trim()
-            ? a.narrativaConversa
+            ? firstSentence(a.narrativaConversa)
             : `Arco: ${arco}. Chamada de alta qualidade com cliente receptivo, sem próximo passo definido.`,
         conversationId,
         agentName,
