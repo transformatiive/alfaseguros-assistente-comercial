@@ -26,7 +26,8 @@ Devolve **apenas** JSON válido (sem markdown, sem comentários) com a seguinte 
   "followUpNecessario": boolean,             // true se a conversa precisar de seguimento concreto
   "followUpDescricao": string,               // o que fazer e quando ("ligar até quinta-feira para confirmar..."). Vazio "" se followUpNecessario=false.
   "riscoPerdaLead": "baixo" | "medio" | "alto",
-  "tags": string[]                           // 1-5 etiquetas curtas em maiúsculas, ex: ["TVDE", "OBJEÇÃO PREÇO", "PROMESSA RETORNO"]
+  "tags": string[],                          // 1-5 etiquetas curtas em maiúsculas, ex: ["TVDE", "OBJEÇÃO PREÇO", "PROMESSA RETORNO"]
+  "ticketsRelevantes": string[]              // Números dos tickets Zoho genuinamente relacionados com ESTA conversa. Copia o número exactamente como aparece no cabeçalho "Ticket #N", sem o sinal #. Array vazio [] se nenhum for relevante. Exemplo: ["123456", "789012"]
 }
 
 Regras de qualidade:

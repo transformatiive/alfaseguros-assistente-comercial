@@ -31,6 +31,10 @@ export const conversationAnalysisSchema = z.object({
   followUpDescricao: z.string().catch(""),
   riscoPerdaLead: z.enum(["baixo", "medio", "alto"]).catch("baixo"),
   tags: z.array(z.string()).catch([]),
+  // Ticket numbers the LLM identified as genuinely relevant to THIS call.
+  // null = field absent (conversation analyzed before this feature; fallback to date proximity).
+  // [] = analyzed; LLM found no relevant tickets.
+  ticketsRelevantes: z.array(z.string()).nullable().catch(null),
 });
 
 export type ConversationAnalysis = z.infer<typeof conversationAnalysisSchema>;
