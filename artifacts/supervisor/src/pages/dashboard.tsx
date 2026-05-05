@@ -656,7 +656,7 @@ export default function Dashboard() {
 
         {/* ── TAB 5: Ações do Dia ── */}
         <TabsContent value="acoes">
-          <AcoesTab actions={actions ?? []} dateStr={dateStr} />
+          <AcoesTab actions={actions ?? []} />
         </TabsContent>
 
         {/* ── TAB 6: Guia de Leitura ── */}
@@ -753,7 +753,7 @@ const PRIORIDADE_LABEL: Record<string, string> = {
   baixa: "Baixa",
 };
 
-function ActionCard({ item, dateStr }: { item: ActionItem; dateStr: string }) {
+function ActionCard({ item }: { item: ActionItem }) {
   const cfg = TIPO_CONFIG[item.tipo];
   const Icon = cfg.icon;
   return (
@@ -774,7 +774,7 @@ function ActionCard({ item, dateStr }: { item: ActionItem; dateStr: string }) {
         )}
       </div>
       <Link
-        href={`/conversas/${dateStr}/${item.conversationId}`}
+        href={`/conversas/${item.conversationId}`}
         className="text-xs text-primary hover:underline flex-shrink-0 mt-0.5 whitespace-nowrap"
       >
         Ver conversa →
@@ -783,7 +783,7 @@ function ActionCard({ item, dateStr }: { item: ActionItem; dateStr: string }) {
   );
 }
 
-function AcoesTab({ actions, dateStr }: { actions: ActionItem[]; dateStr: string }) {
+function AcoesTab({ actions }: { actions: ActionItem[] }) {
   const byAgent = useMemo(() => {
     const map = new Map<string, ActionItem[]>();
     for (const item of actions) {
@@ -917,7 +917,7 @@ function AcoesTab({ actions, dateStr }: { actions: ActionItem[]; dateStr: string
                       </div>
                       <div className="space-y-2">
                         {tipoItems.map((item) => (
-                          <ActionCard key={item.id} item={item} dateStr={dateStr} />
+                          <ActionCard key={item.id} item={item} />
                         ))}
                       </div>
                     </div>
