@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
+import { RichText } from "@/components/rich-text";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -198,7 +199,7 @@ function CaseCard({ c, dateStr }: { c: CaseSummary; dateStr: string }) {
           {/* Analysis narrative */}
           {a?.narrativaConversa && (
             <div className="mt-3 rounded-md border-l-2 border-l-stone-400 bg-muted/30 pl-3 pr-2 py-2">
-              <p className="text-xs text-muted-foreground leading-relaxed">{a.narrativaConversa}</p>
+              <p className="text-xs text-muted-foreground leading-relaxed"><RichText text={a.narrativaConversa} /></p>
             </div>
           )}
 
