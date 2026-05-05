@@ -7,6 +7,18 @@
       "path": "./lib/db"
     },
     {
+      "path": "./lib/ringover"
+    },
+    {
+      "path": "./lib/openrouter"
+    },
+    {
+      "path": "./lib/phone"
+    },
+    {
+      "path": "./lib/zoho-desk"
+    },
+    {
       "path": "./lib/api-client-react"
     },
     {
