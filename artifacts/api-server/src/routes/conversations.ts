@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, inArray, gte, lte } from "drizzle-orm";
+import { eq, and, inArray, gte, lte, not, like, or } from "drizzle-orm";
 import { db, conversationsTable, ticketsTable, ticketCommentsTable } from "@workspace/db";
 import { ListConversationsParams, GetConversationParams } from "@workspace/api-zod";
 import { phoneFingerprint } from "@workspace/phone";
@@ -117,6 +117,9 @@ router.get("/conversations/:date/:conversationId", async (req, res): Promise<voi
             eq(ticketsTable.phoneFingerprint, fp),
             gte(ticketsTable.createdTime, winFrom),
             lte(ticketsTable.createdTime, winTo),
+            // Exclude auto-generated call-log tickets (system notifications, no real thread)
+            not(like(ticketsTable.subject, "%Chamada Efetuada%")),
+            not(like(ticketsTable.subject, "%Chamada Recebida%")),
           ),
         )
         .orderBy(ticketsTable.createdTime)
