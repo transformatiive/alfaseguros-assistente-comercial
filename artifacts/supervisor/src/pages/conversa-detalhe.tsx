@@ -23,6 +23,7 @@ import {
   getGetConversationQueryKey,
   type DeskTicket,
 } from "@workspace/api-client-react";
+import { useExchangeRate, formatEur } from "@/lib/use-exchange-rate";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -163,6 +164,9 @@ export default function ConversaDetalhe() {
     },
   });
 
+  const { data: fxData } = useExchangeRate();
+  const eurRate = fxData?.rate ?? null;
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -236,7 +240,7 @@ export default function ConversaDetalhe() {
             {conv.costUsd != null && (
               <>
                 <span>·</span>
-                <span>${conv.costUsd.toFixed(4)}</span>
+                <span>{formatEur(conv.costUsd, eurRate)}</span>
               </>
             )}
           </div>
