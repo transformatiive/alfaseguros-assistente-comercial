@@ -8,6 +8,7 @@ import {
   Star,
   AlertTriangle,
   Sparkles,
+  Ticket,
 } from "lucide-react";
 import { useDateContext } from "@/lib/date-context";
 import {
@@ -143,6 +144,12 @@ export default function Conversas() {
                         <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200 gap-1">
                           <Sparkles className="h-3 w-3" />
                           follow-up
+                        </Badge>
+                      )}
+                      {c.deskTicketCount > 0 && (
+                        <Badge variant="outline" className="text-[10px] bg-violet-50 text-violet-700 border-violet-200 gap-1">
+                          <Ticket className="h-3 w-3" />
+                          Desk {c.deskTicketCount > 1 ? `×${c.deskTicketCount}` : ""}
                         </Badge>
                       )}
                       {!c.hasAnalysis && (
