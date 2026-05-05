@@ -17,10 +17,10 @@ export const ringoverCallSchema = z.object({
   type: z.string().optional(),
   direction: z.string().optional(),
   is_answered: z.boolean().optional(),
-  duration: z.number().optional(),
-  total_duration: z.number().optional(),
-  incall_duration: z.number().optional(),
-  start_time: z.string().optional(),
+  duration: z.number().nullish(),
+  total_duration: z.number().nullish(),
+  incall_duration: z.number().nullish(),
+  start_time: z.string().nullish(),
   answered_time: z.string().nullable().optional(),
   end_time: z.string().nullable().optional(),
   from_number: z.string().nullable().optional(),
@@ -31,7 +31,7 @@ export const ringoverCallSchema = z.object({
   note: z.string().nullable().optional(),
   record: z.string().nullable().optional(),
   recording_url: z.string().nullable().optional(),
-  tags: z.array(z.unknown()).optional(),
+  tags: z.array(z.unknown()).nullish(),
 }).passthrough();
 
 export type RingoverCall = z.infer<typeof ringoverCallSchema>;
