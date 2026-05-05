@@ -10,6 +10,7 @@ import {
 } from "./schema.js";
 
 export interface AnalyzedConversationRef {
+  rowId: number;
   customerPhone: string;
   agentName: string | null;
   legCount: number;
@@ -61,7 +62,7 @@ Devolve **apenas** JSON válido (sem markdown, sem comentários):
 
 EU-PT sempre. Tom coaching (a ferramenta é para ajudar a equipa a fechar mais, não para vigiar). Cita conversas e operadores específicos sempre que fizer sentido.`;
 
-function summarizeConversation(c: AnalyzedConversationRef, idx: number): string {
+function summarizeConversation(c: AnalyzedConversationRef): string {
   const a = c.analysis;
   const desvios = a.desviosProcedimento.length > 0
     ? a.desviosProcedimento
@@ -69,7 +70,7 @@ function summarizeConversation(c: AnalyzedConversationRef, idx: number): string 
         .join(" | ")
     : "(sem desvios)";
   return [
-    `## Conversa ${idx + 1} — Cliente ${c.customerPhone} — Operador ${c.agentName ?? "(?)"} — ${c.legCount} leg(s) — ${Math.round(c.durationSec / 60)}min`,
+    `## Conversa ${c.rowId} — Cliente ${c.customerPhone} — Operador ${c.agentName ?? "(?)"} — ${c.legCount} leg(s) — ${Math.round(c.durationSec / 60)}min`,
     `Categoria: ${a.categoria} | Produto: ${a.produto} | Qualidade: ${a.qualidadeGlobal}/5 | Risco: ${a.riscoPerdaLead} | FollowUp: ${a.followUpNecessario ? "sim" : "não"}${a.followUpNecessario && a.followUpDescricao ? ` (${a.followUpDescricao})` : ""}`,
     `Arco: ${a.arcoConversa} — Sentimento: ${a.sentimentoClienteEvolucao}`,
     `Narrativa: ${a.narrativaConversa}`,
