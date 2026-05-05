@@ -20,25 +20,32 @@ A daily executive summary is generated for the supervisor, with five structured 
 
 The UI also exposes a **"Por Operador"** view with per-operator coaching: strengths, blind spots, closing-rate observations, and personalised recommendations.
 
+## Stack
+
+pnpm workspace monorepo · Node 24 · TypeScript 5.9 strict · Express 5 · Postgres + Drizzle ORM · OpenAPI + Orval (Zod + React Query codegen) · Vite + React + TanStack Query + Tailwind + Wouter.
+
 ## Quick start (Replit)
 
 1. **Import this repo into a Replit**.
-2. **Add a Postgres database**: Replit → Tools → Database → enable Postgres. Replit provisions a managed Postgres 16 instance and sets the `DATABASE_URL` env var automatically. (Note: as of December 2025, Replit hosts databases on their own infrastructure rather than Neon, but the connection works the same way — standard Postgres connection string, no app-side changes needed.)
+2. **Add a Postgres database**: Replit → Tools → Database → enable Postgres. Replit provisions a managed Postgres 16 instance and sets the `DATABASE_URL` env var automatically.
 3. **Set Replit Secrets**:
    - `RINGOVER_API_KEY` — find in n8n credentials or Ringover dashboard → Settings → API
    - `OPENROUTER_API_KEY` — from https://openrouter.ai/keys
-   - `CRON_WEBHOOK_SECRET` — any random string (used by the n8n cron trigger)
-   - `PUBLIC_APP_URL` — e.g. `https://alfaseguros-supervisor.replit.app` (the Replit deployment URL)
-4. **Click Run**. Replit will install dependencies, apply the Prisma migration, and start the server.
-5. Open the Replit web preview. Pick a date (date picker top-right + quick buttons "Ontem", "Há 2 dias", "Há uma semana"). Click **Analisar este dia**.
+   - `CRON_SECRET` — any random string (used by the n8n cron trigger; verified via `X-Cron-Secret` header)
+   - `PUBLIC_APP_URL` — e.g. `https://alfaseguros-supervisor.replit.app`
+   - **Phase 2A** (when wiring Zoho Desk): `ZOHO_DESK_CLIENT_ID`, `ZOHO_DESK_CLIENT_SECRET`, `ZOHO_DESK_REFRESH_TOKEN`, `ZOHO_DESK_ORG_ID=683863304`
+4. **Run setup once**: `pnpm install && pnpm --filter @workspace/db run push` to install dependencies and apply the Drizzle schema.
+5. **Click Run**. Replit boots the API + UI.
+6. Open the Replit web preview. Pick a date (date picker top-right + quick buttons "Ontem", "Há 2 dias", "Há uma semana"). Click **Analisar este dia**.
 
 ## Local dev
 
 ```bash
 cp .env.example .env       # fill in keys
-npm install
-npx prisma migrate dev
-npm run dev                # server on :3000, UI on :5173
+pnpm install
+pnpm --filter @workspace/db run push           # creates / updates DB schema
+pnpm --filter @workspace/api-server run dev    # API on :3000
+pnpm --filter @workspace/supervisor run dev    # UI on :5173 (proxies /api)
 ```
 
 Open http://localhost:5173.
@@ -47,16 +54,16 @@ Open http://localhost:5173.
 
 The intent is for n8n on Railway to hit `/api/run` once per day at ~07:00 Lisbon time, with yesterday's date. See [`CLAUDE.md`](./CLAUDE.md) for the exact webhook signature.
 
-## Manual CLI
+## Manual CLI (planned)
 
 ```bash
-npm run analyze:cli -- --date=2026-04-30
-npm run analyze:cli -- --date=2026-04-30 --force   # ignore cache
+pnpm run analyze:cli -- --date=2026-04-30
+pnpm run analyze:cli -- --date=2026-04-30 --force   # ignore cache
 ```
 
 ## Cost
 
-With prompt caching and cache-by-default, a full-day run analysing ~60 conversations costs roughly **$0.50–$1.00** on Sonnet 4 via OpenRouter. Re-running the same day is free (cache hit). The per-run total is logged to `Run.totalCostUsd`.
+With prompt caching and cache-by-default, a full-day run analysing ~60 conversations costs roughly **$0.50–$1.00** on Sonnet 4 via OpenRouter. Re-running the same day is free (cache hit). The per-run total is logged to `runs.totalCostUsd`.
 
 ## Project conventions
 
@@ -64,23 +71,22 @@ See [`CLAUDE.md`](./CLAUDE.md) — that file is the source of truth for how to e
 
 ## What this is NOT (yet)
 
-- Does not write back to Zoho Desk (planned: `src/outputs/desk-poster.ts`)
-- Does not send email summaries (planned: `src/outputs/email-sender.ts`)
+- Does not write back to Zoho Desk (planned)
+- Does not send email summaries (planned)
 - Does not analyse the Vida team (NoCRM integration deferred)
 - Procedures manual is a strawman — to be replaced with Soraia's real manual
 
 ## Phase 2A status — Zoho Desk integration (in progress)
 
-The codebase includes the **infrastructure** for cross-channel "cases" (calls + tickets + email threads merged into one customer engagement unit), but it's not yet active in the UI. Specifically:
+Cross-channel "cases" (calls + tickets + email threads merged into one customer engagement unit) are scoped in [`openspec/changes/phase-2a-desk-cases/`](./openspec/changes/phase-2a-desk-cases/). Outline:
 
-- ✅ Postgres schema for tickets, comments, cases
-- ✅ Zoho Desk OAuth client + ticket sync job
-- ✅ Phone normalization + case linker (call ↔ ticket via phone fingerprint, ±14d proximity)
-- ✅ Diagnostic CLI to inspect ticket schema (`npm run zoho:probe-tickets`)
-- ⚠ **Outcome classification (won/lost/open) is a placeholder.** Needs to be wired to Alfaseguros' actual custom fields. Walk through this step in Claude Code locally with the live data.
-- ⏳ Case-level AI analyzer (call + email threads in one prompt) — not yet implemented
-- ⏳ Pipeline view UI — not yet implemented
-- ⏳ Lead temperature classification — not yet implemented
+- ⏳ Drizzle schema for tickets, comments, cases
+- ⏳ Zoho Desk OAuth client + ticket sync job
+- ⏳ Phone normalization + case linker (call ↔ ticket via phone fingerprint, ±14d proximity)
+- ⏳ Diagnostic CLI to inspect ticket schema (`pnpm run zoho:probe-tickets`)
+- ⏳ Outcome classification (won/lost/open) — rule-based against `cf_*` fields, blocked on a probe of live tickets
+- ⏳ Case-level AI analyzer (call + email threads in one prompt)
+- ⏳ Pipeline view UI
 
 See `CLAUDE.md` → "Phase 2A" section for the full plan.
 
