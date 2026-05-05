@@ -29,6 +29,16 @@ interface ActionItem {
 
 const PRIORITY_ORDER: Record<Prioridade, number> = { alta: 0, media: 1, baixa: 2 };
 
+/**
+ * Extracts the first complete sentence from a text block (ending at . ! or ?)
+ * so action card descriptions don't cut off mid-sentence.
+ * Falls back to the full text if no sentence boundary is found within 300 chars.
+ */
+function firstSentence(text: string): string {
+  const match = text.match(/^.{10,300}?[.!?](?:\s|$)/s);
+  return match ? match[0].trim() : text;
+}
+
 router.get("/actions/:date", async (req, res): Promise<void> => {
   const params = ListConversationsParams.safeParse(req.params);
   if (!params.success) {
@@ -132,7 +142,7 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
         titulo: `Qualidade crítica — ${qualidade}/5`,
         descricao:
           typeof a.feedbackSupervisor === "string" && a.feedbackSupervisor.trim()
-            ? a.feedbackSupervisor
+            ? firstSentence(a.feedbackSupervisor)
             : "Chamada com qualidade muito abaixo do esperado. Recomenda-se ouvir a gravação.",
         conversationId,
         agentName,
