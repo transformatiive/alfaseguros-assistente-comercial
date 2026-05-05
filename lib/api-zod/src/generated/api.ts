@@ -141,7 +141,25 @@ export const ListConversationsResponseItem = zod.object({
   runDate: zod.string(),
   customerPhone: zod.string(),
   callCount: zod.number(),
+  agentId: zod.string().nullable(),
+  agentName: zod.string().nullable(),
+  durationSec: zod.number().nullable(),
+  isMultiLeg: zod.boolean(),
   hasAnalysis: zod.boolean(),
+  categoria: zod.string().nullable(),
+  produto: zod.string().nullable(),
+  qualidadeGlobal: zod.number().nullable(),
+  riscoPerdaLead: zod
+    .union([
+      zod.literal("baixo"),
+      zod.literal("medio"),
+      zod.literal("alto"),
+      zod.literal(null),
+    ])
+    .nullable(),
+  desviosCount: zod.number(),
+  followUpNecessario: zod.boolean(),
+  startTime: zod.string().nullable(),
   costUsd: zod.number().nullable(),
   createdAt: zod.string(),
 });

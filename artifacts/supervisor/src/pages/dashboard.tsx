@@ -2,12 +2,15 @@ import { format, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CalendarIcon, RefreshCw, Loader2, TrendingUp, MessageSquare, DollarSign } from "lucide-react";
 import { useDateContext } from "@/lib/date-context";
+import { useRunProgress } from "@/lib/use-run-progress";
 import {
   useGetDailySummary,
   useGetRunStatus,
+  useListConversations,
   useTriggerRun,
   getGetDailySummaryQueryKey,
   getGetRunStatusQueryKey,
+  getListConversationsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -77,6 +80,13 @@ export default function Dashboard() {
   const { data: summary, isLoading: summaryLoading } = useGetDailySummary(dateStr, {
     query: { enabled: !!dateStr, queryKey: getGetDailySummaryQueryKey(dateStr) },
   });
+
+  const { data: conversations } = useListConversations(dateStr, {
+    query: { enabled: !!dateStr, queryKey: getListConversationsQueryKey(dateStr) },
+  });
+
+  // Live updates while a run is in flight (Server-Sent Events).
+  useRunProgress(run?.status === "running" || run?.status === "pending" ? dateStr : null);
 
   const trigger = useTriggerRun({
     mutation: {
@@ -216,6 +226,9 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
+      {/* Stats strip — Rui's at-a-glance health of the day */}
+      {conversations && conversations.length > 0 && <StatsStrip conversations={conversations} />}
+
       {/* Daily summary */}
       <div>
         <h2 className="text-base font-semibold text-foreground mb-3">Resumo Executivo</h2>
@@ -324,6 +337,55 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+interface StatsStripConv {
+  callCount: number;
+  isMultiLeg: boolean;
+  qualidadeGlobal: number | null;
+  desviosCount: number;
+  followUpNecessario: boolean;
+  riscoPerdaLead: string | null;
+}
+
+function StatsStrip({ conversations }: { conversations: StatsStripConv[] }) {
+  const total = conversations.length;
+  const multiLeg = conversations.filter((c) => c.isMultiLeg).length;
+  const qualities = conversations.map((c) => c.qualidadeGlobal).filter((q): q is number => q != null);
+  const avgQuality = qualities.length > 0 ? qualities.reduce((a, b) => a + b, 0) / qualities.length : null;
+  const desviosTotal = conversations.reduce((acc, c) => acc + c.desviosCount, 0);
+  const followUps = conversations.filter((c) => c.followUpNecessario).length;
+  const atRisk = conversations.filter((c) => c.riscoPerdaLead === "alto").length;
+
+  const stats = [
+    { label: "Conversas", value: total.toString(), alert: false },
+    { label: "Multi-chamada", value: multiLeg.toString(), alert: false },
+    { label: "Qualidade Média", value: avgQuality != null ? avgQuality.toFixed(1) : "—", alert: avgQuality != null && avgQuality < 3 },
+    { label: "Desvios", value: desviosTotal.toString(), alert: desviosTotal > 0 },
+    { label: "Follow-ups", value: followUps.toString(), alert: false },
+    { label: "Em Risco", value: atRisk.toString(), alert: atRisk > 0 },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      {stats.map((s) => (
+        <div key={s.label} className="rounded-md border bg-card px-4 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            {s.label}
+          </p>
+          <p
+            className={cn(
+              "mt-1 text-3xl tabular-nums leading-none",
+              s.alert ? "text-red-600" : "text-foreground",
+            )}
+            style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+          >
+            {s.value}
+          </p>
+        </div>
+      ))}
     </div>
   );
 }

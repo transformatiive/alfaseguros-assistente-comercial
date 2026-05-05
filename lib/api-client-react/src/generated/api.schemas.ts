@@ -45,12 +45,44 @@ export interface Run {
   updatedAt: string;
 }
 
+/**
+ * @nullable
+ */
+export type ConversationSummaryRiscoPerdaLead =
+  | (typeof ConversationSummaryRiscoPerdaLead)[keyof typeof ConversationSummaryRiscoPerdaLead]
+  | null;
+
+export const ConversationSummaryRiscoPerdaLead = {
+  baixo: "baixo",
+  medio: "medio",
+  alto: "alto",
+} as const;
+
 export interface ConversationSummary {
   id: number;
   runDate: string;
   customerPhone: string;
   callCount: number;
+  /** @nullable */
+  agentId: string | null;
+  /** @nullable */
+  agentName: string | null;
+  /** @nullable */
+  durationSec: number | null;
+  isMultiLeg: boolean;
   hasAnalysis: boolean;
+  /** @nullable */
+  categoria: string | null;
+  /** @nullable */
+  produto: string | null;
+  /** @nullable */
+  qualidadeGlobal: number | null;
+  /** @nullable */
+  riscoPerdaLead: ConversationSummaryRiscoPerdaLead;
+  desviosCount: number;
+  followUpNecessario: boolean;
+  /** @nullable */
+  startTime: string | null;
   /** @nullable */
   costUsd: number | null;
   createdAt: string;

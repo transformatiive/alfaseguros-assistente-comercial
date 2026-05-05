@@ -19,15 +19,35 @@ router.get("/conversations/:date", async (req, res): Promise<void> => {
     .orderBy(conversationsTable.createdAt);
 
   res.json(
-    conversations.map((c) => ({
-      id: c.id,
-      runDate: c.runDate,
-      customerPhone: c.customerPhone,
-      callCount: c.callIds?.length ?? 0,
-      hasAnalysis: c.analysisJson != null,
-      costUsd: c.costUsd ? Number(c.costUsd) : null,
-      createdAt: c.createdAt.toISOString(),
-    })),
+    conversations.map((c) => {
+      const a = (c.analysisJson ?? null) as Record<string, unknown> | null;
+      const callCount = c.callIds?.length ?? 0;
+      const desvios = Array.isArray(a?.desviosProcedimento)
+        ? (a!.desviosProcedimento as unknown[]).length
+        : 0;
+      return {
+        id: c.id,
+        runDate: c.runDate,
+        customerPhone: c.customerPhone,
+        callCount,
+        agentId: c.agentId ?? null,
+        agentName: c.agentName ?? null,
+        durationSec: c.durationSec ?? null,
+        isMultiLeg: callCount > 1,
+        hasAnalysis: a != null,
+        categoria: typeof a?.categoria === "string" ? a.categoria : null,
+        produto: typeof a?.produto === "string" ? a.produto : null,
+        qualidadeGlobal:
+          typeof a?.qualidadeGlobal === "number" ? a.qualidadeGlobal : null,
+        riscoPerdaLead:
+          typeof a?.riscoPerdaLead === "string" ? a.riscoPerdaLead : null,
+        desviosCount: desvios,
+        followUpNecessario: a?.followUpNecessario === true,
+        startTime: c.createdAt.toISOString(),
+        costUsd: c.costUsd ? Number(c.costUsd) : null,
+        createdAt: c.createdAt.toISOString(),
+      };
+    }),
   );
 });
 

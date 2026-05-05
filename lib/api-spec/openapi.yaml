@@ -278,8 +278,32 @@ components:
           type: string
         callCount:
           type: integer
+        agentId:
+          type: ["string", "null"]
+        agentName:
+          type: ["string", "null"]
+        durationSec:
+          type: ["integer", "null"]
+        isMultiLeg:
+          type: boolean
         hasAnalysis:
           type: boolean
+        # Analysis-derived fields surfaced to the list view (null when no analysis yet)
+        categoria:
+          type: ["string", "null"]
+        produto:
+          type: ["string", "null"]
+        qualidadeGlobal:
+          type: ["integer", "null"]
+        riscoPerdaLead:
+          type: ["string", "null"]
+          enum: [baixo, medio, alto, null]
+        desviosCount:
+          type: integer
+        followUpNecessario:
+          type: boolean
+        startTime:
+          type: ["string", "null"]
         costUsd:
           type: ["number", "null"]
         createdAt:
@@ -289,7 +313,18 @@ components:
         - runDate
         - customerPhone
         - callCount
+        - agentId
+        - agentName
+        - durationSec
+        - isMultiLeg
         - hasAnalysis
+        - categoria
+        - produto
+        - qualidadeGlobal
+        - riscoPerdaLead
+        - desviosCount
+        - followUpNecessario
+        - startTime
         - costUsd
         - createdAt
 
