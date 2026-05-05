@@ -157,6 +157,33 @@ export interface ConversationAnalysis {
   tags: string[];
 }
 
+/**
+ * A Zoho Desk ticket matched to this conversation via phone fingerprint.
+ */
+export interface DeskTicket {
+  id: string;
+  /** @nullable */
+  ticketNumber: string | null;
+  /** @nullable */
+  subject: string | null;
+  /** @nullable */
+  status: string | null;
+  /** @nullable */
+  category: string | null;
+  /** @nullable */
+  productName: string | null;
+  /** @nullable */
+  contactName: string | null;
+  /** @nullable */
+  assigneeName: string | null;
+  /** @nullable */
+  outcomeStatus: string | null;
+  /** @nullable */
+  createdTime: string | null;
+  /** @nullable */
+  modifiedTime: string | null;
+}
+
 export interface ConversationDetail {
   id: number;
   runDate: string;
@@ -170,6 +197,8 @@ export interface ConversationDetail {
   durationSec: number | null;
   recordingUrls: string[];
   analysis: ConversationAnalysis | null;
+  /** Zoho Desk tickets matched via phone fingerprint */
+  tickets: DeskTicket[];
   /** @nullable */
   costUsd: number | null;
   createdAt: string;

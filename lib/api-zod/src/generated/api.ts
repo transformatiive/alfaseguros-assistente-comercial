@@ -270,6 +270,27 @@ export const GetConversationResponse = zod.object({
       ),
     zod.null(),
   ]),
+  tickets: zod
+    .array(
+      zod
+        .object({
+          id: zod.string(),
+          ticketNumber: zod.string().nullable(),
+          subject: zod.string().nullable(),
+          status: zod.string().nullable(),
+          category: zod.string().nullable(),
+          productName: zod.string().nullable(),
+          contactName: zod.string().nullable(),
+          assigneeName: zod.string().nullable(),
+          outcomeStatus: zod.string().nullable(),
+          createdTime: zod.string().nullable(),
+          modifiedTime: zod.string().nullable(),
+        })
+        .describe(
+          "A Zoho Desk ticket matched to this conversation via phone fingerprint.",
+        ),
+    )
+    .describe("Zoho Desk tickets matched via phone fingerprint"),
   costUsd: zod.number().nullable(),
   createdAt: zod.string(),
 });
