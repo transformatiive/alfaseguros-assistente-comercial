@@ -7,8 +7,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { href: "/", icon: LayoutDashboard, label: "Visão Geral" },
-    { href: "/conversas", icon: MessageSquareText, label: "Conversas" },
-    { href: "/operadores", icon: Users, label: "Operadores" },
   ];
 
   return (

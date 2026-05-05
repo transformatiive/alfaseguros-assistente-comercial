@@ -23,6 +23,7 @@ import { analyzeCase } from "../analysis/case-analyzer.js";
 import { lisbonDayBoundsISO } from "../lib/dates.js";
 import { mapWithConcurrency } from "../lib/concurrency.js";
 import { env } from "../lib/env.js";
+import { logger } from "../lib/logger.js";
 import { publishRunEvent } from "./bus.js";
 import { syncTickets } from "./sync-tickets.js";
 import { buildCases, CASE_PROXIMITY_DAYS } from "../cases/linker.js";
@@ -182,6 +183,7 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
             .update(conversationsTable)
             .set({
               analysisJson: outcome.analysis,
+              analysisError: null,
               costUsd: outcome.cost.costUsd.toFixed(6),
             })
             .where(eq(conversationsTable.id, rowId));
@@ -203,6 +205,10 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
           });
         } else {
           totalCost += outcome.cost.costUsd;
+          await db
+            .update(conversationsTable)
+            .set({ analysisError: outcome.error })
+            .where(eq(conversationsTable.id, rowId));
           publishRunEvent({
             type: "conv:error",
             date,
@@ -211,11 +217,16 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
           });
         }
       } catch (err) {
+        const errMsg = (err as Error).message;
+        await db
+          .update(conversationsTable)
+          .set({ analysisError: errMsg })
+          .where(eq(conversationsTable.id, rowId));
         publishRunEvent({
           type: "conv:error",
           date,
           conversationId: rowId,
-          message: (err as Error).message,
+          message: errMsg,
         });
       }
 
@@ -340,6 +351,9 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
         client: openrouter,
         model,
       });
+      if (!summaryOutcome.ok) {
+        logger.warn({ date, error: summaryOutcome.error, rawText: summaryOutcome.rawText }, "Daily summary generation failed");
+      }
       if (summaryOutcome.ok) {
         totalCost += summaryOutcome.cost.costUsd;
         await db

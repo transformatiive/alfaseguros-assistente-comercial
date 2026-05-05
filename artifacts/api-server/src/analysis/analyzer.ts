@@ -66,13 +66,19 @@ export async function analyzeConversation(
     messages: [systemMessage, { role: "user", content: userText }],
   });
 
+  // Strip markdown code-fence wrappers some models add even with response_format=json_object
+  const cleaned = result.text
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```\s*$/, "")
+    .trim();
+
   let parsed: unknown;
   try {
-    parsed = JSON.parse(result.text);
+    parsed = JSON.parse(cleaned);
   } catch (err) {
     return {
       ok: false,
-      error: `Resposta do LLM não é JSON válido: ${(err as Error).message}`,
+      error: `Resposta do LLM não é JSON válido: ${(err as Error).message}. Raw: ${cleaned.slice(0, 300)}`,
       rawText: result.text,
       cost: result.cost,
     };

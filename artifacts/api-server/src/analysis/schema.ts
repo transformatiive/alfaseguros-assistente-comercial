@@ -7,66 +7,68 @@ import { z } from "zod";
  * HANDOVER §2.
  */
 export const desvioProcedimentoSchema = z.object({
-  severidade: z.enum(["alta", "media", "baixa"]),
-  titulo: z.string(),
-  detalhe: z.string(),
-  chamadaEspecifica: z.string().nullable(),
+  severidade: z.enum(["alta", "media", "baixa"]).catch("media"),
+  titulo: z.string().catch("(sem título)"),
+  detalhe: z.string().catch(""),
+  chamadaEspecifica: z.string().nullable().catch(null),
 });
 
 export type DesvioProcedimento = z.infer<typeof desvioProcedimentoSchema>;
 
 export const conversationAnalysisSchema = z.object({
-  categoria: z.string(),
-  produto: z.string(),
-  narrativaConversa: z.string(),
-  arcoConversa: z.string(),
-  sentimentoClienteEvolucao: z.string(),
-  qualidadeGlobal: z.number().int().min(1).max(5),
-  continuidade: z.string(),
-  desviosProcedimento: z.array(desvioProcedimentoSchema),
-  pontosPositivos: z.array(z.string()),
-  feedbackSupervisor: z.string(),
-  sugestaoEspecialista: z.string(),
-  followUpNecessario: z.boolean(),
-  followUpDescricao: z.string(),
-  riscoPerdaLead: z.enum(["baixo", "medio", "alto"]),
-  tags: z.array(z.string()),
+  categoria: z.string().catch("Outro"),
+  produto: z.string().catch("Outro"),
+  narrativaConversa: z.string().catch(""),
+  arcoConversa: z.string().catch(""),
+  sentimentoClienteEvolucao: z.string().catch(""),
+  qualidadeGlobal: z.number().int().min(1).max(5).catch(3),
+  continuidade: z.string().catch(""),
+  desviosProcedimento: z.array(desvioProcedimentoSchema).catch([]),
+  pontosPositivos: z.array(z.string()).catch([]),
+  feedbackSupervisor: z.string().catch(""),
+  sugestaoEspecialista: z.string().catch(""),
+  followUpNecessario: z.boolean().catch(false),
+  followUpDescricao: z.string().catch(""),
+  riscoPerdaLead: z.enum(["baixo", "medio", "alto"]).catch("baixo"),
+  tags: z.array(z.string()).catch([]),
 });
 
 export type ConversationAnalysis = z.infer<typeof conversationAnalysisSchema>;
 
 /** Section of the daily summary — one paragraph + structured bullets. */
 export const summarySectionSchema = z.object({
-  paragraph: z.string(),
-  bullets: z.array(z.string()),
+  paragraph: z.string().catch(""),
+  bullets: z.array(z.string()).catch([]),
 });
 
 export type SummarySection = z.infer<typeof summarySectionSchema>;
 
 export const automationItemSchema = z.object({
-  pattern: z.string(),
-  conversationCountEstimate: z.number().int().nonnegative(),
-  channel: z.string(),
-  feasibility: z.enum(["alta", "media", "baixa"]),
-  notes: z.string(),
+  pattern: z.string().catch(""),
+  conversationCountEstimate: z.number().int().nonnegative().catch(0),
+  channel: z.string().catch(""),
+  feasibility: z.enum(["alta", "media", "baixa"]).catch("media"),
+  notes: z.string().catch(""),
 });
 
 export type AutomationItem = z.infer<typeof automationItemSchema>;
 
 export const automationOpportunitiesSchema = z.object({
-  paragraph: z.string(),
-  items: z.array(automationItemSchema),
+  paragraph: z.string().catch(""),
+  items: z.array(automationItemSchema).catch([]),
 });
 
 export type AutomationOpportunities = z.infer<typeof automationOpportunitiesSchema>;
 
+const emptySummarySection = { paragraph: "", bullets: [] };
+
 export const dailySummarySchema = z.object({
-  executiveSummary: z.string(),
-  workingWell: summarySectionSchema,
-  toImprove: summarySectionSchema,
-  risks: summarySectionSchema,
-  closingRateRecommendations: summarySectionSchema,
-  automationOpportunities: automationOpportunitiesSchema,
+  executiveSummary: z.string().catch(""),
+  workingWell: summarySectionSchema.catch(emptySummarySection),
+  toImprove: summarySectionSchema.catch(emptySummarySection),
+  risks: summarySectionSchema.catch(emptySummarySection),
+  closingRateRecommendations: summarySectionSchema.catch(emptySummarySection),
+  automationOpportunities: automationOpportunitiesSchema.catch({ paragraph: "", items: [] }),
 });
 
 export type DailySummaryAnalysis = z.infer<typeof dailySummarySchema>;
