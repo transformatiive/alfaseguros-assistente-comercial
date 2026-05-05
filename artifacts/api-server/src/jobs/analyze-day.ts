@@ -200,6 +200,8 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
         rowId: number;
         agentId: string | null;
         agentsInvolved: { id: string; name: string }[];
+        startTime: string | null;
+        legs: GroupedConversation["legs"];
       }
     > = [];
     let totalCost = 0;
@@ -232,6 +234,8 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
             analysis: cached,
             agentId: conv.agentId,
             agentsInvolved: conv.agentsInvolved,
+            startTime: conv.startTime ?? null,
+            legs: conv.legs,
           });
           analyzedCount += 1;
           publishRunEvent({ type: "conv:done", date, conversationId: rowId, costUsd: 0 });
@@ -267,6 +271,8 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
             analysis: outcome.analysis,
             agentId: conv.agentId,
             agentsInvolved: conv.agentsInvolved,
+            startTime: conv.startTime ?? null,
+            legs: conv.legs,
           });
           publishRunEvent({
             type: "conv:done",
@@ -406,8 +412,8 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
             recordingUrls: [],
             legCount: a.legCount,
             isMultiLeg: a.legCount > 1,
-            startTime: null,
-            legs: [],
+            startTime: a.startTime,
+            legs: a.legs,
           }));
           const cases = buildCases({
             conversations: linkerInput,

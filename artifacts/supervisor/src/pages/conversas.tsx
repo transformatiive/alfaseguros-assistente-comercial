@@ -165,7 +165,9 @@ export default function Conversas() {
 
                   <div className="text-xs text-muted-foreground text-right flex-shrink-0">
                     {format(new Date(c.startTime ?? c.createdAt), "HH:mm")}
-                    {c.costUsd != null && <div className="font-mono">${c.costUsd.toFixed(4)}</div>}
+                    {c.costUsd != null && c.costUsd > 0 && (
+                      <div className="font-mono tabular-nums">{formatEur(c.costUsd, eurRate)}</div>
+                    )}
                   </div>
                 </div>
               </Link>
