@@ -329,7 +329,7 @@ export default function Dashboard() {
           </TabsTrigger>
           <TabsTrigger value="guia" className="gap-1.5">
             <BookOpen className="h-3.5 w-3.5" />
-            Guia de Leitura
+            Legenda Processos
           </TabsTrigger>
         </TabsList>
 
