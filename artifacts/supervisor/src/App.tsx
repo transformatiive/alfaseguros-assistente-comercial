@@ -8,6 +8,7 @@ import Dashboard from "@/pages/dashboard";
 import Conversas from "@/pages/conversas";
 import ConversaDetalhe from "@/pages/conversa-detalhe";
 import Operadores from "@/pages/operadores";
+import Metodologia from "@/pages/metodologia";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -27,6 +28,7 @@ function Router() {
         <Route path="/conversas" component={Conversas} />
         <Route path="/conversas/:id" component={ConversaDetalhe} />
         <Route path="/operadores" component={Operadores} />
+        <Route path="/metodologia" component={Metodologia} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

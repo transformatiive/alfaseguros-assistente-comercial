@@ -28,6 +28,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Convert a raw error message (possibly a JSON Zod blob) into a readable string. */
@@ -641,21 +643,63 @@ function StatsStrip({ conversations }: { conversations: StatsStripConv[] }) {
   const atRisk = conversations.filter((c) => c.riscoPerdaLead === "alto").length;
 
   const stats = [
-    { label: "Conversas", value: total.toString(), alert: false },
-    { label: "Multi-chamada", value: multiLeg.toString(), alert: false },
-    { label: "Qualidade Média", value: avgQuality != null ? avgQuality.toFixed(1) : "—", alert: avgQuality != null && avgQuality < 3 },
-    { label: "Desvios", value: desviosTotal.toString(), alert: desviosTotal > 0 },
-    { label: "Follow-ups", value: followUps.toString(), alert: false },
-    { label: "Em Risco", value: atRisk.toString(), alert: atRisk > 0 },
+    {
+      label: "Conversas",
+      value: total.toString(),
+      alert: false,
+      hint: "Total de conversas (grupos de chamadas com o mesmo contacto) registadas no dia.",
+    },
+    {
+      label: "Multi-chamada",
+      value: multiLeg.toString(),
+      alert: false,
+      hint: "Conversas com mais do que uma chamada para o mesmo contacto no mesmo dia. Pode indicar necessidade de resolução não satisfeita na primeira chamada.",
+    },
+    {
+      label: "Qualidade Média",
+      value: avgQuality != null ? avgQuality.toFixed(1) : "—",
+      alert: avgQuality != null && avgQuality < 3,
+      hint: "Média da qualidade global (1 a 5) de todas as conversas analisadas. Avalia abertura, qualificação, apresentação, gestão de objeções e fecho. Valores abaixo de 3 são assinalados a vermelho.",
+    },
+    {
+      label: "Desvios",
+      value: desviosTotal.toString(),
+      alert: desviosTotal > 0,
+      hint: "Total de desvios ao processo interno detetados em todas as conversas do dia (alta + média + baixa severidade). Ver detalhe em cada conversa.",
+    },
+    {
+      label: "Follow-ups",
+      value: followUps.toString(),
+      alert: false,
+      hint: "Conversas com uma ação de seguimento pendente (por efetuar) — por exemplo, ligar ao cliente numa data combinada ou enviar simulação por email.",
+    },
+    {
+      label: "Em Risco",
+      value: atRisk.toString(),
+      alert: atRisk > 0,
+      hint: "Conversas classificadas com risco alto de perda de lead — o cliente pode não avançar sem intervenção urgente do supervisor ou do operador.",
+    },
   ];
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
       {stats.map((s) => (
         <div key={s.label} className="rounded-md border bg-card px-4 py-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            {s.label}
-          </p>
+          <div className="flex items-center justify-between gap-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {s.label}
+            </p>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button className="text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                  <Info className="h-3 w-3" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-[200px] text-xs leading-relaxed">
+                {s.hint}
+              </TooltipContent>
+            </Tooltip>
+          </div>
           <p
             className={cn("mt-1 text-3xl tabular-nums leading-none", s.alert ? "text-red-600" : "text-foreground")}
             style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}

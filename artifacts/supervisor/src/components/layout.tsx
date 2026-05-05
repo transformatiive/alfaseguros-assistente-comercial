@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, MessageSquareText, Users, Building, Settings, LogOut } from "lucide-react";
+import { LayoutDashboard, MessageSquareText, Users, Building, BookOpen } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -7,6 +7,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { href: "/", icon: LayoutDashboard, label: "Visão Geral" },
+    { href: "/metodologia", icon: BookOpen, label: "Guia de Leitura" },
   ];
 
   return (
