@@ -365,11 +365,8 @@ export default function Dashboard() {
                         <span className="text-base">{section.icon}</span>
                         {section.label}
                       </div>
-                      {sec.paragraph && (
-                        <p className="text-sm text-foreground/80 leading-relaxed mb-2"><RichText text={sec.paragraph} /></p>
-                      )}
                       {sec.bullets.length > 0 && (
-                        <ul className="space-y-1">
+                        <ul className="space-y-1 mb-2">
                           {sec.bullets.map((b, i) => (
                             <li key={i} className="text-sm text-foreground/80 flex items-start gap-2">
                               <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-current flex-shrink-0 opacity-60" />
@@ -377,6 +374,9 @@ export default function Dashboard() {
                             </li>
                           ))}
                         </ul>
+                      )}
+                      {sec.paragraph && (
+                        <p className="text-sm text-foreground/60 leading-relaxed italic border-t border-current/10 pt-2"><RichText text={sec.paragraph} /></p>
                       )}
                     </div>
                   );
