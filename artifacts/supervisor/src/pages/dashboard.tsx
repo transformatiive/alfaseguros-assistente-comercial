@@ -33,6 +33,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { RichText } from "@/components/rich-text";
 
 /** Convert a raw error message (possibly a JSON Zod blob) into a readable string. */
 function friendlyError(msg: string): string {
@@ -349,7 +350,7 @@ export default function Dashboard() {
                     className="text-base leading-relaxed italic"
                     style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
                   >
-                    {summary.executiveSummary}
+                    <RichText text={summary.executiveSummary} />
                   </p>
                 </div>
               )}
@@ -365,14 +366,14 @@ export default function Dashboard() {
                         {section.label}
                       </div>
                       {sec.paragraph && (
-                        <p className="text-sm text-foreground/80 leading-relaxed mb-2">{sec.paragraph}</p>
+                        <p className="text-sm text-foreground/80 leading-relaxed mb-2"><RichText text={sec.paragraph} /></p>
                       )}
                       {sec.bullets.length > 0 && (
                         <ul className="space-y-1">
                           {sec.bullets.map((b, i) => (
                             <li key={i} className="text-sm text-foreground/80 flex items-start gap-2">
                               <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-current flex-shrink-0 opacity-60" />
-                              {b}
+                              <RichText text={b} />
                             </li>
                           ))}
                         </ul>

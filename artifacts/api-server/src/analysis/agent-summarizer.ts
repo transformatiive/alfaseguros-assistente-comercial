@@ -60,7 +60,7 @@ EU-PT. Sem brasileirismos.`;
 function describeConv(c: AnalyzedConversationRef): string {
   const a = c.analysis;
   return [
-    `- Cliente ${c.customerPhone} | ${a.categoria} ${a.produto} | qualidade ${a.qualidadeGlobal}/5 | risco ${a.riscoPerdaLead}`,
+    `- Conversa ${c.rowId} | Cliente ${c.customerPhone} | ${a.categoria} ${a.produto} | qualidade ${a.qualidadeGlobal}/5 | risco ${a.riscoPerdaLead}`,
     `  Narrativa: ${a.narrativaConversa}`,
     a.desviosProcedimento.length > 0
       ? `  Desvios: ${a.desviosProcedimento
