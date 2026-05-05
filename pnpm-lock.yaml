@@ -172,6 +172,9 @@ importers:
       '@workspace/db':
         specifier: workspace:*
         version: link:../../lib/db
+      '@workspace/openrouter':
+        specifier: workspace:*
+        version: link:../../lib/openrouter
       '@workspace/ringover':
         specifier: workspace:*
         version: link:../../lib/ringover
@@ -193,6 +196,9 @@ importers:
       pino-http:
         specifier: ^10
         version: 10.5.0
+      zod:
+        specifier: 'catalog:'
+        version: 3.25.76
     devDependencies:
       '@types/cookie-parser':
         specifier: ^1.4.10
