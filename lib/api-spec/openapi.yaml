@@ -18,6 +18,10 @@ tags:
     description: Daily summary operations
   - name: operators
     description: Operator coaching operations
+  - name: auth
+    description: Authentication operations
+  - name: admin
+    description: Admin user management
 
 paths:
   /healthz:
