@@ -21,7 +21,7 @@ Devolve **apenas** JSON válido (sem markdown, sem comentários) com a seguinte 
     }
   ],
   "pontosPositivos": string[],               // 2-4 boas práticas observadas; cita momentos concretos
-  "feedbackSupervisor": string,              // 2-4 frases dirigidas ao operador pelo nome próprio, em tom coaching (não policial)
+  "feedbackSupervisor": string,              // 2-4 frases em terceira pessoa, referindo o operador pelo nome próprio (ex: "A Marina fez bem em... / A Marina pode melhorar..."). Nunca usar "tu" ou segunda pessoa.
   "sugestaoEspecialista": string,            // 1-3 frases com sugestão de cross-sell ou conhecimento técnico relevante
   "followUpNecessario": boolean,             // true se a conversa precisar de seguimento concreto
   "followUpDescricao": string,               // o que fazer e quando ("ligar até quinta-feira para confirmar..."). Vazio "" se followUpNecessario=false.
