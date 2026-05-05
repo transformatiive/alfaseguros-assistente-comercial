@@ -577,7 +577,7 @@ export default function Dashboard() {
                     {op.paragraphOverview && (
                       <div className="rounded-md bg-stone-900 text-stone-50 p-4">
                         <p className="text-sm leading-relaxed italic" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
-                          {op.paragraphOverview}
+                          <RichText text={op.paragraphOverview} />
                         </p>
                       </div>
                     )}
@@ -585,7 +585,7 @@ export default function Dashboard() {
                     {op.closingRateObservations && (
                       <div className="flex items-start gap-2.5 p-3 rounded-md bg-blue-50 border border-blue-200">
                         <TrendingUp className="h-4 w-4 text-blue-700 mt-0.5 flex-shrink-0" />
-                        <p className="text-sm text-foreground/80 leading-relaxed">{op.closingRateObservations}</p>
+                        <p className="text-sm text-foreground/80 leading-relaxed"><RichText text={op.closingRateObservations} /></p>
                       </div>
                     )}
 
