@@ -11,7 +11,12 @@ import { env } from "./lib/env.js";
 const PgSession = connectPgSimple(session);
 const cfg = env();
 
+const isProd = process.env["NODE_ENV"] === "production";
+
 const app: Express = express();
+
+// Trust Replit's reverse proxy so req.secure and cookies work correctly
+app.set("trust proxy", 1);
 
 app.use(
   pinoHttp({
@@ -38,7 +43,8 @@ app.use(
     store: new PgSession({
       pool,
       tableName: "user_sessions",
-      createTableIfMissing: true,
+      // Do NOT use createTableIfMissing — the table.sql file is not bundled.
+      // Table is created explicitly in setupSessionStore() at startup.
     }),
     secret: cfg.SESSION_SECRET,
     resave: false,
@@ -47,8 +53,8 @@ app.use(
     cookie: {
       maxAge: 90 * 24 * 60 * 60 * 1000,
       httpOnly: true,
-      sameSite: "lax",
-      secure: false,
+      sameSite: isProd ? "none" : "lax",
+      secure: isProd,
     },
   }),
 );
