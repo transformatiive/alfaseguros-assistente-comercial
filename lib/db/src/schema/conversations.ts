@@ -12,6 +12,7 @@ export const conversationsTable = pgTable("conversations", {
   durationSec: integer("duration_sec"),
   recordingUrls: text("recording_urls").array().notNull().default([]),
   analysisJson: jsonb("analysis_json"),
+  analysisError: text("analysis_error"),
   costUsd: numeric("cost_usd", { precision: 10, scale: 6 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
