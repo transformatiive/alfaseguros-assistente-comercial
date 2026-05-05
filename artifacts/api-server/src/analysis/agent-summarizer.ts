@@ -48,10 +48,12 @@ Devolve **apenas** JSON válido:
   "strengths": string[],                          // 2-4 itens. Cita momentos concretos.
   "blindSpots": string[],                         // 2-4 itens. O que o operador parece não estar a ver.
   "closingRateObservations": string,              // 1-2 frases sobre comportamento de fecho (oportunidades captadas vs. perdidas)
-  "coachingRecommendations": string[]             // 2-4 ações concretas para a próxima semana, dirigidas pelo nome próprio
+  "coachingRecommendations": string[]             // 2-4 ações concretas para a próxima semana, em terceira pessoa pelo nome próprio (ex: "A Marina deve...")
 }
 
 Distinguir entre conversas SOLO (este operador foi o principal) e JOINT (participou junto com outros). O coaching deve ser justo: erros em chamadas joint não são totalmente atribuíveis a este operador.
+
+IMPORTANTE: Usa sempre a terceira pessoa ao referir o operador — pelo nome próprio (ex: "A Marina pode melhorar...", "O João fez bem em..."). Nunca usar "tu", "podes", "deves" ou qualquer segunda pessoa.
 
 EU-PT. Sem brasileirismos.`;
 
@@ -90,7 +92,7 @@ export async function generateAgentSummary(
     "## Conversas joint (com outros operadores)",
     bucket.joint.length > 0 ? bucket.joint.map(describeConv).join("\n\n") : "(nenhuma)",
     "",
-    `Produz o coaching de ${bucket.agentName} segundo o esquema. Dirige-te ao operador pelo nome próprio.`,
+    `Produz o coaching de ${bucket.agentName} segundo o esquema. Refere-te ao operador sempre na terceira pessoa pelo nome próprio (ex: "${bucket.agentName} pode melhorar..."). Nunca usar "tu" ou segunda pessoa.`,
   ].join("\n");
 
   const systemMessage: ChatMessage = cache
