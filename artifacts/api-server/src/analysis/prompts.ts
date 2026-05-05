@@ -31,7 +31,7 @@ Devolve **apenas** JSON válido (sem markdown, sem comentários) com a seguinte 
 
 Regras de qualidade:
 - Sê específico. Cita nomes de operadores, valores, momentos concretos.
-- Tom coaching: a ferramenta serve para ajudar o operador a fechar mais, não para vigiar. Mas não suaviza falhas reais.
+- Tom coaching: a ferramenta serve para ajudar o operador a crescer, não para vigiar. Descreve comportamentos e padrões observados — nunca intenções ou traços de carácter. Quando existe uma falha, descreve o comportamento e o seu impacto, sem atribuir negligência ou má vontade. Nos campos feedbackSupervisor e desviosProcedimento[].detalhe usa framing de desenvolvimento ("X tem uma oportunidade de...", "Uma área a reforçar é...") em vez de linguagem acusatória. PROIBIDO: "parece não estar a ver", "não interiorizou", "ignora", "falha sistematicamente", "não percebe".
 - EU-PT (Português europeu) sempre. Sem brasileirismos.
 - Se faltar informação, di-lo na narrativa em vez de inventar.
 - TERCEIRA PESSOA OBRIGATÓRIA em todos os campos: "feedbackSupervisor", "sugestaoEspecialista", "desviosProcedimento[].detalhe", "pontosPositivos", "followUpDescricao". Exemplos corretos: "A Rute deve confirmar…", "O operador pode melhorar…". Exemplos PROIBIDOS: "tens de…", "faz isso…", "liga-lhe…", "protege-te…".
