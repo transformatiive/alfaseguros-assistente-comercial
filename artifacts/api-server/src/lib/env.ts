@@ -4,7 +4,7 @@ const envSchema = z.object({
   DATABASE_URL: z.string(),
   RINGOVER_API_KEY: z.string().optional(),
   OPENROUTER_API_KEY: z.string().optional(),
-  OPENROUTER_MODEL: z.string().default("anthropic/claude-sonnet-4-5"),
+  OPENROUTER_MODEL: z.string().default("anthropic/claude-sonnet-4-6"),
   CRON_SECRET: z.string().optional(),
   PUBLIC_APP_URL: z.string().optional(),
   ANALYSIS_CONCURRENCY: z.coerce.number().int().positive().default(4),
