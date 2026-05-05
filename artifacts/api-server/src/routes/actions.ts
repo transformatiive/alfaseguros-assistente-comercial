@@ -11,7 +11,9 @@ type Tipo =
   | "risco_perda_lead"
   | "desvio_procedimento"
   | "qualidade_critica"
-  | "oportunidade_cross_sell";
+  | "oportunidade_cross_sell"
+  | "cotacao_sem_seguimento"
+  | "lead_quente_sem_fecho";
 
 interface ActionItem {
   id: string;
@@ -137,6 +139,53 @@ router.get("/actions/:date", async (req, res): Promise<void> => {
         prioridade: "baixa",
         titulo: "Oportunidade de cross-sell identificada",
         descricao: sugestao.slice(0, 220),
+        conversationId,
+        agentName,
+        customerPhone,
+        runDate,
+      });
+    }
+
+    // 6. Cotação sem seguimento
+    // Pedido de cotação terminado sem follow-up marcado — falha frequente no fecho
+    const categoria = typeof a.categoria === "string" ? a.categoria.trim() : "";
+    const followUpNecessario = a.followUpNecessario === true;
+    if (categoria === "Cotação" && !followUpNecessario) {
+      items.push({
+        id: `${conversationId}-cotacao_sem_seguimento`,
+        tipo: "cotacao_sem_seguimento",
+        prioridade: "media",
+        titulo: "Cotação sem seguimento marcado",
+        descricao:
+          typeof a.narrativaConversa === "string" && a.narrativaConversa.trim()
+            ? a.narrativaConversa.slice(0, 220)
+            : "Chamada de cotação encerrada sem follow-up registado. Risco de o lead esfriar.",
+        conversationId,
+        agentName,
+        customerPhone,
+        runDate,
+      });
+    }
+
+    // 7. Lead quente sem fecho
+    // Boa chamada, cliente quente, baixo risco — mas sem follow-up agendado
+    const arco = typeof a.arcoConversa === "string" ? a.arcoConversa : "";
+    const arcoQuente = /quente/i.test(arco);
+    if (
+      a.riscoPerdaLead === "baixo" &&
+      qualidade !== null && qualidade >= 4 &&
+      arcoQuente &&
+      !followUpNecessario
+    ) {
+      items.push({
+        id: `${conversationId}-lead_quente`,
+        tipo: "lead_quente_sem_fecho",
+        prioridade: "media",
+        titulo: "Lead quente — fecho não aproveitado",
+        descricao:
+          typeof a.narrativaConversa === "string" && a.narrativaConversa.trim()
+            ? a.narrativaConversa.slice(0, 220)
+            : `Arco: ${arco}. Chamada de alta qualidade com cliente receptivo, sem próximo passo definido.`,
         conversationId,
         agentName,
         customerPhone,

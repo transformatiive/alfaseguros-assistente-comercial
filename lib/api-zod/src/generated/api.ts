@@ -354,6 +354,8 @@ export const ListActionsResponseItem = zod
       "desvio_procedimento",
       "qualidade_critica",
       "oportunidade_cross_sell",
+      "cotacao_sem_seguimento",
+      "lead_quente_sem_fecho",
     ]),
     prioridade: zod.enum(["alta", "media", "baixa"]),
     titulo: zod.string(),

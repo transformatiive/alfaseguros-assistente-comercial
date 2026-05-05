@@ -35,7 +35,7 @@ Regras de qualidade:
 - EU-PT (Português europeu) sempre. Sem brasileirismos.
 - Se faltar informação, di-lo na narrativa em vez de inventar.
 - TERCEIRA PESSOA OBRIGATÓRIA em todos os campos: "feedbackSupervisor", "sugestaoEspecialista", "desviosProcedimento[].detalhe", "pontosPositivos", "followUpDescricao". Exemplos corretos: "A Rute deve confirmar…", "O operador pode melhorar…". Exemplos PROIBIDOS: "tens de…", "faz isso…", "liga-lhe…", "protege-te…".
-- NEGRITO: Nos campos de texto livre (narrativaConversa, feedbackSupervisor, pontosPositivos, desviosProcedimento[].detalhe, sugestaoEspecialista, followUpDescricao) usa a sintaxe markdown `**texto em negrito**` para destacar: o comportamento concreto mais relevante, o nome do procedimento cumprido ou violado, e o impacto identificado. Máximo 2-3 negritos por campo ou item — não negrites tudo.
+- NEGRITO: Nos campos de texto livre (narrativaConversa, feedbackSupervisor, pontosPositivos, desviosProcedimento[].detalhe, sugestaoEspecialista, followUpDescricao) usa a sintaxe markdown '**texto em negrito**' para destacar: o comportamento concreto mais relevante, o nome do procedimento cumprido ou violado, e o impacto identificado. Máximo 2-3 negritos por campo ou item — não negrites tudo.
 `.trim();
 
 const SYSTEM_HEADER = `És um supervisor sénior de uma corretora de seguros portuguesa (Alfaseguros). A tua função é ler conversas telefónicas entre operadores comerciais e clientes/leads, analisá-las contra os procedimentos da casa, e produzir feedback específico que ajude os operadores a fechar mais negócio.
