@@ -1,9 +1,16 @@
+/**
+ * Procedimentos da equipa Não Vida / 360 — Alfaseguros (strawman).
+ *
+ * Este texto alimenta o system prompt do analisador. Será substituído pela
+ * versão revista da Soraia. Quando isso acontecer, reinicia o servidor e
+ * força uma re-análise completa do dia (`force: true`) para que o modelo
+ * passe a usar as novas regras.
+ *
+ * Mantemos o conteúdo num módulo TypeScript (em vez de um .md à parte) para
+ * que o esbuild o inclua automaticamente no bundle CJS de produção.
+ */
+export const PROCEDURES_TEXT = `
 # Procedimentos da equipa Não Vida / 360 — Alfaseguros
-
-> **Strawman**. Este ficheiro é fed-line para o system prompt do analisador.
-> Será substituído pela versão revista da Soraia. Quando isso acontecer,
-> reinicia o servidor e força uma re-análise completa do dia para que o
-> modelo passe a usar as novas regras (`force=true`).
 
 ## Princípios gerais
 
@@ -25,12 +32,12 @@
 ## Qualificação
 
 - Confirmar o produto pretendido (TVDE, Multirriscos, Auto, Saúde, etc.).
-- Recolher dados mínimos para simulação: NIF, morada/CP, dados do bem (matrícula
-  para auto, área para multirriscos, etc.).
+- Recolher dados mínimos para simulação: NIF, morada/CP, dados do bem
+  (matrícula para auto, área para multirriscos, etc.).
 - Em TVDE: confirmar a plataforma (Uber/Bolt/Free Now), idade, carta de
   condução, sinistros nos últimos 5 anos.
-- Em Multirriscos: confirmar tipo de imóvel, regime (próprio/arrendado), área
-  bruta privativa, número de casas de banho.
+- Em Multirriscos: confirmar tipo de imóvel, regime (próprio/arrendado),
+  área bruta privativa, número de casas de banho.
 
 ## Apresentação da proposta
 
@@ -44,8 +51,8 @@
 
 - **Preço**: pedir o que está a comparar e em que termos. Reposicionar
   cobertura, não baixar preço sem motivo.
-- **Vou pensar**: aceitar, mas combinar **um próximo passo concreto com data**
-  ("posso ligar-lhe na quinta de manhã para confirmar?").
+- **Vou pensar**: aceitar, mas combinar **um próximo passo concreto com
+  data** ("posso ligar-lhe na quinta de manhã para confirmar?").
 - **Já tenho seguro**: pedir data de renovação e proposta cega.
 
 ## Fecho e follow-up
@@ -59,4 +66,6 @@
 
 - Cliente promete responder e não há follow-up agendado → risco de lead frio
 - Operador desconhece campo do produto → registar para formação
-- Cliente já chamou múltiplas vezes pela mesma questão → escalação ao supervisor
+- Cliente já chamou múltiplas vezes pela mesma questão → escalação ao
+  supervisor
+`.trim();

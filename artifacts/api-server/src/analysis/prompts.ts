@@ -1,6 +1,4 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { PROCEDURES_TEXT } from "../procedures/procedures.js";
 import type { GroupedConversation } from "../grouping/conversations.js";
 
 const SCHEMA_DESCRIPTION = `
@@ -42,36 +40,13 @@ const SYSTEM_HEADER = `És um supervisor sénior de uma corretora de seguros por
 
 Falas e escreves **apenas** em Português europeu. Nunca em Brasileiro. Nunca em Inglês exceto onde for inevitável (ex: "follow-up", "TVDE").`;
 
-/**
- * Load the procedures manual once at startup. The path is relative to this file
- * so it works in both source (.ts) and bundled (.mjs) layouts.
- */
-let proceduresCache: string | null = null;
-function loadProcedures(): string {
-  if (proceduresCache != null) return proceduresCache;
-  try {
-    const here = dirname(fileURLToPath(import.meta.url));
-    // From src/analysis/prompts.ts → src/procedures/procedures.md
-    const path = join(here, "..", "procedures", "procedures.md");
-    proceduresCache = readFileSync(path, "utf8");
-  } catch {
-    proceduresCache = "(procedimentos não encontrados — usa princípios gerais de boas práticas comerciais.)";
-  }
-  return proceduresCache;
-}
-
-/** Reset the procedures cache — call after the manual is updated on disk. */
-export function reloadProcedures(): void {
-  proceduresCache = null;
-}
-
 export function buildSystemPrompt(): string {
   return [
     SYSTEM_HEADER,
     "",
     "## Procedimentos internos",
     "",
-    loadProcedures(),
+    PROCEDURES_TEXT,
     "",
     "## Output esperado",
     "",
