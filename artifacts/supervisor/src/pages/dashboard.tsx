@@ -290,19 +290,35 @@ export default function Dashboard() {
 
           <div className="mt-4 pt-4 border-t flex flex-col gap-3">
             <div className="flex items-center gap-3">
-              <Button
-                size="sm"
-                disabled={trigger.isPending || run?.status === "running"}
-                onClick={() => trigger.mutate({ data: { date: dateStr } })}
-                className="gap-2"
-              >
-                {trigger.isPending || run?.status === "running" ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5" />
-                )}
-                Analisar este dia
-              </Button>
+              {(() => {
+                const isRunning = run?.status === "running";
+                const isStale = isRunning && run?.updatedAt
+                  ? Date.now() - new Date(run.updatedAt).getTime() > 20 * 60 * 1000
+                  : false;
+                const isActivelyRunning = isRunning && !isStale;
+                return (
+                  <>
+                    <Button
+                      size="sm"
+                      disabled={trigger.isPending || isActivelyRunning}
+                      onClick={() => trigger.mutate({ data: { date: dateStr, force: isStale } })}
+                      className="gap-2"
+                    >
+                      {trigger.isPending || isActivelyRunning ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-3.5 w-3.5" />
+                      )}
+                      {isStale ? "Forçar re-análise" : "Analisar este dia"}
+                    </Button>
+                    {isStale && (
+                      <p className="text-xs text-amber-600">
+                        Análise parou a meio — clique para reiniciar
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
             </div>
             {run?.errorMessage && (
               <p className="text-xs text-destructive bg-destructive/5 border border-destructive/20 rounded px-3 py-2 leading-relaxed">

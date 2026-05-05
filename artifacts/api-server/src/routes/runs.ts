@@ -54,8 +54,16 @@ router.post("/run", async (req, res): Promise<void> => {
 
   const existing = await db.select().from(runsTable).where(eq(runsTable.date, date));
   if (existing.length > 0 && existing[0].status === "running") {
-    res.status(409).json({ error: "Run already in progress for this date" });
-    return;
+    // A run is considered stale if it has been "running" for > 20 minutes without
+    // updating — this happens when the server restarts mid-job.
+    const STALE_MS = 20 * 60 * 1000;
+    const isStale = Date.now() - existing[0].updatedAt.getTime() > STALE_MS;
+    if (!force && !isStale) {
+      res.status(409).json({ error: "Run already in progress for this date" });
+      return;
+    }
+    // Stale or forced: fall through and reset the run below.
+    logger.warn({ date, isStale, force }, "Resetting stale/forced running run");
   }
 
   let run;
