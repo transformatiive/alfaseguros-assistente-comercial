@@ -10,6 +10,7 @@ import {
 } from "../lib/dates.js";
 import { analyzeDay } from "../jobs/analyze-day.js";
 import { subscribeRunEvents } from "../jobs/bus.js";
+import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
 
@@ -80,8 +81,7 @@ router.post("/run", async (req, res): Promise<void> => {
   void analyzeDay({ date, force }).catch((err: unknown) => {
     // analyzeDay already records failure on the runs row. This catch keeps the
     // unhandled-rejection from crashing the process.
-    // eslint-disable-next-line no-console
-    console.error("analyzeDay failed", { date, err });
+    logger.error({ date, err }, "analyzeDay failed");
   });
 });
 
