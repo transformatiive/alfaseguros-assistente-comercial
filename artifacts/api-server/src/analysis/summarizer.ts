@@ -9,6 +9,13 @@ import {
   type DailySummaryAnalysis,
 } from "./schema.js";
 
+export interface RelatedTicketComment {
+  commentedTime: string | null;
+  authorType: string | null;
+  authorName: string | null;
+  content: string | null;
+}
+
 export interface RelatedTicketRef {
   ticketNumber: string | null;
   subject: string | null;
@@ -16,6 +23,7 @@ export interface RelatedTicketRef {
   category: string | null;
   createdTime: string | null;
   closedTime: string | null;
+  comments?: RelatedTicketComment[];
 }
 
 export interface AnalyzedConversationRef {
@@ -44,13 +52,13 @@ const DEFAULT_MODEL = "anthropic/claude-sonnet-4";
 
 const SYSTEM = `És um supervisor sénior de uma corretora de seguros portuguesa (Alfaseguros), equipa Não Vida (360).
 
-Recebes a lista das análises de todas as conversas telefónicas analisadas para o dia, enriquecidas com tickets do Zoho Desk quando disponíveis. A tua tarefa é produzir um resumo executivo diário, em Português europeu, dirigido ao CEO (Rui).
+Recebes a lista das análises de todas as conversas telefónicas analisadas para o dia, enriquecidas com tickets do Zoho Desk quando disponíveis (incluindo threads de comentários). A tua tarefa é produzir um resumo executivo diário, em Português europeu, dirigido ao CEO (Rui).
 
 O resumo tem cinco secções estruturadas + um abstract. Cada secção segue esta ordem:
 1. \`bullets\` (3-5 temas/padrões observados — frases curtas, concisas, que nomeiam o tema; ex: "Fecho de cotações TVDE com objeção de preço")
 2. \`paragraph\` (1-3 frases com exemplos concretos que ilustram esses temas, com nomes de operadores e situações específicas; ex: "A Andreia C. fechou 3 cotações TVDE superando objeções de preço nas chamadas da tarde.")
 
-Sê específico nos exemplos: cita nomes, números e momentos concretos. Quando existirem tickets Zoho associados, usa-os para enriquecer o contexto (ex: "ticket aberto", "ticket resolvido", "cliente já tinha contactado por email").
+Sê específico nos exemplos: cita nomes, números e momentos concretos. Quando existirem tickets Zoho associados, usa-os para enriquecer o contexto (ex: "ticket aberto", "ticket resolvido", "cliente já tinha contactado por email", referenciando o conteúdo dos comentários quando relevante).
 
 Devolve **apenas** JSON válido (sem markdown, sem comentários):
 
@@ -76,6 +84,14 @@ Devolve **apenas** JSON válido (sem markdown, sem comentários):
 
 EU-PT sempre. Tom coaching (a ferramenta é para ajudar a equipa a fechar mais, não para vigiar). Cita conversas e operadores específicos sempre que fizer sentido.`;
 
+function formatComment(c: RelatedTicketComment): string {
+  const ts = c.commentedTime ? new Date(c.commentedTime).toISOString().slice(0, 16).replace("T", " ") : "?";
+  const who = c.authorName ?? (c.authorType === "END_USER" ? "Cliente" : "Agente");
+  const type = c.authorType === "END_USER" ? "Mensagem" : "Nota interna";
+  const text = c.content ? ` "${c.content.trim().slice(0, 200)}"` : "";
+  return `    [${ts}] ${type} — ${who}:${text}`;
+}
+
 function summarizeConversation(c: AnalyzedConversationRef): string {
   const a = c.analysis;
   const desvios = a.desviosProcedimento.length > 0
@@ -93,13 +109,13 @@ function summarizeConversation(c: AnalyzedConversationRef): string {
     `Tags: ${a.tags.join(", ") || "(nenhuma)"}`,
   ];
   if (c.relatedTickets && c.relatedTickets.length > 0) {
-    const ticketLines = c.relatedTickets
-      .map(
-        (t) =>
-          `#${t.ticketNumber ?? "?"} "${t.subject ?? "(sem assunto)"}" [${t.status ?? "?"}${t.category ? " / " + t.category : ""}${t.closedTime ? " — fechado" : ""}]`,
-      )
-      .join(" | ");
-    lines.push(`Tickets Zoho: ${ticketLines}`);
+    const ticketLines = c.relatedTickets.map((t) => {
+      const header = `  #${t.ticketNumber ?? "?"} "${t.subject ?? "(sem assunto)"}" [${t.status ?? "?"}${t.category ? " / " + t.category : ""}${t.closedTime ? " — fechado" : ""}]`;
+      if (!t.comments || t.comments.length === 0) return header;
+      const commentLines = t.comments.map(formatComment);
+      return [header, ...commentLines].join("\n");
+    });
+    lines.push(`Tickets Zoho:\n${ticketLines.join("\n")}`);
   }
   return lines.join("\n");
 }

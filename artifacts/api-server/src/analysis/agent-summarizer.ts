@@ -75,13 +75,22 @@ function describeConv(c: AnalyzedConversationRef): string {
     `  Feedback existente: ${a.feedbackSupervisor}`,
   ];
   if (c.relatedTickets && c.relatedTickets.length > 0) {
-    const ticketLines = c.relatedTickets
-      .map(
-        (t) =>
-          `#${t.ticketNumber ?? "?"} "${t.subject ?? "(sem assunto)"}" [${t.status ?? "?"}${t.closedTime ? " — fechado" : ""}]`,
-      )
-      .join(" | ");
-    lines.push(`  Tickets Zoho: ${ticketLines}`);
+    for (const t of c.relatedTickets) {
+      lines.push(
+        `  Ticket Zoho #${t.ticketNumber ?? "?"} "${t.subject ?? "(sem assunto)"}" [${t.status ?? "?"}${t.closedTime ? " — fechado" : ""}]`,
+      );
+      if (t.comments && t.comments.length > 0) {
+        for (const cm of t.comments) {
+          const ts = cm.commentedTime
+            ? new Date(cm.commentedTime).toISOString().slice(0, 16).replace("T", " ")
+            : "?";
+          const who = cm.authorName ?? (cm.authorType === "END_USER" ? "Cliente" : "Agente");
+          const type = cm.authorType === "END_USER" ? "Msg" : "Nota interna";
+          const text = cm.content ? ` "${cm.content.trim().slice(0, 150)}"` : "";
+          lines.push(`    [${ts}] ${type} — ${who}:${text}`);
+        }
+      }
+    }
   }
   return lines.join("\n");
 }

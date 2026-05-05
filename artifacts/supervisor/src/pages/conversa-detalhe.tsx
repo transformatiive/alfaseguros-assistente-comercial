@@ -141,6 +141,27 @@ function buildTimeline(
   return events;
 }
 
+function TypeTag({
+  label,
+  color,
+}: {
+  label: string;
+  color: "emerald" | "blue" | "violet" | "amber" | "sky";
+}) {
+  const cls: Record<string, string> = {
+    emerald: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    blue: "bg-blue-100 text-blue-700 border-blue-200",
+    violet: "bg-violet-100 text-violet-700 border-violet-200",
+    amber: "bg-amber-100 text-amber-700 border-amber-200",
+    sky: "bg-sky-100 text-sky-700 border-sky-200",
+  };
+  return (
+    <span className={cn("text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border", cls[color])}>
+      {label}
+    </span>
+  );
+}
+
 function CallEventRow({ leg }: { leg: ConversationLeg }) {
   const isInbound =
     leg.direction === "in" ||
@@ -149,18 +170,22 @@ function CallEventRow({ leg }: { leg: ConversationLeg }) {
   const Icon = isInbound ? PhoneIncoming : PhoneOutgoing;
   const iconCls = isInbound ? "text-emerald-600" : "text-blue-600";
   const label = isInbound ? "Chamada Entrada" : "Chamada Saída";
+  const color = isInbound ? "emerald" : "blue";
+  const rowBg = isInbound
+    ? "bg-emerald-50/60 border-l-[3px] border-emerald-400"
+    : "bg-blue-50/60 border-l-[3px] border-blue-400";
   const duration = formatDuration(leg.durationSec);
 
   return (
-    <div className="flex items-start gap-3 py-2.5">
-      <div className="flex-shrink-0 w-6 flex items-center justify-center mt-0.5">
+    <div className={cn("flex items-start gap-3 py-2.5 px-2.5 rounded-md", rowBg)}>
+      <div className="flex-shrink-0 w-5 flex items-center justify-center mt-0.5">
         <Icon className={cn("h-4 w-4", iconCls)} />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-medium">{label}</span>
+          <TypeTag label={label} color={color} />
           {leg.agentName && (
-            <span className="text-xs text-muted-foreground">{leg.agentName}</span>
+            <span className="text-xs font-medium text-foreground/80">{leg.agentName}</span>
           )}
           {duration && (
             <Badge variant="outline" className="font-mono text-[10px]">
@@ -186,16 +211,17 @@ function CallEventRow({ leg }: { leg: ConversationLeg }) {
 function TicketEventRow({ ticket }: { ticket: DeskTicket }) {
   const outcome = ticket.outcomeStatus ? OUTCOME_STYLES[ticket.outcomeStatus] ?? null : null;
   return (
-    <div className="flex items-start gap-3 py-2.5">
-      <div className="flex-shrink-0 w-6 flex items-center justify-center mt-0.5">
+    <div className="flex items-start gap-3 py-2.5 px-2.5 rounded-md bg-violet-50/60 border-l-[3px] border-violet-400">
+      <div className="flex-shrink-0 w-5 flex items-center justify-center mt-0.5">
         <Ticket className="h-4 w-4 text-violet-600" />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
+          <TypeTag label="Zoho Desk" color="violet" />
           {ticket.ticketNumber && (
             <span className="font-mono text-xs text-muted-foreground">#{ticket.ticketNumber}</span>
           )}
-          <span className="text-sm font-medium">{ticket.subject ?? "(sem assunto)"}</span>
+          <span className="text-sm font-medium leading-snug">{ticket.subject ?? "(sem assunto)"}</span>
           {outcome && (
             <Badge variant="outline" className={cn("text-[10px]", outcome.cls)}>
               {outcome.label}
@@ -216,10 +242,10 @@ function TicketEventRow({ ticket }: { ticket: DeskTicket }) {
               href={`https://desk.zoho.eu/agent/alfaseguros/tickets/${ticket.ticketNumber}`}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-0.5 text-primary hover:underline"
+              className="inline-flex items-center gap-0.5 text-violet-600 hover:underline"
             >
               <ExternalLink className="h-2.5 w-2.5" />
-              Zoho Desk
+              Abrir no Zoho
             </a>
           )}
         </div>
@@ -237,30 +263,27 @@ function CommentEventRow({
   ticketSubject: string | null;
   ticketNumber: string | null;
 }) {
-  const isClient = comment.authorType === "END_USER";
-  const channelIcon = comment.channel?.toLowerCase().includes("mail") ? (
-    <Mail className="h-3.5 w-3.5 text-indigo-500" />
-  ) : (
-    <MessageSquare className="h-3.5 w-3.5 text-indigo-500" />
-  );
+  const isInternal = comment.authorType !== "END_USER";
+  const isMail = comment.channel?.toLowerCase().includes("mail");
+
+  const rowBg = isInternal
+    ? "bg-amber-50/60 border-l-[3px] border-amber-400"
+    : "bg-sky-50/60 border-l-[3px] border-sky-400";
+  const iconColor = isInternal ? "text-amber-600" : "text-sky-600";
+  const tagColor: "amber" | "sky" = isInternal ? "amber" : "sky";
+  const tagLabel = isInternal ? "Nota interna" : isMail ? "Email cliente" : "Mensagem cliente";
+  const Icon = isInternal ? MessageSquare : isMail ? Mail : MessageSquare;
 
   return (
-    <div className="flex items-start gap-3 py-2.5">
-      <div className="flex-shrink-0 w-6 flex items-center justify-center mt-0.5">
-        {channelIcon}
+    <div className={cn("flex items-start gap-3 py-2.5 px-2.5 rounded-md", rowBg)}>
+      <div className="flex-shrink-0 w-5 flex items-center justify-center mt-0.5">
+        <Icon className={cn("h-4 w-4", iconColor)} />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-medium">
-            {isClient ? "Mensagem do cliente" : "Resposta interna"}
-          </span>
+          <TypeTag label={tagLabel} color={tagColor} />
           {comment.authorName && (
-            <span className="text-xs text-muted-foreground">{comment.authorName}</span>
-          )}
-          {comment.channel && (
-            <Badge variant="outline" className="text-[10px]">
-              {comment.channel}
-            </Badge>
+            <span className="text-xs font-medium text-foreground/80">{comment.authorName}</span>
           )}
           {ticketNumber && (
             <span className="text-[10px] font-mono text-muted-foreground">#{ticketNumber}</span>
@@ -272,7 +295,7 @@ function CommentEventRow({
           </p>
         )}
         {comment.content && (
-          <p className="mt-1 text-xs text-muted-foreground leading-relaxed line-clamp-3">
+          <p className="mt-1 text-xs text-foreground/70 leading-relaxed line-clamp-4">
             {comment.content}
           </p>
         )}
@@ -329,7 +352,7 @@ function InterleaveTimeline({
             )}
           </div>
 
-          <div className="divide-y divide-border/50">
+          <div className="flex flex-col gap-1.5">
             {events.map((ev, i) => {
               if (ev.kind === "call") return <CallEventRow key={i} leg={ev.leg} />;
               if (ev.kind === "ticket") return <TicketEventRow key={i} ticket={ev.ticket} />;
