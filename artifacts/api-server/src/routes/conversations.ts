@@ -19,6 +19,26 @@ router.get("/conversations/:date", async (req, res): Promise<void> => {
     .where(eq(conversationsTable.runDate, params.data.date))
     .orderBy(conversationsTable.createdAt);
 
+  // Batch-fetch ticket counts by phone fingerprint (single query, no N+1).
+  const fingerprints = [
+    ...new Set(
+      conversations
+        .map((c) => phoneFingerprint(c.customerPhone))
+        .filter((fp): fp is string => !!fp),
+    ),
+  ];
+  const ticketCountByFp = new Map<string, number>();
+  if (fingerprints.length > 0) {
+    const rows = await db
+      .select({ fp: ticketsTable.phoneFingerprint, id: ticketsTable.id })
+      .from(ticketsTable)
+      .where(inArray(ticketsTable.phoneFingerprint, fingerprints));
+    for (const row of rows) {
+      if (!row.fp) continue;
+      ticketCountByFp.set(row.fp, (ticketCountByFp.get(row.fp) ?? 0) + 1);
+    }
+  }
+
   res.json(
     conversations.map((c) => {
       const a = (c.analysisJson ?? null) as Record<string, unknown> | null;
@@ -26,6 +46,7 @@ router.get("/conversations/:date", async (req, res): Promise<void> => {
       const desvios = Array.isArray(a?.desviosProcedimento)
         ? (a!.desviosProcedimento as unknown[]).length
         : 0;
+      const fp = phoneFingerprint(c.customerPhone);
       return {
         id: c.id,
         runDate: c.runDate,
@@ -44,6 +65,7 @@ router.get("/conversations/:date", async (req, res): Promise<void> => {
           typeof a?.riscoPerdaLead === "string" ? a.riscoPerdaLead : null,
         desviosCount: desvios,
         followUpNecessario: a?.followUpNecessario === true,
+        deskTicketCount: fp ? (ticketCountByFp.get(fp) ?? 0) : 0,
         startTime: c.createdAt.toISOString(),
         costUsd: c.costUsd ? Number(c.costUsd) : null,
         createdAt: c.createdAt.toISOString(),
