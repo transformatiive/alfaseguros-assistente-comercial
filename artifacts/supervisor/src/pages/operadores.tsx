@@ -5,6 +5,7 @@ import { useDateContext } from "@/lib/date-context";
 import { useListOperatorSummaries, getListOperatorSummariesQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { RichText } from "@/components/rich-text";
 
 export default function Operadores() {
   const { dateStr, selectedDate } = useDateContext();
@@ -49,7 +50,7 @@ export default function Operadores() {
                       className="text-sm leading-relaxed italic"
                       style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
                     >
-                      {op.paragraphOverview}
+                      <RichText text={op.paragraphOverview} />
                     </p>
                   </div>
                 )}
@@ -57,7 +58,7 @@ export default function Operadores() {
                 {op.closingRateObservations && (
                   <div className="flex items-start gap-2.5 p-3 rounded-md bg-blue-50 border border-blue-200">
                     <TrendingUp className="h-4 w-4 text-blue-700 mt-0.5 flex-shrink-0" />
-                    <p className="text-sm text-foreground/80 leading-relaxed">{op.closingRateObservations}</p>
+                    <p className="text-sm text-foreground/80 leading-relaxed"><RichText text={op.closingRateObservations} /></p>
                   </div>
                 )}
 
@@ -73,7 +74,7 @@ export default function Operadores() {
                         {op.strengths.map((s, i) => (
                           <li key={i} className="text-sm text-foreground/80 flex items-start gap-2">
                             <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
-                            {s}
+                            <RichText text={s} />
                           </li>
                         ))}
                       </ul>
@@ -91,7 +92,7 @@ export default function Operadores() {
                         {op.blindSpots.map((b, i) => (
                           <li key={i} className="text-sm text-foreground/80 flex items-start gap-2">
                             <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-amber-400 flex-shrink-0" />
-                            {b}
+                            <RichText text={b} />
                           </li>
                         ))}
                       </ul>
@@ -109,7 +110,7 @@ export default function Operadores() {
                       {op.coachingRecommendations.map((r, i) => (
                         <li key={i} className="text-sm text-foreground/80 flex items-start gap-2">
                           <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-blue-400 flex-shrink-0" />
-                          {r}
+                          <RichText text={r} />
                         </li>
                       ))}
                     </ul>
