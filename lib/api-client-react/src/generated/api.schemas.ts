@@ -354,6 +354,11 @@ export interface ActionItem {
   /** @nullable */
   agentName: string | null;
   customerPhone: string;
+  /**
+   * Contact name from Zoho Desk, if known.
+   * @nullable
+   */
+  contactName: string | null;
   runDate: string;
 }
 
