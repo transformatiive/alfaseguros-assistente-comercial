@@ -420,6 +420,45 @@ components:
         - riscoPerdaLead
         - tags
 
+    DeskTicket:
+      type: object
+      description: A Zoho Desk ticket matched to this conversation via phone fingerprint.
+      properties:
+        id:
+          type: string
+        ticketNumber:
+          type: ["string", "null"]
+        subject:
+          type: ["string", "null"]
+        status:
+          type: ["string", "null"]
+        category:
+          type: ["string", "null"]
+        productName:
+          type: ["string", "null"]
+        contactName:
+          type: ["string", "null"]
+        assigneeName:
+          type: ["string", "null"]
+        outcomeStatus:
+          type: ["string", "null"]
+        createdTime:
+          type: ["string", "null"]
+        modifiedTime:
+          type: ["string", "null"]
+      required:
+        - id
+        - ticketNumber
+        - subject
+        - status
+        - category
+        - productName
+        - contactName
+        - assigneeName
+        - outcomeStatus
+        - createdTime
+        - modifiedTime
+
     ConversationDetail:
       type: object
       properties:
@@ -447,6 +486,11 @@ components:
           oneOf:
             - $ref: "#/components/schemas/ConversationAnalysis"
             - type: "null"
+        tickets:
+          type: array
+          items:
+            $ref: "#/components/schemas/DeskTicket"
+          description: Zoho Desk tickets matched via phone fingerprint
         costUsd:
           type: ["number", "null"]
         createdAt:
@@ -461,6 +505,7 @@ components:
         - durationSec
         - recordingUrls
         - analysis
+        - tickets
         - costUsd
         - createdAt
 

@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
-import { db, conversationsTable } from "@workspace/db";
+import { db, conversationsTable, ticketsTable } from "@workspace/db";
 import { ListConversationsParams, GetConversationParams } from "@workspace/api-zod";
+import { phoneFingerprint } from "@workspace/phone";
 
 const router: IRouter = Router();
 
@@ -73,6 +74,14 @@ router.get("/conversations/:date/:conversationId", async (req, res): Promise<voi
     return;
   }
 
+  const fp = phoneFingerprint(conversation.customerPhone);
+  const tickets = fp
+    ? await db
+        .select()
+        .from(ticketsTable)
+        .where(eq(ticketsTable.phoneFingerprint, fp))
+    : [];
+
   res.json({
     id: conversation.id,
     runDate: conversation.runDate,
@@ -83,6 +92,19 @@ router.get("/conversations/:date/:conversationId", async (req, res): Promise<voi
     durationSec: conversation.durationSec ?? null,
     recordingUrls: conversation.recordingUrls ?? [],
     analysis: normalizeAnalysis(conversation.analysisJson),
+    tickets: tickets.map((t) => ({
+      id: t.id,
+      ticketNumber: t.ticketNumber ?? null,
+      subject: t.subject ?? null,
+      status: t.status ?? null,
+      category: t.category ?? null,
+      productName: t.productName ?? null,
+      contactName: t.contactName ?? null,
+      assigneeName: t.assigneeName ?? null,
+      outcomeStatus: t.outcomeStatus ?? null,
+      createdTime: t.createdTime ? t.createdTime.toISOString() : null,
+      modifiedTime: t.modifiedTime ? t.modifiedTime.toISOString() : null,
+    })),
     costUsd: conversation.costUsd ? Number(conversation.costUsd) : null,
     createdAt: conversation.createdAt.toISOString(),
   });
