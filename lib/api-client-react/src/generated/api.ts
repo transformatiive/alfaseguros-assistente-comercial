@@ -17,6 +17,7 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  CaseSummary,
   ConversationDetail,
   ConversationSummary,
   DailySummary,
@@ -556,6 +557,92 @@ export function useGetConversation<
     conversationId,
     options,
   );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns cases that have at least one call on the given date (YYYY-MM-DD).
+ * @summary Get cross-channel cases for a date
+ */
+export const getListCasesUrl = (date: string) => {
+  return `/api/cases/${date}`;
+};
+
+export const listCases = async (
+  date: string,
+  options?: RequestInit,
+): Promise<CaseSummary[]> => {
+  return customFetch<CaseSummary[]>(getListCasesUrl(date), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListCasesQueryKey = (date: string) => {
+  return [`/api/cases/${date}`] as const;
+};
+
+export const getListCasesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listCases>>,
+  TError = ErrorType<unknown>,
+>(
+  date: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listCases>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListCasesQueryKey(date);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listCases>>> = ({
+    signal,
+  }) => listCases(date, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!date,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof listCases>>, TError, TData> & {
+    queryKey: QueryKey;
+  };
+};
+
+export type ListCasesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listCases>>
+>;
+export type ListCasesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get cross-channel cases for a date
+ */
+
+export function useListCases<
+  TData = Awaited<ReturnType<typeof listCases>>,
+  TError = ErrorType<unknown>,
+>(
+  date: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listCases>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListCasesQueryOptions(date, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

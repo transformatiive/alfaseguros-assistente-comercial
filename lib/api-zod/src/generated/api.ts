@@ -270,6 +270,24 @@ export const GetConversationResponse = zod.object({
       ),
     zod.null(),
   ]),
+  legs: zod
+    .array(
+      zod
+        .object({
+          callId: zod.string(),
+          agentName: zod.string().nullable(),
+          direction: zod.string().nullable().describe("inbound | outbound"),
+          startTime: zod.string().nullable(),
+          durationSec: zod.number(),
+          ringoverSummary: zod
+            .string()
+            .describe("AI-generated or manual note from Ringover"),
+        })
+        .describe("A single call leg within a grouped conversation."),
+    )
+    .describe(
+      "Individual call legs in chronological order (empty for older records)",
+    ),
   tickets: zod
     .array(
       zod
@@ -285,15 +303,169 @@ export const GetConversationResponse = zod.object({
           outcomeStatus: zod.string().nullable(),
           createdTime: zod.string().nullable(),
           modifiedTime: zod.string().nullable(),
+          comments: zod
+            .array(
+              zod
+                .object({
+                  id: zod.string(),
+                  commentedTime: zod.string().nullable(),
+                  channel: zod.string().nullable(),
+                  authorType: zod
+                    .string()
+                    .nullable()
+                    .describe("AGENT | END_USER | SYSTEM"),
+                  authorName: zod.string().nullable(),
+                  content: zod.string(),
+                })
+                .describe("A comment on a Zoho Desk ticket."),
+            )
+            .describe("Comments on this ticket, sorted chronologically"),
         })
         .describe(
           "A Zoho Desk ticket matched to this conversation via phone fingerprint.",
         ),
     )
-    .describe("Zoho Desk tickets matched via phone fingerprint"),
+    .describe(
+      "Zoho Desk tickets matched via phone fingerprint (with comments)",
+    ),
   costUsd: zod.number().nullable(),
   createdAt: zod.string(),
 });
+
+/**
+ * Returns cases that have at least one call on the given date (YYYY-MM-DD).
+ * @summary Get cross-channel cases for a date
+ */
+export const ListCasesParams = zod.object({
+  date: zod.coerce.string(),
+});
+
+export const listCasesResponseAnalysisOneQualidadeGlobalMax = 5;
+
+export const ListCasesResponseItem = zod
+  .object({
+    id: zod.string(),
+    customerPhone: zod.string().nullable(),
+    customerName: zod.string().nullable(),
+    productName: zod.string().nullable(),
+    primaryAgentName: zod.string().nullable(),
+    firstActivityAt: zod.string().nullable(),
+    lastActivityAt: zod.string().nullable(),
+    outcomeStatus: zod.string().describe("won | lost | open | unknown"),
+    legCount: zod.number(),
+    conversationIds: zod
+      .array(zod.number())
+      .describe("Conversation DB ids linked to this case"),
+    ticketIds: zod.array(zod.string()),
+    timeline: zod.array(
+      zod
+        .object({
+          kind: zod.enum(["call", "ticket_event", "ticket_comment"]),
+          at: zod.string().describe("ISO 8601 timestamp"),
+          refId: zod
+            .string()
+            .describe("ticket id, comment id, or conversation row id"),
+          label: zod.string(),
+          detail: zod.string(),
+          agentName: zod.string().nullable(),
+          channel: zod.string().nullable(),
+          conversationId: zod
+            .number()
+            .nullable()
+            .describe("For call legs, the linked conversation DB id"),
+        })
+        .describe("A single event in a cross-channel case timeline."),
+    ),
+    analysis: zod.union([
+      zod
+        .object({
+          categoria: zod
+            .string()
+            .describe(
+              "e.g. Cotação, Renovação, Sinistro, Informação, Pós-venda",
+            ),
+          produto: zod
+            .string()
+            .describe(
+              "e.g. TVDE, Multirriscos, Auto, Saúde, Condomínio, Empresas",
+            ),
+          narrativaConversa: zod
+            .string()
+            .describe(
+              "End-to-end story of the customer's request across all legs",
+            ),
+          arcoConversa: zod
+            .string()
+            .describe(
+              'Short phrase describing the arc, e.g. \"Frio→Quente\", \"Estagnado\", \"Direto ao Fecho\", \"Esfriou\"',
+            ),
+          sentimentoClienteEvolucao: zod
+            .string()
+            .describe(
+              "Evolution of customer sentiment across legs (rendered in italic)",
+            ),
+          qualidadeGlobal: zod
+            .number()
+            .min(1)
+            .max(listCasesResponseAnalysisOneQualidadeGlobalMax)
+            .describe("Overall quality stars (1-5)"),
+          continuidade: zod
+            .string()
+            .describe(
+              "Continuity assessment — empty if single-leg, warning text if handoffs failed",
+            ),
+          desviosProcedimento: zod.array(
+            zod
+              .object({
+                severidade: zod.enum(["alta", "media", "baixa"]),
+                titulo: zod
+                  .string()
+                  .describe(
+                    'Short label, e.g. \"Sem confirmação de identidade\"',
+                  ),
+                detalhe: zod
+                  .string()
+                  .describe(
+                    "Concrete description of what was missed and why it matters",
+                  ),
+                chamadaEspecifica: zod
+                  .string()
+                  .nullable()
+                  .describe(
+                    'Reference to a specific leg\/time, e.g. \"16:06 (chamada 1)\"',
+                  ),
+              })
+              .describe(
+                "A specific deviation from expected procedure observed in the conversation.",
+              ),
+          ),
+          pontosPositivos: zod.array(zod.string()),
+          feedbackSupervisor: zod
+            .string()
+            .describe(
+              "Coaching message addressed to the operator by name (EU-PT, coaching tone)",
+            ),
+          sugestaoEspecialista: zod
+            .string()
+            .describe("Cross-sell \/ product-expertise suggestion"),
+          followUpNecessario: zod.boolean(),
+          followUpDescricao: zod
+            .string()
+            .describe(
+              "What to do and by when (empty when followUpNecessario is false)",
+            ),
+          riscoPerdaLead: zod.enum(["baixo", "medio", "alto"]),
+          tags: zod.array(zod.string()),
+        })
+        .describe(
+          "Per-conversation analysis (canonical schema — EU-PT field names per HANDOVER §2)",
+        ),
+      zod.null(),
+    ]),
+    costUsd: zod.number().nullable(),
+  })
+  .describe("A cross-channel case (calls + tickets) linked to a date.");
+export const ListCasesResponse = zod.array(ListCasesResponseItem);
 
 /**
  * @summary Get per-operator coaching summaries for a date

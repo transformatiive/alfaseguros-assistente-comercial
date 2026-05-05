@@ -4,23 +4,26 @@ import { ptBR } from "date-fns/locale";
 import {
   CalendarIcon, RefreshCw, Loader2, TrendingUp, MessageSquare,
   Euro, Phone, ArrowRight, Star, AlertTriangle, Sparkles,
-  User, Eye, Lightbulb, BookOpen,
+  User, Eye, Lightbulb, BookOpen, Layers,
 } from "lucide-react";
 import { useExchangeRate, formatEur } from "@/lib/use-exchange-rate";
 import { Link } from "wouter";
 import { useDateContext } from "@/lib/date-context";
 import Metodologia from "@/pages/metodologia";
+import Pipeline from "@/pages/pipeline";
 import { useRunProgress } from "@/lib/use-run-progress";
 import {
   useGetDailySummary,
   useGetRunStatus,
   useListConversations,
   useListOperatorSummaries,
+  useListCases,
   useTriggerRun,
   getGetDailySummaryQueryKey,
   getGetRunStatusQueryKey,
   getListConversationsQueryKey,
   getListOperatorSummariesQueryKey,
+  getListCasesQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -148,6 +151,10 @@ export default function Dashboard() {
 
   const { data: operators, isLoading: opsLoading } = useListOperatorSummaries(dateStr, {
     query: { enabled: !!dateStr, queryKey: getListOperatorSummariesQueryKey(dateStr) },
+  });
+
+  const { data: cases } = useListCases(dateStr, {
+    query: { enabled: !!dateStr, queryKey: getListCasesQueryKey(dateStr) },
   });
 
   useRunProgress(run?.status === "running" || run?.status === "pending" ? dateStr : null);
@@ -325,6 +332,15 @@ export default function Dashboard() {
             {operators && operators.length > 0 && (
               <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-mono">
                 {operators.length}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="pipeline" className="gap-1.5">
+            <Layers className="h-3.5 w-3.5" />
+            Pipeline
+            {cases && cases.length > 0 && (
+              <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-mono">
+                {cases.length}
               </span>
             )}
           </TabsTrigger>
@@ -638,7 +654,12 @@ export default function Dashboard() {
           )}
         </TabsContent>
 
-        {/* ── TAB 4: Guia de Leitura ── */}
+        {/* ── TAB 5: Pipeline (cross-channel cases) ── */}
+        <TabsContent value="pipeline">
+          <Pipeline />
+        </TabsContent>
+
+        {/* ── TAB 6: Guia de Leitura ── */}
         <TabsContent value="guia">
           <Metodologia />
         </TabsContent>
