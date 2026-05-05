@@ -4,11 +4,12 @@ import { ptBR } from "date-fns/locale";
 import {
   CalendarIcon, RefreshCw, Loader2, TrendingUp, MessageSquare,
   Euro, Phone, ArrowRight, Star, AlertTriangle, Sparkles,
-  User, Eye, Lightbulb,
+  User, Eye, Lightbulb, BookOpen,
 } from "lucide-react";
 import { useExchangeRate, formatEur } from "@/lib/use-exchange-rate";
 import { Link } from "wouter";
 import { useDateContext } from "@/lib/date-context";
+import Metodologia from "@/pages/metodologia";
 import { useRunProgress } from "@/lib/use-run-progress";
 import {
   useGetDailySummary,
@@ -326,6 +327,10 @@ export default function Dashboard() {
               </span>
             )}
           </TabsTrigger>
+          <TabsTrigger value="guia" className="gap-1.5">
+            <BookOpen className="h-3.5 w-3.5" />
+            Guia de Leitura
+          </TabsTrigger>
         </TabsList>
 
         {/* ── TAB 1: Resumo Executivo ── */}
@@ -630,6 +635,11 @@ export default function Dashboard() {
               </p>
             </div>
           )}
+        </TabsContent>
+
+        {/* ── TAB 4: Guia de Leitura ── */}
+        <TabsContent value="guia">
+          <Metodologia />
         </TabsContent>
       </Tabs>
     </div>
