@@ -323,11 +323,18 @@ function InterleaveTimeline({
 
   return (
     <div className="rounded-lg border bg-card p-4">
-      <SectionTitle
-        icon={<Clock className="h-3.5 w-3.5" />}
-        label={`Linha do Tempo${hasContent ? ` · ${events.length} eventos` : ""}`}
-        color="text-violet-700"
-      />
+      <div className="mb-3">
+        <SectionTitle
+          icon={<Clock className="h-3.5 w-3.5" />}
+          label={`Linha do Tempo${hasContent ? ` · ${events.length} eventos` : ""}`}
+          color="text-violet-700"
+        />
+        {ticketCount > 0 && (
+          <p className="text-[10px] text-muted-foreground -mt-2 mb-1">
+            Tickets Zoho do mesmo contacto nos 60 dias anteriores a esta conversa. Podem incluir assuntos distintos se o contacto tratar de vários casos.
+          </p>
+        )}
+      </div>
 
       {hasContent ? (
         <>

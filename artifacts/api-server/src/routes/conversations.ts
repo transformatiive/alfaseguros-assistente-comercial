@@ -1,8 +1,18 @@
 import { Router, type IRouter } from "express";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, gte, lte } from "drizzle-orm";
 import { db, conversationsTable, ticketsTable, ticketCommentsTable } from "@workspace/db";
 import { ListConversationsParams, GetConversationParams } from "@workspace/api-zod";
 import { phoneFingerprint } from "@workspace/phone";
+
+/** Returns [windowStart, windowEnd] for ticket matching around a runDate string (YYYY-MM-DD). */
+function ticketWindow(runDate: string): [Date, Date] {
+  const base = new Date(`${runDate}T12:00:00Z`);
+  const from = new Date(base);
+  from.setDate(from.getDate() - 60);
+  const to = new Date(base);
+  to.setDate(to.getDate() + 7);
+  return [from, to];
+}
 
 const router: IRouter = Router();
 
@@ -97,11 +107,19 @@ router.get("/conversations/:date/:conversationId", async (req, res): Promise<voi
   }
 
   const fp = phoneFingerprint(conversation.customerPhone);
+  const [winFrom, winTo] = ticketWindow(conversation.runDate);
   const tickets = fp
     ? await db
         .select()
         .from(ticketsTable)
-        .where(eq(ticketsTable.phoneFingerprint, fp))
+        .where(
+          and(
+            eq(ticketsTable.phoneFingerprint, fp),
+            gte(ticketsTable.createdTime, winFrom),
+            lte(ticketsTable.createdTime, winTo),
+          ),
+        )
+        .orderBy(ticketsTable.createdTime)
     : [];
 
   // Fetch comments for all matched tickets
