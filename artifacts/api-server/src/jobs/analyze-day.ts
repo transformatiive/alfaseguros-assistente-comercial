@@ -294,101 +294,114 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
     // Phase 2A — sync Zoho Desk tickets, build cross-channel cases, analyze each.
     // Gated on Zoho credentials being configured; otherwise the run stays
     // call-only and the Pipeline view will simply be empty.
-    if (
-      cfg.ZOHO_DESK_CLIENT_ID &&
-      cfg.ZOHO_DESK_CLIENT_SECRET &&
-      cfg.ZOHO_DESK_REFRESH_TOKEN &&
-      cfg.ZOHO_DESK_ORG_ID
-    ) {
+    // Wrapped in a 5-minute timeout so a slow/hung Zoho API can't stall the run.
+    const PHASE_2A_TIMEOUT_MS = 5 * 60_000;
+    const zohoClientId = cfg.ZOHO_DESK_CLIENT_ID;
+    const zohoClientSecret = cfg.ZOHO_DESK_CLIENT_SECRET;
+    const zohoRefreshToken = cfg.ZOHO_DESK_REFRESH_TOKEN;
+    const zohoOrgId = cfg.ZOHO_DESK_ORG_ID;
+    if (zohoClientId && zohoClientSecret && zohoRefreshToken && zohoOrgId) {
       try {
-        const auth = new ZohoAuth({
-          clientId: cfg.ZOHO_DESK_CLIENT_ID,
-          clientSecret: cfg.ZOHO_DESK_CLIENT_SECRET,
-          refreshToken: cfg.ZOHO_DESK_REFRESH_TOKEN,
-        });
-        const desk = new ZohoDeskClient({ auth, orgId: cfg.ZOHO_DESK_ORG_ID });
+        const phase2aWork = async () => {
+          const auth = new ZohoAuth({
+            clientId: zohoClientId,
+            clientSecret: zohoClientSecret,
+            refreshToken: zohoRefreshToken,
+          });
+          const desk = new ZohoDeskClient({ auth, orgId: zohoOrgId });
 
-        const dayStart = new Date(`${date}T00:00:00Z`);
-        const winFrom = new Date(dayStart.getTime() - CASE_PROXIMITY_DAYS * 86_400_000);
-        const winTo = new Date(dayStart.getTime() + 86_400_000);
+          const dayStart = new Date(`${date}T00:00:00Z`);
+          const winFrom = new Date(dayStart.getTime() - CASE_PROXIMITY_DAYS * 86_400_000);
+          const winTo = new Date(dayStart.getTime() + 86_400_000);
 
-        const sync = await syncTickets(desk, winFrom, winTo);
+          const sync = await syncTickets(desk, winFrom, winTo);
 
-        const linkerInput = analyzed.map((a) => ({
-          rowId: a.rowId,
-          customerPhone: a.customerPhone,
-          callIds: [],
-          agentId: a.agentId,
-          agentName: a.agentName,
-          agentsInvolved: a.agentsInvolved,
-          durationSec: a.durationSec,
-          recordingUrls: [],
-          legCount: a.legCount,
-          isMultiLeg: a.legCount > 1,
-          startTime: null,
-          legs: [],
-        }));
-        const cases = buildCases({
-          conversations: linkerInput,
-          tickets: sync.tickets,
-          comments: sync.comments,
-        });
+          const linkerInput = analyzed.map((a) => ({
+            rowId: a.rowId,
+            customerPhone: a.customerPhone,
+            callIds: [],
+            agentId: a.agentId,
+            agentName: a.agentName,
+            agentsInvolved: a.agentsInvolved,
+            durationSec: a.durationSec,
+            recordingUrls: [],
+            legCount: a.legCount,
+            isMultiLeg: a.legCount > 1,
+            startTime: null,
+            legs: [],
+          }));
+          const cases = buildCases({
+            conversations: linkerInput,
+            tickets: sync.tickets,
+            comments: sync.comments,
+          });
 
-        await mapWithConcurrency(cases, cfg.ANALYSIS_CONCURRENCY, async (c) => {
-          // Persist the case shell first; analysis fills in afterwards.
-          const shell = {
-            id: c.id,
-            customerPhone: c.customerPhone,
-            phoneFingerprint: c.phoneFingerprint,
-            customerName: c.customerName,
-            productName: c.productName,
-            primaryAgentId: c.primaryAgentId,
-            primaryAgentName: c.primaryAgentName,
-            firstActivityAt: c.firstActivityAt ? new Date(c.firstActivityAt) : null,
-            lastActivityAt: c.lastActivityAt ? new Date(c.lastActivityAt) : null,
-            timelineJson: c.legs,
-            legCount: c.legs.length,
-          };
-          await db
-            .insert(casesTable)
-            .values(shell)
-            .onConflictDoUpdate({ target: casesTable.id, set: shell });
-
-          // Refresh the link tables (idempotent: clear + re-insert).
-          await db.delete(caseTicketsTable).where(eq(caseTicketsTable.caseId, c.id));
-          if (c.ticketIds.length > 0) {
+          await mapWithConcurrency(cases, cfg.ANALYSIS_CONCURRENCY, async (c) => {
+            // Persist the case shell first; analysis fills in afterwards.
+            const shell = {
+              id: c.id,
+              customerPhone: c.customerPhone,
+              phoneFingerprint: c.phoneFingerprint,
+              customerName: c.customerName,
+              productName: c.productName,
+              primaryAgentId: c.primaryAgentId,
+              primaryAgentName: c.primaryAgentName,
+              firstActivityAt: c.firstActivityAt ? new Date(c.firstActivityAt) : null,
+              lastActivityAt: c.lastActivityAt ? new Date(c.lastActivityAt) : null,
+              timelineJson: c.legs,
+              legCount: c.legs.length,
+            };
             await db
-              .insert(caseTicketsTable)
-              .values(c.ticketIds.map((tid) => ({ caseId: c.id, ticketId: tid })));
-          }
-          await db.delete(caseCallsTable).where(eq(caseCallsTable.caseId, c.id));
-          if (c.conversationIds.length > 0) {
-            await db
-              .insert(caseCallsTable)
-              .values(c.conversationIds.map((cid) => ({ caseId: c.id, conversationId: cid })));
-          }
+              .insert(casesTable)
+              .values(shell)
+              .onConflictDoUpdate({ target: casesTable.id, set: shell });
 
-          if (force === false) {
-            const [existing] = await db.select().from(casesTable).where(eq(casesTable.id, c.id));
-            if (existing?.analysisJson != null) return;
-          }
+            // Refresh the link tables (idempotent: clear + re-insert).
+            await db.delete(caseTicketsTable).where(eq(caseTicketsTable.caseId, c.id));
+            if (c.ticketIds.length > 0) {
+              await db
+                .insert(caseTicketsTable)
+                .values(c.ticketIds.map((tid) => ({ caseId: c.id, ticketId: tid })));
+            }
+            await db.delete(caseCallsTable).where(eq(caseCallsTable.caseId, c.id));
+            if (c.conversationIds.length > 0) {
+              await db
+                .insert(caseCallsTable)
+                .values(c.conversationIds.map((cid) => ({ caseId: c.id, conversationId: cid })));
+            }
 
-          if (c.legs.length === 0) return;
-          const outcome = await analyzeCase(c, { client: openrouter, model });
-          if (outcome.ok) {
-            totalCost += outcome.cost.costUsd;
-            await db
-              .update(casesTable)
-              .set({
-                analysisJson: outcome.analysis,
-                costUsd: outcome.cost.costUsd.toFixed(6),
-              })
-              .where(eq(casesTable.id, c.id));
-          }
-        });
+            if (force === false) {
+              const [existing] = await db.select().from(casesTable).where(eq(casesTable.id, c.id));
+              if (existing?.analysisJson != null) return;
+            }
+
+            if (c.legs.length === 0) return;
+            const outcome = await analyzeCase(c, { client: openrouter, model });
+            if (outcome.ok) {
+              totalCost += outcome.cost.costUsd;
+              await db
+                .update(casesTable)
+                .set({
+                  analysisJson: outcome.analysis,
+                  costUsd: outcome.cost.costUsd.toFixed(6),
+                })
+                .where(eq(casesTable.id, c.id));
+            }
+          });
+        };
+
+        const timeoutGuard = new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`Phase 2A timed out after ${PHASE_2A_TIMEOUT_MS / 1000}s`)),
+            PHASE_2A_TIMEOUT_MS,
+          ),
+        );
+
+        await Promise.race([phase2aWork(), timeoutGuard]);
       } catch (err) {
         // Phase 2A failures shouldn't kill the whole run — Phase 1 results
         // are already in the DB. Surface via SSE and continue.
+        logger.warn({ date, err }, "Phase 2A (cases/Zoho) failed or timed out");
         publishRunEvent({
           type: "run:error",
           date,
