@@ -773,6 +773,7 @@ const PRIORIDADE_LABEL: Record<string, string> = {
   baixa: "Baixa",
 };
 
+
 function ActionCard({ item }: { item: ActionItem }) {
   const cfg = TIPO_CONFIG[item.tipo];
   const Icon = cfg.icon;
@@ -793,7 +794,9 @@ function ActionCard({ item }: { item: ActionItem }) {
         </div>
         <p className="text-sm font-medium leading-snug">{item.titulo}</p>
         {item.descricao && (
-          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-4">{item.descricao}</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            <RichText text={item.descricao} />
+          </p>
         )}
       </div>
       <Link
