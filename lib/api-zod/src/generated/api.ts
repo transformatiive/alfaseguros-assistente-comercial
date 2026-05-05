@@ -159,6 +159,11 @@ export const ListConversationsResponseItem = zod.object({
     .nullable(),
   desviosCount: zod.number(),
   followUpNecessario: zod.boolean(),
+  deskTicketCount: zod
+    .number()
+    .describe(
+      "Number of Zoho Desk tickets associated with this customer phone. 0 means phone-only.",
+    ),
   startTime: zod.string().nullable(),
   costUsd: zod.number().nullable(),
   createdAt: zod.string(),

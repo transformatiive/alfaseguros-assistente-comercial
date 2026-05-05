@@ -81,6 +81,8 @@ export interface ConversationSummary {
   riscoPerdaLead: ConversationSummaryRiscoPerdaLead;
   desviosCount: number;
   followUpNecessario: boolean;
+  /** Number of Zoho Desk tickets associated with this customer phone. 0 means phone-only. */
+  deskTicketCount: number;
   /** @nullable */
   startTime: string | null;
   /** @nullable */

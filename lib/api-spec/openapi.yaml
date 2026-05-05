@@ -330,6 +330,9 @@ components:
           type: integer
         followUpNecessario:
           type: boolean
+        deskTicketCount:
+          type: integer
+          description: Number of Zoho Desk tickets associated with this customer phone. 0 means phone-only.
         startTime:
           type: ["string", "null"]
         costUsd:
@@ -352,6 +355,7 @@ components:
         - riscoPerdaLead
         - desviosCount
         - followUpNecessario
+        - deskTicketCount
         - startTime
         - costUsd
         - createdAt
