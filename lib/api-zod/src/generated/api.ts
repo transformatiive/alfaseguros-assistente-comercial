@@ -489,6 +489,11 @@ export const ListOperatorSummariesResponseItem = zod
       .string()
       .describe("1-2 sentence note on closing-rate behavior"),
     coachingRecommendations: zod.array(zod.string()),
+    conversationIds: zod
+      .array(zod.number())
+      .describe(
+        "DB ids of all conversations analysed for this operator on this date",
+      ),
     createdAt: zod.string(),
   })
   .describe("Per-operator coaching summary (canonical schema per HANDOVER §2)");

@@ -311,6 +311,8 @@ export interface OperatorSummary {
   /** 1-2 sentence note on closing-rate behavior */
   closingRateObservations: string;
   coachingRecommendations: string[];
+  /** DB ids of all conversations analysed for this operator on this date */
+  conversationIds: number[];
   createdAt: string;
 }
 
