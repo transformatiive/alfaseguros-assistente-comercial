@@ -17,20 +17,16 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-async function start() {
-  await setupSessionStore();
-  await seedAdminUser();
+// Bind to the port immediately so deployment health checks pass,
+// then run DB setup tasks in the background.
+app.listen(port, (err?: Error) => {
+  if (err) {
+    logger.error({ err }, "Error listening on port");
+    process.exit(1);
+  }
+  logger.info({ port }, "Server listening");
 
-  app.listen(port, (err?: Error) => {
-    if (err) {
-      logger.error({ err }, "Error listening on port");
-      process.exit(1);
-    }
-    logger.info({ port }, "Server listening");
-  });
-}
-
-start().catch((err) => {
-  logger.error({ err }, "Fatal startup error");
-  process.exit(1);
+  setupSessionStore()
+    .then(() => seedAdminUser())
+    .catch((err) => logger.error({ err }, "Startup DB setup failed"));
 });
