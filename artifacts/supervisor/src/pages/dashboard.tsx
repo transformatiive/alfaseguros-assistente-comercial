@@ -1,10 +1,11 @@
-import { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { format, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   CalendarIcon, RefreshCw, Loader2, TrendingUp, MessageSquare,
   Euro, Phone, ArrowRight, Star, AlertTriangle, Sparkles,
   User, Eye, Lightbulb, BookOpen, Bell, PhoneCall, ShieldAlert,
+  ChevronDown, ChevronRight, TrendingDown, Sparkles as SparklesIcon,
 } from "lucide-react";
 import { useExchangeRate, formatEur } from "@/lib/use-exchange-rate";
 import { Link } from "wouter";
@@ -669,9 +670,16 @@ export default function Dashboard() {
 
 // ── Ações do Dia component ─────────────────────────────────────────────────
 
+type ActionTipo =
+  | "follow_up_pendente"
+  | "risco_perda_lead"
+  | "desvio_procedimento"
+  | "qualidade_critica"
+  | "oportunidade_cross_sell";
+
 type ActionItem = {
   id: string;
-  tipo: "follow_up_pendente" | "risco_perda_lead" | "desvio_procedimento";
+  tipo: ActionTipo;
   prioridade: "alta" | "media" | "baixa";
   titulo: string;
   descricao: string;
@@ -681,7 +689,21 @@ type ActionItem = {
   runDate: string;
 };
 
-const TIPO_CONFIG = {
+const TIPO_ORDER: ActionTipo[] = [
+  "follow_up_pendente",
+  "risco_perda_lead",
+  "desvio_procedimento",
+  "qualidade_critica",
+  "oportunidade_cross_sell",
+];
+
+const TIPO_CONFIG: Record<ActionTipo, {
+  label: string;
+  icon: React.ElementType;
+  color: string;
+  bg: string;
+  iconColor: string;
+}> = {
   follow_up_pendente: {
     label: "Follow-up pendente",
     icon: PhoneCall,
@@ -703,7 +725,21 @@ const TIPO_CONFIG = {
     bg: "bg-amber-50 border-amber-200",
     iconColor: "text-amber-500",
   },
-} as const;
+  qualidade_critica: {
+    label: "Qualidade crítica",
+    icon: TrendingDown,
+    color: "text-rose-700",
+    bg: "bg-rose-50 border-rose-200",
+    iconColor: "text-rose-500",
+  },
+  oportunidade_cross_sell: {
+    label: "Oportunidade de cross-sell",
+    icon: SparklesIcon,
+    color: "text-emerald-700",
+    bg: "bg-emerald-50 border-emerald-200",
+    iconColor: "text-emerald-500",
+  },
+};
 
 const PRIORIDADE_PILL: Record<string, string> = {
   alta: "bg-red-100 text-red-700 border border-red-200",
@@ -717,111 +753,178 @@ const PRIORIDADE_LABEL: Record<string, string> = {
   baixa: "Baixa",
 };
 
+function ActionCard({ item, dateStr }: { item: ActionItem; dateStr: string }) {
+  const cfg = TIPO_CONFIG[item.tipo];
+  const Icon = cfg.icon;
+  return (
+    <div className={cn("rounded-lg border p-4 flex items-start gap-3", cfg.bg)}>
+      <Icon className={cn("h-4 w-4 mt-0.5 flex-shrink-0", cfg.iconColor)} />
+      <div className="flex-1 min-w-0 space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={cn("text-[10px] rounded-full px-1.5 py-0.5 font-medium border", PRIORIDADE_PILL[item.prioridade])}
+          >
+            {PRIORIDADE_LABEL[item.prioridade]}
+          </span>
+          <span className="text-[10px] text-muted-foreground font-mono">{item.customerPhone}</span>
+        </div>
+        <p className="text-sm font-medium leading-snug">{item.titulo}</p>
+        {item.descricao && (
+          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">{item.descricao}</p>
+        )}
+      </div>
+      <Link
+        href={`/conversas/${dateStr}/${item.conversationId}`}
+        className="text-xs text-primary hover:underline flex-shrink-0 mt-0.5 whitespace-nowrap"
+      >
+        Ver conversa →
+      </Link>
+    </div>
+  );
+}
+
 function AcoesTab({ actions, dateStr }: { actions: ActionItem[]; dateStr: string }) {
+  const byAgent = useMemo(() => {
+    const map = new Map<string, ActionItem[]>();
+    for (const item of actions) {
+      const key = item.agentName ?? "Sem operador";
+      const list = map.get(key) ?? [];
+      list.push(item);
+      map.set(key, list);
+    }
+    return map;
+  }, [actions]);
+
+  const agentKeys = useMemo(
+    () => [...byAgent.keys()].sort((a, b) => a.localeCompare(b, "pt")),
+    [byAgent],
+  );
+
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const allCollapsed = collapsed.size === agentKeys.length && agentKeys.length > 0;
+
+  const toggleAll = () => {
+    setCollapsed(allCollapsed ? new Set() : new Set(agentKeys));
+  };
+
+  const toggleAgent = (agent: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(agent)) next.delete(agent);
+      else next.add(agent);
+      return next;
+    });
+  };
+
+  const altaCount = actions.filter((a) => a.prioridade === "alta").length;
+  const mediaCount = actions.filter((a) => a.prioridade === "media").length;
+
   if (actions.length === 0) {
     return (
       <div className="rounded-lg border border-dashed p-10 text-center">
         <Bell className="h-8 w-8 mx-auto mb-3 text-muted-foreground/40" />
-        <p className="text-sm text-muted-foreground">
-          Nenhuma ação pendente para esta data.
-        </p>
+        <p className="text-sm text-muted-foreground">Nenhuma ação pendente para esta data.</p>
         <p className="text-xs text-muted-foreground/60 mt-1">
-          As ações aparecem quando existe follow-up necessário, risco de lead ou desvios de procedimento.
+          As ações aparecem quando existe follow-up necessário, risco de lead, desvios de procedimento ou qualidade crítica.
         </p>
       </div>
     );
   }
 
-  // Group by agent
-  const byAgent = new Map<string, ActionItem[]>();
-  for (const item of actions) {
-    const key = item.agentName ?? "Sem operador";
-    const list = byAgent.get(key) ?? [];
-    list.push(item);
-    byAgent.set(key, list);
-  }
-
-  const agentKeys = [...byAgent.keys()].sort((a, b) => a.localeCompare(b, "pt"));
-
-  const altaCount = actions.filter((a) => a.prioridade === "alta").length;
-  const mediaCount = actions.filter((a) => a.prioridade === "media").length;
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {/* Summary bar */}
       <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 px-4 py-3">
-        <Bell className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-medium">{actions.length} ações identificadas</span>
-        <span className="text-muted-foreground">·</span>
+        <Bell className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+        <span className="text-sm font-medium">{actions.length} ações · {agentKeys.length} operadores</span>
         {altaCount > 0 && (
           <span className="text-xs rounded-full bg-red-100 text-red-700 border border-red-200 px-2 py-0.5 font-medium">
-            {altaCount} alta prioridade
+            {altaCount} alta
           </span>
         )}
         {mediaCount > 0 && (
           <span className="text-xs rounded-full bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 font-medium">
-            {mediaCount} média prioridade
+            {mediaCount} média
           </span>
         )}
-        <span className="text-xs text-muted-foreground ml-auto">
-          Extraído da análise do dia — sem custo adicional de IA
-        </span>
+        <button
+          onClick={toggleAll}
+          className="ml-auto text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+        >
+          {allCollapsed ? (
+            <><ChevronDown className="h-3.5 w-3.5" /> Expandir todos</>
+          ) : (
+            <><ChevronRight className="h-3.5 w-3.5 rotate-90" /> Recolher todos</>
+          )}
+        </button>
       </div>
 
       {/* Per-agent sections */}
       {agentKeys.map((agent) => {
         const items = byAgent.get(agent)!;
+        const isCollapsed = collapsed.has(agent);
+
+        // Sub-group by tipo
+        const byTipo = new Map<ActionTipo, ActionItem[]>();
+        for (const item of items) {
+          const list = byTipo.get(item.tipo) ?? [];
+          list.push(item);
+          byTipo.set(item.tipo, list);
+        }
+        const presentTipos = TIPO_ORDER.filter((t) => byTipo.has(t));
+
         return (
-          <div key={agent} className="space-y-2">
-            <div className="flex items-center gap-2 mb-3">
-              <User className="h-4 w-4 text-muted-foreground" />
-              <h3 className="text-sm font-semibold">{agent}</h3>
-              <span className="text-xs text-muted-foreground">({items.length})</span>
-            </div>
-            <div className="space-y-2 pl-6">
-              {items.map((item) => {
-                const cfg = TIPO_CONFIG[item.tipo];
-                const Icon = cfg.icon;
-                return (
-                  <div
-                    key={item.id}
-                    className={cn("rounded-lg border p-4 flex items-start gap-3", cfg.bg)}
-                  >
-                    <Icon className={cn("h-4 w-4 mt-0.5 flex-shrink-0", cfg.iconColor)} />
-                    <div className="flex-1 min-w-0 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className={cn("text-xs font-semibold", cfg.color)}>
-                          {cfg.label}
-                        </span>
-                        <span
-                          className={cn(
-                            "text-[10px] rounded-full px-1.5 py-0.5 font-medium",
-                            PRIORIDADE_PILL[item.prioridade],
-                          )}
-                        >
-                          {PRIORIDADE_LABEL[item.prioridade]}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground font-mono">
-                          {item.customerPhone}
-                        </span>
-                      </div>
-                      <p className="text-sm font-medium leading-snug">{item.titulo}</p>
-                      {item.descricao && (
-                        <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
-                          {item.descricao}
+          <div key={agent} className="rounded-lg border bg-card">
+            {/* Agent header */}
+            <button
+              onClick={() => toggleAgent(agent)}
+              className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-muted/30 transition-colors rounded-lg"
+            >
+              {isCollapsed
+                ? <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                : <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              }
+              <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <span className="text-sm font-semibold flex-1">{agent}</span>
+              <span className="text-xs text-muted-foreground">{items.length} ações</span>
+              {/* Type summary pills */}
+              <div className="hidden sm:flex items-center gap-1 ml-2">
+                {presentTipos.map((t) => {
+                  const cfg = TIPO_CONFIG[t];
+                  return (
+                    <span key={t} className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium border", cfg.bg, cfg.color)}>
+                      {cfg.label} ({byTipo.get(t)!.length})
+                    </span>
+                  );
+                })}
+              </div>
+            </button>
+
+            {/* Agent body */}
+            {!isCollapsed && (
+              <div className="px-4 pb-4 space-y-5 border-t pt-4">
+                {presentTipos.map((tipo) => {
+                  const tipoItems = byTipo.get(tipo)!;
+                  const cfg = TIPO_CONFIG[tipo];
+                  const Icon = cfg.icon;
+                  return (
+                    <div key={tipo}>
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <Icon className={cn("h-3.5 w-3.5", cfg.iconColor)} />
+                        <p className={cn("text-xs font-semibold uppercase tracking-wide", cfg.color)}>
+                          {cfg.label} <span className="text-muted-foreground font-normal normal-case tracking-normal">({tipoItems.length})</span>
                         </p>
-                      )}
+                      </div>
+                      <div className="space-y-2">
+                        {tipoItems.map((item) => (
+                          <ActionCard key={item.id} item={item} dateStr={dateStr} />
+                        ))}
+                      </div>
                     </div>
-                    <Link
-                      href={`/conversas/${dateStr}/${item.conversationId}`}
-                      className="text-xs text-primary hover:underline flex-shrink-0 mt-0.5"
-                    >
-                      Ver conversa →
-                    </Link>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         );
       })}

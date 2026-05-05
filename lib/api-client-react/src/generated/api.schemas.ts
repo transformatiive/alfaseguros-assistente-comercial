@@ -325,6 +325,8 @@ export const ActionItemTipo = {
   follow_up_pendente: "follow_up_pendente",
   risco_perda_lead: "risco_perda_lead",
   desvio_procedimento: "desvio_procedimento",
+  qualidade_critica: "qualidade_critica",
+  oportunidade_cross_sell: "oportunidade_cross_sell",
 } as const;
 
 export type ActionItemPrioridade =

@@ -89,6 +89,7 @@ Ringover API → fetch calls → group into conversations
 - `GET /api/conversations/:date/:id` — Get conversation detail (with `legs`, `tickets` + comments)
 - `GET /api/operators/:date` — Get per-operator summaries
 - `GET /api/cases/:date` — Get cross-channel cases for date (pipeline view)
+- `GET /api/actions/:date` — Get consolidated action items for the day (no LLM cost — extracted from existing analysisJson). Types: `follow_up_pendente`, `risco_perda_lead`, `desvio_procedimento`, `qualidade_critica`, `oportunidade_cross_sell`
 
 ## Required Secrets
 
