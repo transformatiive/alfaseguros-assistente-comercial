@@ -259,7 +259,7 @@ export default function Metodologia() {
           </Section>
           <Section title="Identificação visual">
             <p className="text-xs">
-              Na lista de conversas, as multi-chamadas têm uma barra azul no lado esquerdo e mostram o número de chamadas (ex: <span className="font-mono bg-muted px-1 rounded text-[11px]">3× legs</span>). O modelo recebe o histórico completo para análise.
+              Na lista de conversas, as multi-chamadas têm uma barra azul no lado esquerdo e mostram o número de chamadas (ex: <span className="font-mono bg-muted px-1 rounded text-[11px]">3× interações</span>). O modelo recebe o histórico completo para análise.
             </p>
           </Section>
         </MetricCard>
