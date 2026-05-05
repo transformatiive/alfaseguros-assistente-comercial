@@ -45,23 +45,116 @@ export interface Run {
   updatedAt: string;
 }
 
+/**
+ * @nullable
+ */
+export type ConversationSummaryRiscoPerdaLead =
+  | (typeof ConversationSummaryRiscoPerdaLead)[keyof typeof ConversationSummaryRiscoPerdaLead]
+  | null;
+
+export const ConversationSummaryRiscoPerdaLead = {
+  baixo: "baixo",
+  medio: "medio",
+  alto: "alto",
+} as const;
+
 export interface ConversationSummary {
   id: number;
   runDate: string;
   customerPhone: string;
   callCount: number;
+  /** @nullable */
+  agentId: string | null;
+  /** @nullable */
+  agentName: string | null;
+  /** @nullable */
+  durationSec: number | null;
+  isMultiLeg: boolean;
   hasAnalysis: boolean;
+  /** @nullable */
+  categoria: string | null;
+  /** @nullable */
+  produto: string | null;
+  /** @nullable */
+  qualidadeGlobal: number | null;
+  /** @nullable */
+  riscoPerdaLead: ConversationSummaryRiscoPerdaLead;
+  desviosCount: number;
+  followUpNecessario: boolean;
+  /** @nullable */
+  startTime: string | null;
   /** @nullable */
   costUsd: number | null;
   createdAt: string;
 }
 
+export type DesvioProcedimentoSeveridade =
+  (typeof DesvioProcedimentoSeveridade)[keyof typeof DesvioProcedimentoSeveridade];
+
+export const DesvioProcedimentoSeveridade = {
+  alta: "alta",
+  media: "media",
+  baixa: "baixa",
+} as const;
+
+/**
+ * A specific deviation from expected procedure observed in the conversation.
+ */
+export interface DesvioProcedimento {
+  severidade: DesvioProcedimentoSeveridade;
+  /** Short label, e.g. "Sem confirmação de identidade" */
+  titulo: string;
+  /** Concrete description of what was missed and why it matters */
+  detalhe: string;
+  /**
+   * Reference to a specific leg/time, e.g. "16:06 (chamada 1)"
+   * @nullable
+   */
+  chamadaEspecifica: string | null;
+}
+
+export type ConversationAnalysisRiscoPerdaLead =
+  (typeof ConversationAnalysisRiscoPerdaLead)[keyof typeof ConversationAnalysisRiscoPerdaLead];
+
+export const ConversationAnalysisRiscoPerdaLead = {
+  baixo: "baixo",
+  medio: "medio",
+  alto: "alto",
+} as const;
+
+/**
+ * Per-conversation analysis (canonical schema — EU-PT field names per HANDOVER §2)
+ */
 export interface ConversationAnalysis {
-  narrative: string;
-  proceduralFlags: string[];
-  coachingFeedback: string;
-  specialistSuggestions: string;
-  riskAssessment: string;
+  /** e.g. Cotação, Renovação, Sinistro, Informação, Pós-venda */
+  categoria: string;
+  /** e.g. TVDE, Multirriscos, Auto, Saúde, Condomínio, Empresas */
+  produto: string;
+  /** End-to-end story of the customer's request across all legs */
+  narrativaConversa: string;
+  /** Short phrase describing the arc, e.g. "Frio→Quente", "Estagnado", "Direto ao Fecho", "Esfriou" */
+  arcoConversa: string;
+  /** Evolution of customer sentiment across legs (rendered in italic) */
+  sentimentoClienteEvolucao: string;
+  /**
+   * Overall quality stars (1-5)
+   * @minimum 1
+   * @maximum 5
+   */
+  qualidadeGlobal: number;
+  /** Continuity assessment — empty if single-leg, warning text if handoffs failed */
+  continuidade: string;
+  desviosProcedimento: DesvioProcedimento[];
+  pontosPositivos: string[];
+  /** Coaching message addressed to the operator by name (EU-PT, coaching tone) */
+  feedbackSupervisor: string;
+  /** Cross-sell / product-expertise suggestion */
+  sugestaoEspecialista: string;
+  followUpNecessario: boolean;
+  /** What to do and by when (empty when followUpNecessario is false) */
+  followUpDescricao: string;
+  riscoPerdaLead: ConversationAnalysisRiscoPerdaLead;
+  tags: string[];
 }
 
 export interface ConversationDetail {
@@ -69,31 +162,83 @@ export interface ConversationDetail {
   runDate: string;
   customerPhone: string;
   callIds: string[];
+  /** @nullable */
+  agentId: string | null;
+  /** @nullable */
+  agentName: string | null;
+  /** @nullable */
+  durationSec: number | null;
+  recordingUrls: string[];
   analysis: ConversationAnalysis | null;
   /** @nullable */
   costUsd: number | null;
   createdAt: string;
 }
 
+/**
+ * A single section of the daily summary (working well / to improve / risks / closing-rate recs)
+ */
+export interface SummarySection {
+  /** 1-2 sentence framing, EU-PT */
+  paragraph: string;
+  /** 3-5 specific bullets with operator names and concrete examples */
+  bullets: string[];
+}
+
+export type AutomationItemFeasibility =
+  (typeof AutomationItemFeasibility)[keyof typeof AutomationItemFeasibility];
+
+export const AutomationItemFeasibility = {
+  alta: "alta",
+  media: "media",
+  baixa: "baixa",
+} as const;
+
+export interface AutomationItem {
+  /** The recurring query / interaction pattern */
+  pattern: string;
+  conversationCountEstimate: number;
+  /** e.g. Telefone, Email, Self-service */
+  channel: string;
+  feasibility: AutomationItemFeasibility;
+  notes: string;
+}
+
+export interface AutomationOpportunities {
+  paragraph: string;
+  items: AutomationItem[];
+}
+
+/**
+ * Daily executive summary (canonical structure per HANDOVER §2)
+ */
 export interface DailySummary {
   id: number;
   date: string;
-  workingWell: string[];
-  toImprove: string[];
-  risks: string[];
-  closingRateRecommendations: string[];
-  automationOpportunities: string[];
+  /** 1-2 sentence intro shown in the black banner */
+  executiveSummary: string;
+  workingWell: SummarySection;
+  toImprove: SummarySection;
+  risks: SummarySection;
+  closingRateRecommendations: SummarySection;
+  automationOpportunities: AutomationOpportunities;
   createdAt: string;
 }
 
+/**
+ * Per-operator coaching summary (canonical schema per HANDOVER §2)
+ */
 export interface OperatorSummary {
   id: number;
   date: string;
   operatorId: string;
   operatorName: string;
+  /** 2-3 sentence overview of the operator's day */
+  paragraphOverview: string;
   strengths: string[];
   blindSpots: string[];
-  closingObservations: string;
-  recommendations: string[];
+  /** 1-2 sentence note on closing-rate behavior */
+  closingRateObservations: string;
+  coachingRecommendations: string[];
   createdAt: string;
 }

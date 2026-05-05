@@ -24,10 +24,11 @@ router.get("/operators/:date", async (req, res): Promise<void> => {
       date: op.date,
       operatorId: op.operatorId,
       operatorName: op.operatorName,
+      paragraphOverview: op.paragraphOverview ?? "",
       strengths: op.strengths ?? [],
       blindSpots: op.blindSpots ?? [],
-      closingObservations: op.closingObservations ?? "",
-      recommendations: op.recommendations ?? [],
+      closingRateObservations: op.closingRateObservations ?? "",
+      coachingRecommendations: op.coachingRecommendations ?? [],
       createdAt: op.createdAt.toISOString(),
     })),
   );
