@@ -412,6 +412,11 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
             coachingRecommendations: outcome.summary.coachingRecommendations,
           });
           agentsCount += 1;
+        } else {
+          logger.warn(
+            { date, agentId: bucket.agentId, agentName: bucket.agentName, error: outcome.error, rawText: outcome.rawText?.slice(0, 500) },
+            "Agent summary generation failed",
+          );
         }
       }
       publishRunEvent({ type: "agents:done", date, count: agentsCount, costUsd: agentsCost });

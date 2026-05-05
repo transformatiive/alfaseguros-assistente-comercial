@@ -74,11 +74,11 @@ export const dailySummarySchema = z.object({
 export type DailySummaryAnalysis = z.infer<typeof dailySummarySchema>;
 
 export const operatorSummarySchema = z.object({
-  paragraphOverview: z.string(),
-  strengths: z.array(z.string()),
-  blindSpots: z.array(z.string()),
-  closingRateObservations: z.string(),
-  coachingRecommendations: z.array(z.string()),
+  paragraphOverview: z.string().catch(""),
+  strengths: z.array(z.string()).catch([]),
+  blindSpots: z.array(z.string()).catch([]),
+  closingRateObservations: z.string().catch(""),
+  coachingRecommendations: z.array(z.string()).catch([]),
 });
 
 export type OperatorSummaryAnalysis = z.infer<typeof operatorSummarySchema>;
