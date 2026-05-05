@@ -110,7 +110,7 @@ function AppRoutes() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
+      <TooltipProvider delayDuration={100}>
         <DateProvider>
           <AuthProvider>
             <QueryErrorInterceptor />
