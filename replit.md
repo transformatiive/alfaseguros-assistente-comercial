@@ -62,26 +62,33 @@ Ringover API → fetch calls → group into conversations
 
 ## Frontend Pages
 
-- `/` — Dashboard: date navigation, executive summary (5 sections), run status, "Analisar este dia" trigger button, SSE live progress
-- `/conversas` — Conversations list for selected date
-- `/conversas/:id` — Single conversation detail with full AI analysis
+- `/` — Dashboard: date navigation, executive summary (5 sections), run status, "Analisar este dia" trigger button, SSE live progress. Tabs: Resumo, Conversas, Operadores, Pipeline
+- `/conversas` — Conversations list for selected date (with Zoho ticket count badge, analysis cost)
+- `/conversas/:id` — Single conversation detail with full AI analysis + interleaved timeline (call legs + Zoho tickets + comments sorted chronologically)
 - `/operadores` — Per-operator coaching summaries
+- `/pipeline` — Cross-channel cases: each case groups calls + Zoho tickets by phone fingerprint (±14 day window), shows expandable timeline per case
 
 ## Database Schema
 
 - `runs` — Analysis runs (date, status, progress, cost)
-- `conversations` — Grouped phone conversations with AI analysis JSON
+- `conversations` — Grouped phone conversations with AI analysis JSON; `legs_json` stores per-leg metadata (direction, duration, Ringover summary)
 - `daily_summaries` — Daily executive summaries (5 structured sections)
 - `operator_summaries` — Per-operator coaching (strengths, blind spots, recommendations)
+- `tickets` — Zoho Desk tickets synced during analysis (by phone fingerprint)
+- `ticket_comments` — Zoho Desk ticket comment threads
+- `cases` — Cross-channel cases linking calls + tickets (id = `case_t_<ticketId>` or `case_p_<fp>_<date>`)
+- `case_calls` — Many-to-many: case ↔ conversation
+- `case_tickets` — Many-to-many: case ↔ ticket
 
 ## API Endpoints
 
 - `POST /api/run` — Trigger analysis for a date
 - `GET /api/run/:date` — Get run status + SSE progress at `/api/progress`
 - `GET /api/summary/:date` — Get daily executive summary
-- `GET /api/conversations/:date` — List conversations
-- `GET /api/conversations/:date/:id` — Get conversation detail
+- `GET /api/conversations/:date` — List conversations (with `deskTicketCount`, `costUsd`)
+- `GET /api/conversations/:date/:id` — Get conversation detail (with `legs`, `tickets` + comments)
 - `GET /api/operators/:date` — Get per-operator summaries
+- `GET /api/cases/:date` — Get cross-channel cases for date (pipeline view)
 
 ## Required Secrets
 

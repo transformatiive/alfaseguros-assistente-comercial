@@ -470,10 +470,10 @@ export default function ConversaDetalhe() {
                 <span>{tickets.length} ticket{tickets.length !== 1 ? "s" : ""} Zoho</span>
               </>
             )}
-            {conv.costUsd != null && (
+            {conv.costUsd != null && conv.costUsd > 0 && (
               <>
                 <span>·</span>
-                <span>{formatEur(conv.costUsd, eurRate)}</span>
+                <span className="tabular-nums">{formatEur(conv.costUsd, eurRate)}</span>
               </>
             )}
           </div>

@@ -18,6 +18,8 @@ export interface CaseLeg {
   detail: string;
   agentName?: string | null;
   channel?: string | null;
+  /** For call legs only: the DB row id of the linked conversation. */
+  conversationId?: number | null;
 }
 
 export interface LinkedCase {
@@ -178,6 +180,7 @@ export function buildCases(input: BuildCasesInput): LinkedCase[] {
         label: ticketLabel(t),
         detail: `Canal: ${t.channel ?? "?"} · Categoria: ${t.category ?? "?"}`,
         channel: t.channel ?? null,
+        conversationId: null,
       });
     }
     const ticketComments = commentsByTicket.get(t.id) ?? [];
@@ -195,6 +198,7 @@ export function buildCases(input: BuildCasesInput): LinkedCase[] {
         detail: sanitizeCommentContent(c.content),
         agentName: author,
         channel: c.channel ?? null,
+        conversationId: null,
       });
     }
 
@@ -276,6 +280,7 @@ export function buildCases(input: BuildCasesInput): LinkedCase[] {
               : "Chamada",
         detail: leg.ringoverSummary,
         agentName: leg.agentName,
+        conversationId: conv.rowId,
       });
     }
   }
