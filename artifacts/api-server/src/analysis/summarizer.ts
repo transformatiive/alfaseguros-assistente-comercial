@@ -9,6 +9,15 @@ import {
   type DailySummaryAnalysis,
 } from "./schema.js";
 
+export interface RelatedTicketRef {
+  ticketNumber: string | null;
+  subject: string | null;
+  status: string | null;
+  category: string | null;
+  createdTime: string | null;
+  closedTime: string | null;
+}
+
 export interface AnalyzedConversationRef {
   rowId: number;
   customerPhone: string;
@@ -16,6 +25,7 @@ export interface AnalyzedConversationRef {
   legCount: number;
   durationSec: number;
   analysis: ConversationAnalysis;
+  relatedTickets?: RelatedTicketRef[];
 }
 
 export interface SummarizeOptions {
@@ -34,13 +44,13 @@ const DEFAULT_MODEL = "anthropic/claude-sonnet-4";
 
 const SYSTEM = `És um supervisor sénior de uma corretora de seguros portuguesa (Alfaseguros), equipa Não Vida (360).
 
-Recebes a lista das análises de todas as conversas telefónicas analisadas para o dia. A tua tarefa é produzir um resumo executivo diário, em Português europeu, dirigido ao CEO (Rui).
+Recebes a lista das análises de todas as conversas telefónicas analisadas para o dia, enriquecidas com tickets do Zoho Desk quando disponíveis. A tua tarefa é produzir um resumo executivo diário, em Português europeu, dirigido ao CEO (Rui).
 
 O resumo tem cinco secções estruturadas + um abstract. Cada secção segue esta ordem:
 1. \`bullets\` (3-5 temas/padrões observados — frases curtas, concisas, que nomeiam o tema; ex: "Fecho de cotações TVDE com objeção de preço")
 2. \`paragraph\` (1-3 frases com exemplos concretos que ilustram esses temas, com nomes de operadores e situações específicas; ex: "A Andreia C. fechou 3 cotações TVDE superando objeções de preço nas chamadas da tarde.")
 
-Sê específico nos exemplos: cita nomes, números e momentos concretos.
+Sê específico nos exemplos: cita nomes, números e momentos concretos. Quando existirem tickets Zoho associados, usa-os para enriquecer o contexto (ex: "ticket aberto", "ticket resolvido", "cliente já tinha contactado por email").
 
 Devolve **apenas** JSON válido (sem markdown, sem comentários):
 
@@ -73,7 +83,7 @@ function summarizeConversation(c: AnalyzedConversationRef): string {
         .map((d) => `${d.severidade.toUpperCase()}: ${d.titulo}${d.detalhe ? ` — ${d.detalhe}` : ""}`)
         .join(" | ")
     : "(sem desvios)";
-  return [
+  const lines = [
     `## Conversa ${c.rowId} — Cliente ${c.customerPhone} — Operador ${c.agentName ?? "(?)"} — ${c.legCount} leg(s) — ${Math.round(c.durationSec / 60)}min`,
     `Categoria: ${a.categoria} | Produto: ${a.produto} | Qualidade: ${a.qualidadeGlobal}/5 | Risco: ${a.riscoPerdaLead} | FollowUp: ${a.followUpNecessario ? "sim" : "não"}${a.followUpNecessario && a.followUpDescricao ? ` (${a.followUpDescricao})` : ""}`,
     `Arco: ${a.arcoConversa} — Sentimento: ${a.sentimentoClienteEvolucao}`,
@@ -81,7 +91,17 @@ function summarizeConversation(c: AnalyzedConversationRef): string {
     `Desvios: ${desvios}`,
     `Pontos positivos: ${a.pontosPositivos.length > 0 ? a.pontosPositivos.join(" | ") : "(nenhum destacado)"}`,
     `Tags: ${a.tags.join(", ") || "(nenhuma)"}`,
-  ].join("\n");
+  ];
+  if (c.relatedTickets && c.relatedTickets.length > 0) {
+    const ticketLines = c.relatedTickets
+      .map(
+        (t) =>
+          `#${t.ticketNumber ?? "?"} "${t.subject ?? "(sem assunto)"}" [${t.status ?? "?"}${t.category ? " / " + t.category : ""}${t.closedTime ? " — fechado" : ""}]`,
+      )
+      .join(" | ");
+    lines.push(`Tickets Zoho: ${ticketLines}`);
+  }
+  return lines.join("\n");
 }
 
 export async function generateDailySummary(

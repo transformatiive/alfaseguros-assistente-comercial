@@ -11,6 +11,7 @@ export const conversationsTable = pgTable("conversations", {
   agentName: text("agent_name"),
   durationSec: integer("duration_sec"),
   recordingUrls: text("recording_urls").array().notNull().default([]),
+  legsJson: jsonb("legs_json").notNull().default([]),
   analysisJson: jsonb("analysis_json"),
   analysisError: text("analysis_error"),
   costUsd: numeric("cost_usd", { precision: 10, scale: 6 }),
