@@ -33,6 +33,7 @@ import { useExchangeRate, formatEur } from "@/lib/use-exchange-rate";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { RichText } from "@/components/rich-text";
 
 type Severidade = "alta" | "media" | "baixa";
 
@@ -534,11 +535,11 @@ export default function ConversaDetalhe() {
               className="text-base leading-relaxed text-foreground/90 whitespace-pre-line"
               style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
             >
-              {a.narrativaConversa}
+              <RichText text={a.narrativaConversa} />
             </p>
             {a.sentimentoClienteEvolucao && (
               <p className="text-xs italic text-muted-foreground leading-relaxed pt-2 border-t">
-                {a.sentimentoClienteEvolucao}
+                <RichText text={a.sentimentoClienteEvolucao} />
               </p>
             )}
           </div>
@@ -549,7 +550,7 @@ export default function ConversaDetalhe() {
               <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 mb-1">
                 Continuidade
               </p>
-              <p className="text-sm text-amber-900 leading-relaxed">{a.continuidade}</p>
+              <p className="text-sm text-amber-900 leading-relaxed"><RichText text={a.continuidade} /></p>
             </div>
           )}
 
@@ -564,11 +565,11 @@ export default function ConversaDetalhe() {
                   label="Pontos Positivos"
                   color="text-emerald-700"
                 />
-                <ul className="space-y-2">
+                <ul className="space-y-3">
                   {a.pontosPositivos.map((p, i) => (
-                    <li key={i} className="text-sm flex items-start gap-2">
-                      <span className="text-emerald-500 mt-0.5 flex-shrink-0">✓</span>
-                      <span className="text-foreground/80 leading-snug">{p}</span>
+                    <li key={i} className="text-sm flex items-start gap-2 leading-relaxed">
+                      <span className="text-emerald-500 mt-1 flex-shrink-0">✓</span>
+                      <span className="text-foreground/80"><RichText text={p} /></span>
                     </li>
                   ))}
                 </ul>
@@ -623,7 +624,7 @@ export default function ConversaDetalhe() {
                   color="text-amber-700"
                 />
                 <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-line">
-                  {a.feedbackSupervisor}
+                  <RichText text={a.feedbackSupervisor} />
                 </p>
               </div>
             )}
@@ -640,7 +641,7 @@ export default function ConversaDetalhe() {
                     color="text-cyan-700"
                   />
                   <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-line">
-                    {a.sugestaoEspecialista}
+                    <RichText text={a.sugestaoEspecialista} />
                   </p>
                 </div>
               )}
@@ -653,7 +654,7 @@ export default function ConversaDetalhe() {
                     color="text-blue-700"
                   />
                   <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-line">
-                    {a.followUpDescricao}
+                    <RichText text={a.followUpDescricao} />
                   </p>
                 </div>
               )}

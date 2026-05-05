@@ -94,10 +94,10 @@ export default function Operadores() {
                         <Star className="h-3.5 w-3.5 text-emerald-500" />
                         <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Pontos Fortes</p>
                       </div>
-                      <ul className="space-y-1">
+                      <ul className="space-y-3">
                         {op.strengths.map((s, i) => (
-                          <li key={i} className="text-sm text-foreground/80 flex items-start gap-2">
-                            <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
+                          <li key={i} className="text-sm text-foreground/80 flex items-start gap-2 leading-relaxed">
+                            <span className="mt-2 h-1.5 w-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
                             <RichText text={s} />
                           </li>
                         ))}
@@ -112,10 +112,10 @@ export default function Operadores() {
                         <Eye className="h-3.5 w-3.5 text-amber-500" />
                         <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Pontos Cegos</p>
                       </div>
-                      <ul className="space-y-1">
+                      <ul className="space-y-3">
                         {op.blindSpots.map((b, i) => (
-                          <li key={i} className="text-sm text-foreground/80 flex items-start gap-2">
-                            <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                          <li key={i} className="text-sm text-foreground/80 flex items-start gap-2 leading-relaxed">
+                            <span className="mt-2 h-1.5 w-1.5 rounded-full bg-amber-400 flex-shrink-0" />
                             <RichText text={b} />
                           </li>
                         ))}
@@ -130,10 +130,10 @@ export default function Operadores() {
                       <Lightbulb className="h-3.5 w-3.5 text-blue-500" />
                       <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Recomendações de Coaching</p>
                     </div>
-                    <ul className="space-y-1">
+                    <ul className="space-y-3">
                       {op.coachingRecommendations.map((r, i) => (
-                        <li key={i} className="text-sm text-foreground/80 flex items-start gap-2">
-                          <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+                        <li key={i} className="text-sm text-foreground/80 flex items-start gap-2 leading-relaxed">
+                          <span className="mt-2 h-1.5 w-1.5 rounded-full bg-blue-400 flex-shrink-0" />
                           <RichText text={r} />
                         </li>
                       ))}
