@@ -18,6 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { useExchangeRate, formatEur } from "@/lib/use-exchange-rate";
 
 const RISK_PILL: Record<string, string> = {
   baixo: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -47,6 +48,8 @@ function Stars({ value }: { value: number }) {
 
 export default function Conversas() {
   const { dateStr, selectedDate } = useDateContext();
+  const { data: fxData } = useExchangeRate();
+  const eurRate = fxData?.rate ?? null;
   const { data: conversations, isLoading } = useListConversations(dateStr, {
     query: { enabled: !!dateStr, queryKey: getListConversationsQueryKey(dateStr) },
   });
