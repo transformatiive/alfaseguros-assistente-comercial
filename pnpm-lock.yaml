@@ -172,6 +172,9 @@ importers:
       '@workspace/db':
         specifier: workspace:*
         version: link:../../lib/db
+      '@workspace/ringover':
+        specifier: workspace:*
+        version: link:../../lib/ringover
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
