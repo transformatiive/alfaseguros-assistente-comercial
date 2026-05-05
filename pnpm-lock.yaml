@@ -178,9 +178,15 @@ importers:
       '@workspace/openrouter':
         specifier: workspace:*
         version: link:../../lib/openrouter
+      '@workspace/phone':
+        specifier: workspace:*
+        version: link:../../lib/phone
       '@workspace/ringover':
         specifier: workspace:*
         version: link:../../lib/ringover
+      '@workspace/zoho-desk':
+        specifier: workspace:*
+        version: link:../../lib/zoho-desk
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
@@ -695,6 +701,10 @@ importers:
         version: 3.2.4(@types/node@25.3.5)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
 
   scripts:
+    dependencies:
+      '@workspace/zoho-desk':
+        specifier: workspace:*
+        version: link:../lib/zoho-desk
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

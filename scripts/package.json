@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "hello": "tsx ./src/hello.ts",
+    "zoho:probe-tickets": "tsx ./src/zoho-probe-tickets.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@workspace/zoho-desk": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:",
