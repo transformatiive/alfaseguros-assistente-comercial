@@ -117,6 +117,7 @@ function normalizeAnalysis(raw: unknown): ConversationAnalysis | null {
     followUpDescricao: (a.followUpDescricao as string) ?? "",
     riscoPerdaLead: (a.riscoPerdaLead as "baixo" | "medio" | "alto") ?? "baixo",
     tags: Array.isArray(a.tags) ? a.tags as string[] : [],
+    ticketsRelevantes: Array.isArray(a.ticketsRelevantes) ? a.ticketsRelevantes as string[] : null,
   };
 }
 

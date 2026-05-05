@@ -108,7 +108,7 @@ router.get("/conversations/:date/:conversationId", async (req, res): Promise<voi
 
   const fp = phoneFingerprint(conversation.customerPhone);
   const [winFrom, winTo] = ticketWindow(conversation.runDate);
-  const tickets = fp
+  const allTickets = fp
     ? await db
         .select()
         .from(ticketsTable)
@@ -124,6 +124,28 @@ router.get("/conversations/:date/:conversationId", async (req, res): Promise<voi
         )
         .orderBy(ticketsTable.createdTime)
     : [];
+
+  // Filter to relevant tickets only.
+  // New conversations: use the list the LLM identified as relevant during analysis.
+  // Old conversations (field absent = null): fallback to ±3 days from runDate.
+  const analysisRaw = conversation.analysisJson as Record<string, unknown> | null;
+  const ticketsRelevantesRaw = analysisRaw?.ticketsRelevantes;
+  const ticketsRelevantes: string[] | null = Array.isArray(ticketsRelevantesRaw)
+    ? (ticketsRelevantesRaw as string[]).map((n) => String(n).replace(/^#/, ""))
+    : null;
+
+  const tickets = ticketsRelevantes !== null
+    ? allTickets.filter(
+        (t) => t.ticketNumber != null && ticketsRelevantes.includes(t.ticketNumber),
+      )
+    : (() => {
+        // Fallback: ±3 days around runDate
+        const runMs = new Date(conversation.runDate).getTime();
+        const threeDayMs = 3 * 24 * 60 * 60 * 1000;
+        return allTickets.filter(
+          (t) => t.createdTime != null && Math.abs(t.createdTime.getTime() - runMs) <= threeDayMs,
+        );
+      })();
 
   // Fetch comments for all matched tickets
   const ticketIds = tickets.map((t) => t.id);
@@ -248,6 +270,7 @@ function normalizeAnalysis(raw: unknown): unknown {
       (a.riskLevel as string) ??
       "baixo",
     tags: Array.isArray(a.tags) ? a.tags : [],
+    ticketsRelevantes: Array.isArray(a.ticketsRelevantes) ? a.ticketsRelevantes : null,
   };
 }
 
