@@ -31,15 +31,20 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
 
-  // If 2FA is enabled, create a pending session and ask for TOTP code
+  // If 2FA is enabled, create a pending-only session (no userId/role/username)
   if (user.totpSecret) {
+    delete req.session.userId;
+    delete req.session.userRole;
+    delete req.session.username;
     req.session.totpPending = true;
     req.session.totpUserId = user.id;
     res.json({ totpRequired: true });
     return;
   }
 
-  // No 2FA — create a full session immediately
+  // No 2FA — create a full session; clear any stale pending flags
+  delete req.session.totpPending;
+  delete req.session.totpUserId;
   req.session.userId = user.id;
   req.session.userRole = user.role;
   req.session.username = user.username;
@@ -59,6 +64,10 @@ router.post("/auth/logout", (req, res): void => {
 });
 
 router.get("/auth/me", (req, res): void => {
+  if (req.session?.totpPending) {
+    res.status(403).json({ error: "Verificação em dois passos pendente" });
+    return;
+  }
   if (!req.session?.userId) {
     res.status(401).json({ error: "Não autenticado" });
     return;
