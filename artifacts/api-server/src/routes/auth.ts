@@ -131,31 +131,59 @@ router.get("/auth/totp/setup", requireAuth, async (req, res): Promise<void> => {
     res.status(404).json({ error: "Utilizador não encontrado" });
     return;
   }
+  if (user.totpSecret) {
+    res.status(409).json({ error: "2FA já está activo — desactive primeiro antes de reconfigurar" });
+    return;
+  }
 
   const secret = generateSecret();
   const otpauth = generateURI({ issuer: ISSUER, label: user.username, secret });
   const qrDataUrl = await QRCode.toDataURL(otpauth);
 
+  // Store server-generated secret in session; confirm step uses this, not client-provided value
+  req.session.totpSetupSecret = secret;
+
   res.json({ secret, otpauth, qrDataUrl });
 });
 
 router.post("/auth/totp/setup", requireAuth, async (req, res): Promise<void> => {
-  const { secret, code } = req.body as { secret?: string; code?: string };
-  if (!secret || !code) {
-    res.status(400).json({ error: "Secret e código obrigatórios" });
+  const userId = req.session.userId as number;
+
+  // Use the server-generated secret stored in session (ignore any client-provided secret)
+  const secret = req.session.totpSetupSecret;
+  if (!secret) {
+    res.status(400).json({ error: "Sessão de configuração não encontrada — reinicie o processo" });
     return;
   }
 
+  const { code } = req.body as { code?: string };
+  if (!code) {
+    res.status(400).json({ error: "Código obrigatório" });
+    return;
+  }
+
+  // Verify against server-held secret before persisting
   const result = await totpVerify({ secret, token: code.replace(/\s/g, "") });
   if (!result.valid) {
     res.status(401).json({ error: "Código inválido — verifique a app de autenticação" });
     return;
   }
 
+  // Guard against enabling when already active (in case session is replayed)
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  if (user?.totpSecret) {
+    delete req.session.totpSetupSecret;
+    res.status(409).json({ error: "2FA já está activo" });
+    return;
+  }
+
   await db
     .update(usersTable)
     .set({ totpSecret: secret })
-    .where(eq(usersTable.id, req.session.userId as number));
+    .where(eq(usersTable.id, userId));
+
+  // Clear setup secret from session once persisted
+  delete req.session.totpSetupSecret;
 
   res.json({ ok: true });
 });

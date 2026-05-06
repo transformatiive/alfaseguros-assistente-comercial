@@ -7,5 +7,6 @@ declare module "express-session" {
     username: string;
     totpPending?: boolean;
     totpUserId?: number;
+    totpSetupSecret?: string;
   }
 }
