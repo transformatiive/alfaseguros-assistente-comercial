@@ -5,9 +5,8 @@ export const requireAuth: RequestHandler = (req, res, next) => {
     res.status(401).json({ error: "Não autenticado" });
     return;
   }
-  // Reject sessions that are still waiting for TOTP verification
   if (req.session.totpPending) {
-    res.status(401).json({ error: "Não autenticado" });
+    res.status(403).json({ error: "Verificação em dois passos pendente" });
     return;
   }
   next();
@@ -19,7 +18,7 @@ export const requireAdmin: RequestHandler = (req, res, next) => {
     return;
   }
   if (req.session.totpPending) {
-    res.status(401).json({ error: "Não autenticado" });
+    res.status(403).json({ error: "Verificação em dois passos pendente" });
     return;
   }
   if (req.session.userRole !== "admin") {

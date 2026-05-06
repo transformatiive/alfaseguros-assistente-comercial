@@ -100,12 +100,12 @@ router.post("/auth/totp/verify", async (req, res): Promise<void> => {
     return;
   }
 
-  // Promote to full session
+  // Promote to full session — clear pending flags then set full auth
+  delete req.session.totpPending;
+  delete req.session.totpUserId;
   req.session.userId = user.id;
   req.session.userRole = user.role;
   req.session.username = user.username;
-  req.session.totpPending = undefined as unknown as boolean;
-  req.session.totpUserId = undefined as unknown as number;
 
   res.json({ id: user.id, username: user.username, role: user.role });
 });
@@ -127,7 +127,7 @@ router.get("/auth/totp/setup", requireAuth, async (req, res): Promise<void> => {
   const otpauth = generateURI({ issuer: ISSUER, label: user.username, secret });
   const qrDataUrl = await QRCode.toDataURL(otpauth);
 
-  res.json({ secret, qrDataUrl });
+  res.json({ secret, otpauth, qrDataUrl });
 });
 
 router.post("/auth/totp/setup", requireAuth, async (req, res): Promise<void> => {
