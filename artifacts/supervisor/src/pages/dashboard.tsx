@@ -324,7 +324,12 @@ export default function Dashboard() {
                     <Button
                       size="sm"
                       disabled={trigger.isPending || isActivelyRunning}
-                      onClick={() => trigger.mutate({ data: { date: dateStr, force: isStale } })}
+                      onClick={() =>
+                        // For stale/stuck runs: resume WITHOUT force so the LLM cache
+                        // is preserved — only conversations not yet analysed will run.
+                        // force=true would wipe the cache and re-bill everything.
+                        trigger.mutate({ data: { date: dateStr, force: false } })
+                      }
                       className="gap-2"
                     >
                       {trigger.isPending || isActivelyRunning ? (
@@ -332,11 +337,11 @@ export default function Dashboard() {
                       ) : (
                         <RefreshCw className="h-3.5 w-3.5" />
                       )}
-                      {isStale ? "Forçar re-análise" : "Analisar este dia"}
+                      {isStale ? "Retomar análise" : "Analisar este dia"}
                     </Button>
                     {isStale && (
                       <p className="text-xs text-amber-600">
-                        Análise parou a meio — clique para reiniciar
+                        Análise parou a meio — clique para retomar
                       </p>
                     )}
                   </>
