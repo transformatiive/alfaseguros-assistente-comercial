@@ -11,6 +11,14 @@ export interface AdminUser {
   username: string;
   role: "admin" | "viewer";
   createdAt: string;
+  totpEnabled: boolean;
+}
+
+export interface LoginResult {
+  totpRequired?: true;
+  id?: number;
+  username?: string;
+  role?: "admin" | "viewer";
 }
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -27,11 +35,28 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 export const authApi = {
   me: () => apiFetch<AuthUser>("/auth/me"),
   login: (username: string, password: string) =>
-    apiFetch<AuthUser>("/auth/login", {
+    apiFetch<LoginResult>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ username, password }),
     }),
   logout: () => apiFetch<{ ok: boolean }>("/auth/logout", { method: "POST" }),
+  totpVerify: (code: string) =>
+    apiFetch<AuthUser>("/auth/totp/verify", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
+  totpStatus: () => apiFetch<{ totpEnabled: boolean }>("/auth/totp/status"),
+  totpSetupInit: () => apiFetch<{ secret: string; qrDataUrl: string }>("/auth/totp/setup"),
+  totpSetupConfirm: (secret: string, code: string) =>
+    apiFetch<{ ok: boolean }>("/auth/totp/setup", {
+      method: "POST",
+      body: JSON.stringify({ secret, code }),
+    }),
+  totpDisable: (code: string) =>
+    apiFetch<{ ok: boolean }>("/auth/totp", {
+      method: "DELETE",
+      body: JSON.stringify({ code }),
+    }),
 };
 
 export const adminApi = {

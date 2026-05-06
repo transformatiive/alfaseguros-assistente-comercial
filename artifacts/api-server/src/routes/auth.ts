@@ -1,9 +1,18 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
+import { generateSecret, verify as totpVerify, generateURI } from "otplib";
+import QRCode from "qrcode";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
+import { requireAuth } from "../middleware/require-auth.js";
 
 const router: IRouter = Router();
+
+const ISSUER = "Alfaseguros Supervisor Virtual";
+
+// ---------------------------------------------------------------------------
+// Login / logout / me
+// ---------------------------------------------------------------------------
 
 router.post("/auth/login", async (req, res): Promise<void> => {
   const { username, password } = req.body as { username?: string; password?: string };
@@ -22,6 +31,15 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
 
+  // If 2FA is enabled, create a pending session and ask for TOTP code
+  if (user.totpSecret) {
+    req.session.totpPending = true;
+    req.session.totpUserId = user.id;
+    res.json({ totpRequired: true });
+    return;
+  }
+
+  // No 2FA — create a full session immediately
   req.session.userId = user.id;
   req.session.userRole = user.role;
   req.session.username = user.username;
@@ -50,6 +68,128 @@ router.get("/auth/me", (req, res): void => {
     username: req.session.username,
     role: req.session.userRole,
   });
+});
+
+// ---------------------------------------------------------------------------
+// TOTP — verify during login (pending session → full session)
+// ---------------------------------------------------------------------------
+
+router.post("/auth/totp/verify", async (req, res): Promise<void> => {
+  if (!req.session?.totpPending || !req.session.totpUserId) {
+    res.status(400).json({ error: "Sem sessão de verificação TOTP activa" });
+    return;
+  }
+  const totpUserId = req.session.totpUserId;
+
+  const { code } = req.body as { code?: string };
+  if (!code) {
+    res.status(400).json({ error: "Código obrigatório" });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, totpUserId));
+
+  if (!user?.totpSecret) {
+    res.status(400).json({ error: "2FA não configurado" });
+    return;
+  }
+
+  const result = await totpVerify({ secret: user.totpSecret, token: code.replace(/\s/g, "") });
+  if (!result.valid) {
+    res.status(401).json({ error: "Código inválido" });
+    return;
+  }
+
+  // Promote to full session
+  req.session.userId = user.id;
+  req.session.userRole = user.role;
+  req.session.username = user.username;
+  req.session.totpPending = undefined as unknown as boolean;
+  req.session.totpUserId = undefined as unknown as number;
+
+  res.json({ id: user.id, username: user.username, role: user.role });
+});
+
+// ---------------------------------------------------------------------------
+// TOTP — setup (generate QR) and activate (confirm code + save secret)
+// These require a fully authenticated session.
+// ---------------------------------------------------------------------------
+
+router.get("/auth/totp/setup", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.session.userId as number;
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  if (!user) {
+    res.status(404).json({ error: "Utilizador não encontrado" });
+    return;
+  }
+
+  const secret = generateSecret();
+  const otpauth = generateURI({ issuer: ISSUER, label: user.username, secret });
+  const qrDataUrl = await QRCode.toDataURL(otpauth);
+
+  res.json({ secret, qrDataUrl });
+});
+
+router.post("/auth/totp/setup", requireAuth, async (req, res): Promise<void> => {
+  const { secret, code } = req.body as { secret?: string; code?: string };
+  if (!secret || !code) {
+    res.status(400).json({ error: "Secret e código obrigatórios" });
+    return;
+  }
+
+  const result = await totpVerify({ secret, token: code.replace(/\s/g, "") });
+  if (!result.valid) {
+    res.status(401).json({ error: "Código inválido — verifique a app de autenticação" });
+    return;
+  }
+
+  await db
+    .update(usersTable)
+    .set({ totpSecret: secret })
+    .where(eq(usersTable.id, req.session.userId as number));
+
+  res.json({ ok: true });
+});
+
+router.delete("/auth/totp", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.session.userId as number;
+  const { code } = req.body as { code?: string };
+  if (!code) {
+    res.status(400).json({ error: "Código obrigatório para desactivar 2FA" });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  if (!user?.totpSecret) {
+    res.status(400).json({ error: "2FA não está activo" });
+    return;
+  }
+
+  const result = await totpVerify({ secret: user.totpSecret, token: code.replace(/\s/g, "") });
+  if (!result.valid) {
+    res.status(401).json({ error: "Código inválido" });
+    return;
+  }
+
+  await db
+    .update(usersTable)
+    .set({ totpSecret: null })
+    .where(eq(usersTable.id, userId));
+
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Current user's 2FA status
+// ---------------------------------------------------------------------------
+
+router.get("/auth/totp/status", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.session.userId as number;
+  const [user] = await db
+    .select({ totpEnabled: usersTable.totpSecret })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId));
+  res.json({ totpEnabled: !!user?.totpEnabled });
 });
 
 export default router;

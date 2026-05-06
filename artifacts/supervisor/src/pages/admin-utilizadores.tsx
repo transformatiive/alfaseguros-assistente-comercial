@@ -164,6 +164,15 @@ export default function AdminUtilizadores() {
                     ? <><ShieldCheck className="h-3 w-3" />Admin</>
                     : <><Eye className="h-3 w-3" />Viewer</>}
                 </Badge>
+                <Badge
+                  variant="outline"
+                  className={u.totpEnabled
+                    ? "gap-1 bg-green-50 text-green-700 border-green-200"
+                    : "gap-1 bg-stone-50 text-stone-400 border-stone-200"}
+                >
+                  <ShieldCheck className="h-3 w-3" />
+                  {u.totpEnabled ? "2FA" : "Sem 2FA"}
+                </Badge>
                 <div className="flex items-center gap-1">
                   <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEdit(u)}>
                     <Pencil className="h-3.5 w-3.5" />

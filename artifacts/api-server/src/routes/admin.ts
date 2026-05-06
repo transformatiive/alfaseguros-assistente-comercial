@@ -10,10 +10,10 @@ router.use(requireAdmin);
 
 router.get("/admin/users", async (_req, res): Promise<void> => {
   const users = await db
-    .select({ id: usersTable.id, username: usersTable.username, role: usersTable.role, createdAt: usersTable.createdAt })
+    .select({ id: usersTable.id, username: usersTable.username, role: usersTable.role, createdAt: usersTable.createdAt, totpSecret: usersTable.totpSecret })
     .from(usersTable)
     .orderBy(usersTable.username);
-  res.json(users.map((u) => ({ ...u, createdAt: u.createdAt.toISOString() })));
+  res.json(users.map((u) => ({ id: u.id, username: u.username, role: u.role, createdAt: u.createdAt.toISOString(), totpEnabled: !!u.totpSecret })));
 });
 
 router.post("/admin/users", async (req, res): Promise<void> => {
