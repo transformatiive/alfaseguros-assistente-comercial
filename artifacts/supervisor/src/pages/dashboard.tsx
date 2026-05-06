@@ -291,11 +291,34 @@ export default function Dashboard() {
           <div className="mt-4 pt-4 border-t flex flex-col gap-3">
             <div className="flex items-center gap-3">
               {(() => {
-                const isRunning = run?.status === "running";
+                const status = run?.status;
+                const isRunning = status === "running";
+                const isCompleted = status === "completed";
                 const isStale = isRunning && run?.updatedAt
                   ? Date.now() - new Date(run.updatedAt).getTime() > 20 * 60 * 1000
                   : false;
                 const isActivelyRunning = isRunning && !isStale;
+
+                if (isCompleted) {
+                  return (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={trigger.isPending}
+                      onClick={() => {
+                        if (!window.confirm(
+                          "Este dia já foi totalmente analisado.\n\nRe-analisar vai consumir créditos OpenRouter adicionais e sobrescrever a análise existente.\n\nTem a certeza?"
+                        )) return;
+                        trigger.mutate({ data: { date: dateStr, force: true } });
+                      }}
+                      className="gap-2 text-muted-foreground hover:text-destructive"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      Re-analisar este dia
+                    </Button>
+                  );
+                }
+
                 return (
                   <>
                     <Button
