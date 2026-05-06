@@ -57,7 +57,7 @@ export default function Perfil() {
     setSetupError(null);
     setSetupLoading(true);
     try {
-      await authApi.totpSetupConfirm(secret, setupCode);
+      await authApi.totpSetupConfirm(setupCode);
       setTotpEnabled(true);
       setSetupState("done");
       setSetupCode("");

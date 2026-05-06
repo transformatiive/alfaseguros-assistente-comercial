@@ -47,10 +47,10 @@ export const authApi = {
     }),
   totpStatus: () => apiFetch<{ totpEnabled: boolean }>("/auth/totp/status"),
   totpSetupInit: () => apiFetch<{ secret: string; qrDataUrl: string }>("/auth/totp/setup"),
-  totpSetupConfirm: (secret: string, code: string) =>
+  totpSetupConfirm: (code: string) =>
     apiFetch<{ ok: boolean }>("/auth/totp/setup", {
       method: "POST",
-      body: JSON.stringify({ secret, code }),
+      body: JSON.stringify({ code }),
     }),
   totpDisable: (code: string) =>
     apiFetch<{ ok: boolean }>("/auth/totp", {
