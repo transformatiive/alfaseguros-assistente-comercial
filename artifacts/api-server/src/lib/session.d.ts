@@ -5,7 +5,7 @@ declare module "express-session" {
     userId: number;
     userRole: "admin" | "viewer";
     username: string;
-    totpPending: boolean;
-    totpUserId: number;
+    totpPending?: boolean;
+    totpUserId?: number;
   }
 }
