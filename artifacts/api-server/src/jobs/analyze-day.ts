@@ -425,6 +425,7 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
     const zohoOrgId = cfg.ZOHO_DESK_ORG_ID;
     if (zohoClientId && zohoClientSecret && zohoRefreshToken && zohoOrgId) {
       try {
+        let phase2aCancelled = false;
         const phase2aWork = async () => {
           const auth = new ZohoAuth({
             clientId: zohoClientId,
@@ -460,6 +461,7 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
           });
 
           await mapWithConcurrency(cases, cfg.ANALYSIS_CONCURRENCY, async (c) => {
+            if (phase2aCancelled) return;
             // Persist the case shell first; analysis fills in afterwards.
             const shell = {
               id: c.id,
@@ -499,6 +501,7 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
             }
 
             if (c.legs.length === 0) return;
+            if (phase2aCancelled) return;
             const outcome = await analyzeCase(c, { client: openrouter, model });
             if (outcome.ok) {
               totalCost += outcome.cost.costUsd;
@@ -515,7 +518,10 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
 
         const timeoutGuard = new Promise<never>((_, reject) =>
           setTimeout(
-            () => reject(new Error(`Phase 2A timed out after ${PHASE_2A_TIMEOUT_MS / 1000}s`)),
+            () => {
+              phase2aCancelled = true;
+              reject(new Error(`Phase 2A timed out after ${PHASE_2A_TIMEOUT_MS / 1000}s`));
+            },
             PHASE_2A_TIMEOUT_MS,
           ),
         );
