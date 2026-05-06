@@ -10,6 +10,28 @@ const router: IRouter = Router();
 
 const ISSUER = "Alfaseguros Supervisor Virtual";
 
+/** Normalise and validate a TOTP token string, then verify it against the secret.
+ *  Returns { valid: boolean } or throws a structured Error with `status` for bad input.
+ */
+async function safeVerifyTotp(
+  secret: string,
+  rawToken: string,
+): Promise<{ valid: boolean }> {
+  const token = rawToken.replace(/\s/g, "");
+  if (!/^\d{6}$/.test(token)) {
+    const err = new Error("Formato de código inválido — deve ter 6 dígitos") as Error & {
+      status: number;
+    };
+    err.status = 400;
+    throw err;
+  }
+  try {
+    return await totpVerify({ secret, token });
+  } catch {
+    return { valid: false };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Login / logout / me
 // ---------------------------------------------------------------------------
@@ -103,8 +125,15 @@ router.post("/auth/totp/verify", async (req, res): Promise<void> => {
     return;
   }
 
-  const result = await totpVerify({ secret: user.totpSecret, token: code.replace(/\s/g, "") });
-  if (!result.valid) {
+  let verifyResult: { valid: boolean };
+  try {
+    verifyResult = await safeVerifyTotp(user.totpSecret, code);
+  } catch (e) {
+    const err = e as { status?: number; message?: string };
+    res.status(err.status ?? 400).json({ error: err.message ?? "Código inválido" });
+    return;
+  }
+  if (!verifyResult.valid) {
     res.status(401).json({ error: "Código inválido" });
     return;
   }
@@ -163,8 +192,15 @@ router.post("/auth/totp/setup", requireAuth, async (req, res): Promise<void> => 
   }
 
   // Verify against server-held secret before persisting
-  const result = await totpVerify({ secret, token: code.replace(/\s/g, "") });
-  if (!result.valid) {
+  let setupVerifyResult: { valid: boolean };
+  try {
+    setupVerifyResult = await safeVerifyTotp(secret, code);
+  } catch (e) {
+    const err = e as { status?: number; message?: string };
+    res.status(err.status ?? 400).json({ error: err.message ?? "Código inválido" });
+    return;
+  }
+  if (!setupVerifyResult.valid) {
     res.status(401).json({ error: "Código inválido — verifique a app de autenticação" });
     return;
   }
@@ -202,8 +238,15 @@ router.delete("/auth/totp", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const result = await totpVerify({ secret: user.totpSecret, token: code.replace(/\s/g, "") });
-  if (!result.valid) {
+  let disableVerifyResult: { valid: boolean };
+  try {
+    disableVerifyResult = await safeVerifyTotp(user.totpSecret, code);
+  } catch (e) {
+    const err = e as { status?: number; message?: string };
+    res.status(err.status ?? 400).json({ error: err.message ?? "Código inválido" });
+    return;
+  }
+  if (!disableVerifyResult.valid) {
     res.status(401).json({ error: "Código inválido" });
     return;
   }
