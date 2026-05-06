@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Building, LogOut, ShieldCheck } from "lucide-react";
+import { Building, LogOut, ShieldCheck, User } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -53,9 +53,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <p className="text-xs text-muted-foreground capitalize">{user?.role}</p>
               </div>
             </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/perfil" className="flex items-center gap-2 cursor-pointer">
+                <User className="h-4 w-4" />
+                Perfil e segurança
+              </Link>
+            </DropdownMenuItem>
             {user?.role === "admin" && (
               <>
-                <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
                   <Link href="/admin/utilizadores" className="flex items-center gap-2 cursor-pointer">
                     <ShieldCheck className="h-4 w-4" />
