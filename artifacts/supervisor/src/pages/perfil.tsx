@@ -1,5 +1,8 @@
-import { useState, useEffect } from "react";
-import { ShieldCheck, ShieldOff, QrCode, Loader2, Check, AlertTriangle } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import {
+  ShieldCheck, ShieldOff, QrCode, Loader2, Check, AlertTriangle,
+  Copy, CopyCheck, RefreshCw, KeyRound,
+} from "lucide-react";
 import { authApi } from "@/lib/auth-api";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
@@ -8,8 +11,44 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-type SetupState = "idle" | "scanning" | "confirming" | "done";
+type SetupState = "idle" | "scanning" | "confirming" | "showCodes" | "done";
 type DisableState = "idle" | "confirming";
+
+function RecoveryCodeGrid({ codes }: { codes: string[] }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    void navigator.clipboard.writeText(codes.join("\n")).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        {codes.map((code) => (
+          <code
+            key={code}
+            className="block font-mono text-sm bg-muted rounded px-3 py-1.5 text-center tracking-widest select-all"
+          >
+            {code}
+          </code>
+        ))}
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="gap-2"
+        onClick={handleCopy}
+      >
+        {copied ? <CopyCheck className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+        {copied ? "Copiado!" : "Copiar todos"}
+      </Button>
+    </div>
+  );
+}
 
 export default function Perfil() {
   const { user } = useAuth();
@@ -23,6 +62,7 @@ export default function Perfil() {
   const [setupCode, setSetupCode] = useState("");
   const [setupLoading, setSetupLoading] = useState(false);
   const [setupError, setSetupError] = useState<string | null>(null);
+  const [newRecoveryCodes, setNewRecoveryCodes] = useState<string[] | null>(null);
 
   // Disable state
   const [disableState, setDisableState] = useState<DisableState>("idle");
@@ -30,11 +70,30 @@ export default function Perfil() {
   const [disableLoading, setDisableLoading] = useState(false);
   const [disableError, setDisableError] = useState<string | null>(null);
 
-  useEffect(() => {
-    authApi.totpStatus()
-      .then((s) => setTotpEnabled(s.totpEnabled))
-      .finally(() => setLoadingStatus(false));
+  // Recovery codes state (for active 2FA)
+  const [codesRemaining, setCodesRemaining] = useState<number | null>(null);
+  const [regenCodes, setRegenCodes] = useState<string[] | null>(null);
+  const [regenLoading, setRegenLoading] = useState(false);
+  const [regenError, setRegenError] = useState<string | null>(null);
+  const [showRegenConfirm, setShowRegenConfirm] = useState(false);
+
+  const fetchStatus = useCallback(async () => {
+    setLoadingStatus(true);
+    try {
+      const [statusRes, codesRes] = await Promise.all([
+        authApi.totpStatus(),
+        authApi.recoveryCodes(),
+      ]);
+      setTotpEnabled(statusRes.totpEnabled);
+      setCodesRemaining(codesRes.remaining);
+    } finally {
+      setLoadingStatus(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void fetchStatus();
+  }, [fetchStatus]);
 
   const startSetup = async () => {
     setSetupError(null);
@@ -57,9 +116,10 @@ export default function Perfil() {
     setSetupError(null);
     setSetupLoading(true);
     try {
-      await authApi.totpSetupConfirm(setupCode);
+      const result = await authApi.totpSetupConfirm(setupCode);
       setTotpEnabled(true);
-      setSetupState("done");
+      setNewRecoveryCodes(result.recoveryCodes);
+      setSetupState("showCodes");
       setSetupCode("");
     } catch (e) {
       setSetupError((e as Error).message);
@@ -76,13 +136,30 @@ export default function Perfil() {
     try {
       await authApi.totpDisable(disableCode);
       setTotpEnabled(false);
+      setCodesRemaining(null);
       setDisableState("idle");
       setDisableCode("");
+      setRegenCodes(null);
     } catch (e) {
       setDisableError((e as Error).message);
       setDisableCode("");
     } finally {
       setDisableLoading(false);
+    }
+  };
+
+  const handleRegenerate = async () => {
+    setRegenError(null);
+    setRegenLoading(true);
+    try {
+      const result = await authApi.recoveryCodesRegenerate();
+      setRegenCodes(result.recoveryCodes);
+      setCodesRemaining(result.recoveryCodes.length);
+      setShowRegenConfirm(false);
+    } catch (e) {
+      setRegenError((e as Error).message);
+    } finally {
+      setRegenLoading(false);
     }
   };
 
@@ -142,12 +219,106 @@ export default function Perfil() {
               A carregar...
             </div>
           ) : totpEnabled ? (
-            /* --- 2FA ACTIVE: show disable option --- */
-            <div className="space-y-4">
+            /* --- 2FA ACTIVE: show recovery codes info + disable option --- */
+            <div className="space-y-5">
               <p className="text-sm text-muted-foreground">
                 O segundo factor está activo. Para desactivar, confirme com o código actual da sua app de autenticação.
               </p>
 
+              {/* Recovery codes section */}
+              <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <KeyRound className="h-4 w-4 text-muted-foreground" />
+                    Códigos de recuperação
+                  </div>
+                  {codesRemaining !== null && (
+                    <Badge
+                      variant="outline"
+                      className={
+                        codesRemaining === 0
+                          ? "bg-red-50 text-red-700 border-red-200"
+                          : codesRemaining <= 2
+                          ? "bg-amber-50 text-amber-700 border-amber-200"
+                          : "bg-stone-50 text-stone-600 border-stone-200"
+                      }
+                    >
+                      {codesRemaining} restante{codesRemaining !== 1 ? "s" : ""}
+                    </Badge>
+                  )}
+                </div>
+
+                {regenCodes ? (
+                  /* Freshly regenerated codes — show them */
+                  <div className="space-y-3">
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 flex gap-1.5 items-start">
+                      <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                      Guarde estes códigos num local seguro. Os códigos anteriores foram invalidados e não voltarão a ser mostrados.
+                    </p>
+                    <RecoveryCodeGrid codes={regenCodes} />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs text-muted-foreground"
+                      onClick={() => setRegenCodes(null)}
+                    >
+                      Fechar
+                    </Button>
+                  </div>
+                ) : showRegenConfirm ? (
+                  /* Confirm regeneration */
+                  <div className="space-y-3">
+                    <p className="text-xs text-destructive">
+                      Gerar novos códigos invalida todos os códigos actuais. Tem a certeza?
+                    </p>
+                    {regenError && (
+                      <p className="text-xs text-destructive">{regenError}</p>
+                    )}
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowRegenConfirm(false)}
+                        disabled={regenLoading}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={handleRegenerate}
+                        disabled={regenLoading}
+                        className="gap-2"
+                      >
+                        {regenLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                        Gerar novos códigos
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Default: show count + regenerate button */
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      Use um código de recuperação para entrar caso perca acesso à sua app de autenticação. Cada código só funciona uma vez.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => { setShowRegenConfirm(true); setRegenError(null); }}
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      Gerar novos códigos de recuperação
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* Disable 2FA */}
               {disableState === "idle" && (
                 <Button
                   variant="outline"
@@ -195,8 +366,41 @@ export default function Perfil() {
                 </form>
               )}
             </div>
+          ) : setupState === "showCodes" ? (
+            /* --- Show recovery codes immediately after setup --- */
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+                <Check className="h-4 w-4 flex-shrink-0" />
+                <span>Autenticação em dois passos activada com sucesso.</span>
+              </div>
+
+              <div className="border rounded-lg p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <KeyRound className="h-4 w-4 text-muted-foreground" />
+                  Guarde os seus códigos de recuperação
+                </div>
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 flex gap-1.5 items-start">
+                  <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                  Se perder o telemóvel, poderá usar estes códigos para entrar na sua conta. Cada código funciona uma única vez. Guarde-os num local seguro — não voltarão a ser mostrados.
+                </p>
+                {newRecoveryCodes && <RecoveryCodeGrid codes={newRecoveryCodes} />}
+              </div>
+
+              <Button
+                type="button"
+                onClick={() => {
+                  setSetupState("done");
+                  setNewRecoveryCodes(null);
+                  void fetchStatus();
+                }}
+                className="gap-2"
+              >
+                <Check className="h-4 w-4" />
+                Já guardei os códigos
+              </Button>
+            </div>
           ) : setupState === "done" ? (
-            /* --- Setup complete --- */
+            /* --- Setup fully complete --- */
             <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
               <Check className="h-4 w-4 flex-shrink-0" />
               <span>Autenticação em dois passos activada com sucesso. Será pedido o código no próximo início de sessão.</span>
@@ -216,7 +420,7 @@ export default function Perfil() {
               )}
             </div>
           ) : (
-            /* --- Scanning / confirming --- */
+            /* --- Scanning / confirming QR --- */
             <div className="space-y-4">
               <div className="space-y-2">
                 <p className="text-sm font-medium">1. Leia o QR code com a sua app</p>

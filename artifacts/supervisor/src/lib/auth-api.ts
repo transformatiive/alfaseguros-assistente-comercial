@@ -45,10 +45,15 @@ export const authApi = {
       method: "POST",
       body: JSON.stringify({ code }),
     }),
+  totpRecover: (code: string) =>
+    apiFetch<AuthUser>("/auth/totp/recover", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
   totpStatus: () => apiFetch<{ totpEnabled: boolean }>("/auth/totp/status"),
   totpSetupInit: () => apiFetch<{ secret: string; qrDataUrl: string }>("/auth/totp/setup"),
   totpSetupConfirm: (code: string) =>
-    apiFetch<{ ok: boolean }>("/auth/totp/setup", {
+    apiFetch<{ ok: boolean; recoveryCodes: string[] }>("/auth/totp/setup", {
       method: "POST",
       body: JSON.stringify({ code }),
     }),
@@ -56,6 +61,12 @@ export const authApi = {
     apiFetch<{ ok: boolean }>("/auth/totp", {
       method: "DELETE",
       body: JSON.stringify({ code }),
+    }),
+  recoveryCodes: () =>
+    apiFetch<{ totpEnabled: boolean; remaining: number }>("/auth/recovery-codes"),
+  recoveryCodesRegenerate: () =>
+    apiFetch<{ recoveryCodes: string[] }>("/auth/recovery-codes/regenerate", {
+      method: "POST",
     }),
 };
 

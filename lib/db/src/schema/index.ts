@@ -5,3 +5,4 @@ export * from "./operator_summaries";
 export * from "./tickets";
 export * from "./cases";
 export * from "./users";
+export * from "./recovery_codes";
