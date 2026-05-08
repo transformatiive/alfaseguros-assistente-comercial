@@ -78,4 +78,6 @@ export const adminApi = {
     apiFetch<AdminUser>(`/admin/users/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteUser: (id: number) =>
     apiFetch<{ ok: boolean }>(`/admin/users/${id}`, { method: "DELETE" }),
+  resetUserTotp: (id: number) =>
+    apiFetch<{ ok: boolean }>(`/admin/users/${id}/totp`, { method: "DELETE" }),
 };
