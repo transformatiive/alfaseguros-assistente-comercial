@@ -7,6 +7,7 @@ interface AuthState {
   totpRequired: boolean;
   login: (username: string, password: string) => Promise<void>;
   verifyTotp: (code: string) => Promise<void>;
+  verifyRecoveryCode: (code: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -47,6 +48,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(me);
   };
 
+  const verifyRecoveryCode = async (code: string) => {
+    const me = await authApi.totpRecover(code);
+    setTotpRequired(false);
+    setUser(me);
+  };
+
   const logout = async () => {
     await authApi.logout();
     setUser(null);
@@ -54,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, totpRequired, login, verifyTotp, logout, refresh }}>
+    <AuthContext.Provider value={{ user, loading, totpRequired, login, verifyTotp, verifyRecoveryCode, logout, refresh }}>
       {children}
     </AuthContext.Provider>
   );

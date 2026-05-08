@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
-import { db, usersTable } from "@workspace/db";
+import { db, usersTable, recoveryCodesTable } from "@workspace/db";
 import { requireAdmin } from "../middleware/require-auth.js";
 
 const router: IRouter = Router();
@@ -60,6 +60,24 @@ router.put("/admin/users/:id", async (req, res): Promise<void> => {
     return;
   }
   res.json({ ...updated, createdAt: updated.createdAt.toISOString() });
+});
+
+router.delete("/admin/users/:id/totp", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  const [user] = await db.select({ id: usersTable.id, totpSecret: usersTable.totpSecret }).from(usersTable).where(eq(usersTable.id, id));
+  if (!user) {
+    res.status(404).json({ error: "Utilizador não encontrado" });
+    return;
+  }
+  if (!user.totpSecret) {
+    res.status(400).json({ error: "Este utilizador não tem 2FA activo" });
+    return;
+  }
+  await db.transaction(async (tx) => {
+    await tx.update(usersTable).set({ totpSecret: null }).where(eq(usersTable.id, id));
+    await tx.delete(recoveryCodesTable).where(eq(recoveryCodesTable.userId, id));
+  });
+  res.json({ ok: true });
 });
 
 router.delete("/admin/users/:id", async (req, res): Promise<void> => {

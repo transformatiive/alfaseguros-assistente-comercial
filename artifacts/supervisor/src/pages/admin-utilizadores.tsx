@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Pencil, Trash2, ShieldCheck, Eye, Loader2, X, Check } from "lucide-react";
+import { Plus, Pencil, Trash2, ShieldCheck, ShieldOff, Eye, Loader2, X, Check } from "lucide-react";
 import { adminApi, type AdminUser } from "@/lib/auth-api";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
@@ -46,6 +46,9 @@ export default function AdminUtilizadores() {
 
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  const [resetTotpId, setResetTotpId] = useState<number | null>(null);
+  const [resettingTotp, setResettingTotp] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -114,6 +117,19 @@ export default function AdminUtilizadores() {
     }
   };
 
+  const handleResetTotp = async (id: number) => {
+    setResettingTotp(true);
+    try {
+      await adminApi.resetUserTotp(id);
+      setResetTotpId(null);
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setResettingTotp(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -167,12 +183,25 @@ export default function AdminUtilizadores() {
                 <Badge
                   variant="outline"
                   className={u.totpEnabled
-                    ? "gap-1 bg-green-50 text-green-700 border-green-200"
-                    : "gap-1 bg-stone-50 text-stone-400 border-stone-200"}
+                    ? "gap-1 bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-800"
+                    : "gap-1 bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-600"}
                 >
-                  <ShieldCheck className="h-3 w-3" />
-                  {u.totpEnabled ? "2FA" : "Sem 2FA"}
+                  {u.totpEnabled
+                    ? <><ShieldCheck className="h-3 w-3" />2FA activo</>
+                    : <><ShieldOff className="h-3 w-3" />Sem 2FA</>}
                 </Badge>
+                {u.totpEnabled && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => setResetTotpId(u.id)}
+                    disabled={u.id === me?.id}
+                    title="Repor 2FA deste utilizador"
+                  >
+                    Repor 2FA
+                  </Button>
+                )}
                 <div className="flex items-center gap-1">
                   <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEdit(u)}>
                     <Pencil className="h-3.5 w-3.5" />
@@ -240,6 +269,25 @@ export default function AdminUtilizadores() {
             <Button onClick={handleSave} disabled={saving} className="gap-2">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
               Guardar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset 2FA confirm */}
+      <Dialog open={resetTotpId !== null} onOpenChange={(open) => { if (!open) setResetTotpId(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Repor autenticação de dois fatores?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            O 2FA e os códigos de recuperação deste utilizador serão eliminados. Na próxima sessão poderá configurar novamente.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResetTotpId(null)} disabled={resettingTotp}>Cancelar</Button>
+            <Button variant="destructive" onClick={() => resetTotpId && handleResetTotp(resetTotpId)} disabled={resettingTotp} className="gap-2">
+              {resettingTotp ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldOff className="h-4 w-4" />}
+              Repor 2FA
             </Button>
           </DialogFooter>
         </DialogContent>

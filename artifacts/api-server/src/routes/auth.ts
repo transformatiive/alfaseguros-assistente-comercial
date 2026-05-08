@@ -2,13 +2,15 @@ import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
 import { generateSecret, verify as totpVerify, generateURI } from "otplib";
 import QRCode from "qrcode";
-import { eq } from "drizzle-orm";
-import { db, usersTable } from "@workspace/db";
+import { eq, and, isNull } from "drizzle-orm";
+import { randomBytes } from "crypto";
+import { db, usersTable, recoveryCodesTable } from "@workspace/db";
 import { requireAuth } from "../middleware/require-auth.js";
 
 const router: IRouter = Router();
 
 const ISSUER = "Alfaseguros Supervisor Virtual";
+const RECOVERY_CODE_COUNT = 8;
 
 /** Normalise and validate a TOTP token string, then verify it against the secret.
  *  Returns { valid: boolean } or throws a structured Error with `status` for bad input.
@@ -30,6 +32,56 @@ async function safeVerifyTotp(
   } catch {
     return { valid: false };
   }
+}
+
+/** Generate a plaintext recovery code in the format `xxxxx-xxxxx`. */
+function generatePlaintextCode(): string {
+  const part1 = randomBytes(3).toString("hex"); // 6 hex chars
+  const part2 = randomBytes(3).toString("hex"); // 6 hex chars
+  return `${part1}-${part2}`;
+}
+
+/** Normalise a recovery code input: strip whitespace and hyphens, lowercase. */
+function normaliseRecoveryCode(raw: string): string {
+  return raw.replace(/[\s-]/g, "").toLowerCase();
+}
+
+/**
+ * Pre-generate plaintext codes and their bcrypt hashes.
+ * This is intentionally done outside any DB transaction so we don't hold a
+ * connection open while running the expensive bcrypt rounds.
+ */
+async function buildCodeHashes(): Promise<Array<{ plain: string; hash: string }>> {
+  const result: Array<{ plain: string; hash: string }> = [];
+  for (let i = 0; i < RECOVERY_CODE_COUNT; i++) {
+    const plain = generatePlaintextCode();
+    const hash = await bcrypt.hash(normaliseRecoveryCode(plain), 10);
+    result.push({ plain, hash });
+  }
+  return result;
+}
+
+/**
+ * Atomically replace all recovery codes for a user inside a DB transaction.
+ * Call `buildCodeHashes()` first (outside the transaction) to prepare the hashes.
+ */
+async function replaceRecoveryCodesInTx(
+  userId: number,
+  codes: Array<{ plain: string; hash: string }>,
+): Promise<string[]> {
+  await db.transaction(async (tx) => {
+    await tx.delete(recoveryCodesTable).where(eq(recoveryCodesTable.userId, userId));
+    await tx
+      .insert(recoveryCodesTable)
+      .values(codes.map(({ hash }) => ({ userId, codeHash: hash })));
+  });
+  return codes.map(({ plain }) => plain);
+}
+
+/** Generate, hash, and atomically store 8 fresh recovery codes. */
+async function generateAndStoreRecoveryCodes(userId: number): Promise<string[]> {
+  const codes = await buildCodeHashes();
+  return replaceRecoveryCodesInTx(userId, codes);
 }
 
 // ---------------------------------------------------------------------------
@@ -149,6 +201,94 @@ router.post("/auth/totp/verify", async (req, res): Promise<void> => {
 });
 
 // ---------------------------------------------------------------------------
+// Recovery code — verify during login (alternative to TOTP)
+// ---------------------------------------------------------------------------
+
+router.post("/auth/totp/recover", async (req, res): Promise<void> => {
+  if (!req.session?.totpPending || !req.session.totpUserId) {
+    res.status(400).json({ error: "Sem sessão de verificação TOTP activa" });
+    return;
+  }
+  const totpUserId = req.session.totpUserId;
+
+  const { code } = req.body as { code?: string };
+  if (!code) {
+    res.status(400).json({ error: "Código de recuperação obrigatório" });
+    return;
+  }
+
+  const normalisedInput = normaliseRecoveryCode(code);
+  if (normalisedInput.length < 6) {
+    res.status(400).json({ error: "Código de recuperação inválido" });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, totpUserId));
+  if (!user) {
+    res.status(400).json({ error: "Utilizador não encontrado" });
+    return;
+  }
+
+  // Fetch all unused codes for this user
+  const unusedCodes = await db
+    .select()
+    .from(recoveryCodesTable)
+    .where(
+      and(
+        eq(recoveryCodesTable.userId, totpUserId),
+        isNull(recoveryCodesTable.usedAt),
+      ),
+    );
+
+  if (unusedCodes.length === 0) {
+    res.status(401).json({ error: "Sem códigos de recuperação disponíveis" });
+    return;
+  }
+
+  // Check against each stored hash
+  let matchedCode: (typeof unusedCodes)[number] | null = null;
+  for (const stored of unusedCodes) {
+    if (await bcrypt.compare(normalisedInput, stored.codeHash)) {
+      matchedCode = stored;
+      break;
+    }
+  }
+
+  if (!matchedCode) {
+    res.status(401).json({ error: "Código de recuperação inválido" });
+    return;
+  }
+
+  // Atomically mark code as used — the WHERE used_at IS NULL guard ensures
+  // only one concurrent request can consume the code, preventing replay attacks.
+  const consumed = await db
+    .update(recoveryCodesTable)
+    .set({ usedAt: new Date() })
+    .where(
+      and(
+        eq(recoveryCodesTable.id, matchedCode.id),
+        isNull(recoveryCodesTable.usedAt),
+      ),
+    )
+    .returning({ id: recoveryCodesTable.id });
+
+  if (consumed.length === 0) {
+    // Another concurrent request already consumed this code
+    res.status(401).json({ error: "Código de recuperação inválido" });
+    return;
+  }
+
+  // Promote to full session
+  delete req.session.totpPending;
+  delete req.session.totpUserId;
+  req.session.userId = user.id;
+  req.session.userRole = user.role;
+  req.session.username = user.username;
+
+  res.json({ id: user.id, username: user.username, role: user.role });
+});
+
+// ---------------------------------------------------------------------------
 // TOTP — setup (generate QR) and activate (confirm code + save secret)
 // These require a fully authenticated session.
 // ---------------------------------------------------------------------------
@@ -213,15 +353,27 @@ router.post("/auth/totp/setup", requireAuth, async (req, res): Promise<void> => 
     return;
   }
 
-  await db
-    .update(usersTable)
-    .set({ totpSecret: secret })
-    .where(eq(usersTable.id, userId));
+  // Pre-generate hashes outside the transaction (avoids holding DB connection during bcrypt)
+  const codeHashes = await buildCodeHashes();
+
+  // Atomically activate 2FA and store recovery codes
+  await db.transaction(async (tx) => {
+    await tx
+      .update(usersTable)
+      .set({ totpSecret: secret })
+      .where(eq(usersTable.id, userId));
+    await tx.delete(recoveryCodesTable).where(eq(recoveryCodesTable.userId, userId));
+    await tx
+      .insert(recoveryCodesTable)
+      .values(codeHashes.map(({ hash }) => ({ userId, codeHash: hash })));
+  });
+
+  const recoveryCodes = codeHashes.map(({ plain }) => plain);
 
   // Clear setup secret from session once persisted
   delete req.session.totpSetupSecret;
 
-  res.json({ ok: true });
+  res.json({ ok: true, recoveryCodes });
 });
 
 router.delete("/auth/totp", requireAuth, async (req, res): Promise<void> => {
@@ -251,10 +403,14 @@ router.delete("/auth/totp", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  await db
-    .update(usersTable)
-    .set({ totpSecret: null })
-    .where(eq(usersTable.id, userId));
+  // Atomically clear the TOTP secret and remove all recovery codes
+  await db.transaction(async (tx) => {
+    await tx
+      .update(usersTable)
+      .set({ totpSecret: null })
+      .where(eq(usersTable.id, userId));
+    await tx.delete(recoveryCodesTable).where(eq(recoveryCodesTable.userId, userId));
+  });
 
   res.json({ ok: true });
 });
@@ -270,6 +426,55 @@ router.get("/auth/totp/status", requireAuth, async (req, res): Promise<void> => 
     .from(usersTable)
     .where(eq(usersTable.id, userId));
   res.json({ totpEnabled: !!user?.totpEnabled });
+});
+
+// ---------------------------------------------------------------------------
+// Recovery codes — count remaining & regenerate
+// ---------------------------------------------------------------------------
+
+router.get("/auth/recovery-codes", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.session.userId as number;
+
+  // Only meaningful if 2FA is active
+  const [user] = await db
+    .select({ totpEnabled: usersTable.totpSecret })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId));
+
+  if (!user?.totpEnabled) {
+    res.json({ totpEnabled: false, remaining: 0 });
+    return;
+  }
+
+  const unused = await db
+    .select({ id: recoveryCodesTable.id })
+    .from(recoveryCodesTable)
+    .where(
+      and(
+        eq(recoveryCodesTable.userId, userId),
+        isNull(recoveryCodesTable.usedAt),
+      ),
+    );
+
+  res.json({ totpEnabled: true, remaining: unused.length });
+});
+
+router.post("/auth/recovery-codes/regenerate", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.session.userId as number;
+
+  const [user] = await db
+    .select({ totpEnabled: usersTable.totpSecret })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId));
+
+  if (!user?.totpEnabled) {
+    res.status(400).json({ error: "2FA não está activo" });
+    return;
+  }
+
+  const recoveryCodes = await generateAndStoreRecoveryCodes(userId);
+
+  res.json({ recoveryCodes });
 });
 
 export default router;
