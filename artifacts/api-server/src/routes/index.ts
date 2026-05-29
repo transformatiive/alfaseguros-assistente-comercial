@@ -8,6 +8,7 @@ import summaryRouter from "./summary.js";
 import operatorsRouter from "./operators.js";
 import casesRouter from "./cases.js";
 import actionsRouter from "./actions.js";
+import followupsRouter from "./followups.js";
 import { requireAuth } from "../middleware/require-auth.js";
 
 const router: IRouter = Router();
@@ -15,6 +16,8 @@ const router: IRouter = Router();
 // Public routes (no auth needed)
 router.use(healthRouter);
 router.use(authRouter);
+// n8n-facing routes — authenticated by bearer token, not session
+router.use(followupsRouter);
 
 // Protected routes — must be authenticated
 router.use(requireAuth);
