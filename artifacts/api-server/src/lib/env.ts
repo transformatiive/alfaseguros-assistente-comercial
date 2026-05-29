@@ -13,6 +13,14 @@ const envSchema = z.object({
   ZOHO_DESK_CLIENT_SECRET: z.string().optional(),
   ZOHO_DESK_REFRESH_TOKEN: z.string().optional(),
   ZOHO_DESK_ORG_ID: z.string().optional(),
+  /** Bearer token that n8n uses to authenticate with /api/followups/* endpoints */
+  FOLLOWUP_API_TOKEN: z.string().optional(),
+  /** JSON object mapping Ringover numeric agent_id to email: {"23275677":"ana@alfa.pt"} */
+  AGENT_EMAIL_MAP: z.string().optional(),
+  /** Comma-separated Ringover numeric user_ids to exclude (extends the hardcoded Vida set) */
+  VIDA_AGENT_IDS: z.string().optional(),
+  /** Comma-separated product names to exclude from pending follow-ups. Default: "TVDE,Caravela" */
+  FOLLOWUP_EXCLUDE_PRODUCTS: z.string().optional(),
 });
 
 let cached: z.infer<typeof envSchema> | null = null;

@@ -1,0 +1,179 @@
+# TRNSF-846 — Endpoints de follow-up no Supervisor Virtual (Opção B: pull)
+
+> **Para:** Claude Code / Replit, repo `alfaseguros-supervisor`
+> **Contexto:** o n8n (Railway) vai correr um workflow agendado que **puxa** as promessas não cumpridas do Supervisor e cria tarefas no Zoho Desk. O Supervisor não empurra nada — só expõe dois endpoints. Toda a orquestração (criar Task, dedup, Cliq) vive no n8n.
+>
+> **O que é contrato firme** (o n8n depende exatamente disto): os caminhos, os métodos, a forma do JSON de resposta e de pedido, e o mecanismo de auth. **O que fica ao teu critério** (Replit): como mapear isto ao schema Prisma real, nomes internos de colunas, e a implementação.
+
+---
+
+## Visão geral
+
+Dois endpoints novos:
+
+1. **`GET /api/followups/pending`** — devolve a lista de promessas não cumpridas que ainda não foram entregues ao Desk. O n8n chama isto a cada execução agendada.
+2. **`POST /api/followups/{id}/ack`** — o n8n confirma que criou a Task no Desk para uma promessa (marca-a como emitida, para não voltar a aparecer no GET). Inclui o `desk_task_id` para fechar o loop mais tarde.
+
+Opcionalmente, um terceiro para o close-loop (quando a Task é concluída no Desk) — descrito no fim, mas pode ficar para o TRNSF-847.
+
+---
+
+## Autenticação (ambos os endpoints)
+
+Header partilhado, um único segredo:
+
+```
+Authorization: Bearer ${FOLLOWUP_API_TOKEN}
+```
+
+- Adicionar `FOLLOWUP_API_TOKEN` ao `.env` do Supervisor (gerar um token aleatório forte, ex.: `openssl rand -hex 32`).
+- Middleware: se o header não corresponder, devolver `401`. Não logar o token.
+- Este mesmo token será configurado como credencial no n8n.
+
+---
+
+## 1. `GET /api/followups/pending`
+
+Devolve as promessas que: (a) foram detetadas como `follow_up_necessario`, (b) ainda **não** foram emitidas (sem `desk_task_id` associado / sem timestamp de emissão), e (c) ainda **não** foram concluídas.
+
+### Filtros que o Supervisor DEVE aplicar (não o n8n)
+
+Devolver apenas promessas elegíveis:
+
+- Excluir agentes da **equipa Vida** (manter a lista de emails Vida numa config/env, ex.: `VIDA_AGENT_EMAILS`).
+- Excluir `product === "TVDE"`.
+- Excluir `product === "Caravela"` (assumir excluído por padrão; confirmar com Alfaseguros depois).
+- Excluir as que já têm emissão registada (idempotência — ver endpoint `/ack`).
+- Excluir as já concluídas.
+
+Aplicar estes filtros no servidor mantém o n8n simples e a lógica de negócio no sítio certo.
+
+### Resposta — `200 OK` (CONTRATO FIRME)
+
+```json
+{
+  "pending": [
+    {
+      "id": "conv_abc123",
+      "agent_email": "marina.almeida@alfaseguros.pt",
+      "contact_phone": "+351912345678",
+      "contact_email": "cliente@exemplo.pt",
+      "follow_up_descricao": "Prometeu enviar simulação de auto até sexta-feira",
+      "follow_up_sla_hours": 24,
+      "linked_ticket_id": "367662000XXXXXXXXX",
+      "product": "Auto",
+      "detected_at": "2026-05-29T07:00:00Z"
+    }
+  ],
+  "count": 1
+}
+```
+
+Notas sobre os campos:
+
+- **`id`** (string, obrigatório): identificador único da promessa/conversa no Supervisor. O n8n usa-o no `/ack` e como chave de deduplicação. Pode ser o `conversation_id` ou um id de uma linha de follow-up — o que fizer sentido no teu schema, desde que seja estável e único.
+- **`agent_email`** (string, obrigatório): email do agente que fez a promessa. O n8n usa-o para encontrar o agente no Desk e atribuir a Task.
+- **`contact_phone`** / **`contact_email`** (string ou `null`): para ancorar a Task ao contacto se não houver ticket. Pelo menos um dos dois deveria estar presente quando `linked_ticket_id` é `null`.
+- **`follow_up_descricao`** (string, obrigatório): a promessa em linguagem natural. Vai para o corpo da Task.
+- **`follow_up_sla_hours`** (number, obrigatório): horas até ao prazo. O n8n calcula o `dueDate` da Task. Se não tiveres um valor por promessa, devolve um default (ex.: `24`).
+- **`linked_ticket_id`** (string ou `null`): id do ticket Desk se a conversa foi ligada a um (Phase 2A). Se `null`, o n8n ancora ao contacto.
+- **`product`** (string ou `null`): produto identificado. Já filtrado (sem TVDE/Caravela), mas o n8n pode usá-lo no texto da Task.
+- **`detected_at`** (string ISO 8601): quando a análise detetou a promessa. Informativo.
+
+Se não houver nada pendente: `{"pending": [], "count": 0}` com `200`.
+
+### Comportamento
+
+- **Read-only.** Este GET não altera estado. Só marca como "emitida" o `/ack` (a seguir). Isto evita que uma falha do n8n a meio perca a promessa — se o n8n falhar antes do `/ack`, a promessa volta a aparecer no próximo GET.
+- Paginação não é necessária no v1 (o volume diário é baixo, ~dezenas). Se quiseres, aceita `?limit=` opcional com default alto.
+
+---
+
+## 2. `POST /api/followups/{id}/ack`
+
+O n8n chama isto **depois** de criar (ou atualizar) a Task no Desk com sucesso. Marca a promessa como emitida para não reaparecer no GET.
+
+### Pedido (CONTRATO FIRME)
+
+```
+POST /api/followups/conv_abc123/ack
+Authorization: Bearer ${FOLLOWUP_API_TOKEN}
+Content-Type: application/json
+```
+
+```json
+{
+  "desk_task_id": "367662000YYYYYYYYY",
+  "emitted_at": "2026-05-29T09:15:00Z",
+  "dedup": "created"
+}
+```
+
+- **`desk_task_id`** (string, obrigatório): id da Task criada no Desk. Guarda-o associado à promessa — é a chave para o close-loop futuro.
+- **`emitted_at`** (string ISO): quando o n8n criou a Task.
+- **`dedup`** (string, opcional): `"created"` ou `"updated"` — informativo, caso queiras distinguir Tasks novas de extensões de prazo.
+
+### Comportamento
+
+- Persistir `desk_task_id` + `emitted_at` na promessa correspondente ao `{id}`.
+- A partir daqui, esta promessa **deixa de aparecer** no `GET /pending`.
+- Se o `{id}` não existir: `404`.
+- Se já tinha sido emitida (já tem `desk_task_id`): devolver `200` à mesma (idempotente — o n8n pode reenviar sem problema), opcionalmente atualizar o `desk_task_id`.
+
+### Resposta — `200 OK`
+
+```json
+{ "id": "conv_abc123", "status": "emitted", "desk_task_id": "367662000YYYYYYYYY" }
+```
+
+---
+
+## 3. (Opcional, pode ficar para TRNSF-847) `POST /api/followups/close-loop`
+
+Quando a Task é concluída no Desk, o n8n avisa o Supervisor para marcar a promessa como tratada.
+
+### Pedido
+
+```json
+{
+  "desk_task_id": "367662000YYYYYYYYY",
+  "completed_at": "2026-05-30T11:00:00Z",
+  "completed_by": "marina.almeida@alfaseguros.pt"
+}
+```
+
+### Comportamento
+
+- Procurar a promessa pelo `desk_task_id` e marcar como concluída (`completed_at`).
+- **SEMPRE devolver `200`**, mesmo se o `desk_task_id` for desconhecido (evita retry storms do n8n). Se não encontrar, logar warning e devolver `{ "id": null }`.
+
+---
+
+## Resumo do que adicionar ao `.env`
+
+```
+FOLLOWUP_API_TOKEN=<openssl rand -hex 32>
+VIDA_AGENT_EMAILS=hcardoso@alfaseguros.pt,...   # se ainda não existir
+```
+
+---
+
+## Checklist de aceitação (lado Supervisor)
+
+- [ ] `GET /api/followups/pending` devolve a forma exata acima, com os filtros (Vida, TVDE, Caravela, já-emitidas, já-concluídas) aplicados no servidor.
+- [ ] `POST /api/followups/{id}/ack` persiste `desk_task_id` + `emitted_at` e remove a promessa do GET seguinte.
+- [ ] Ambos exigem `Authorization: Bearer` e devolvem `401` sem ele.
+- [ ] GET é read-only (não marca emissão).
+- [ ] `ack` é idempotente (reenvio não parte nada).
+- [ ] (Se incluído) close-loop devolve sempre `200`.
+
+---
+
+## O que o n8n vai fazer com isto (contexto, não é para implementar no Supervisor)
+
+1. Schedule Trigger (mesmo padrão do Follow-up Scanner) chama `GET /pending`.
+2. Para cada promessa: encontra o agente no Desk, dedup, cria/atualiza Task (ancorada ao ticket ou contacto), com `dueDate = now + sla_hours`.
+3. Chama `POST /{id}/ack` com o `desk_task_id`.
+4. (847) quando a Task fecha no Desk, webhook → n8n → `POST /close-loop`.
+
+Quando os dois endpoints estiverem de pé e me deres a URL pública do Supervisor + o token, construo o workflow n8n do lado de cá.
