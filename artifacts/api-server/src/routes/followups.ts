@@ -1,5 +1,5 @@
 import { Router, type IRouter, type RequestHandler } from "express";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import {
   db,
   conversationsTable,
@@ -63,79 +63,71 @@ function buildExcludedProducts(): Set<string> {
 // ---------------------------------------------------------------------------
 // GET /api/followups/pending
 // Read-only. Returns follow-up promises not yet emitted to Zoho Desk.
+//
+// Query params:
+//   since  — ISO 8601 datetime. Only return items where detected_at >= since.
+//             Strongly recommended to avoid backlog. E.g. ?since=2026-06-01T00:00:00Z
+//   limit  — max items per page (default 100, max 500)
+//   offset — skip N items (default 0); use with limit for pagination
 // ---------------------------------------------------------------------------
 router.get("/followups/pending", requireToken, async (req, res): Promise<void> => {
-  const limitRaw = typeof req.query.limit === "string" ? parseInt(req.query.limit, 10) : 200;
-  const limit = isNaN(limitRaw) || limitRaw <= 0 ? 200 : Math.min(limitRaw, 1000);
+  // --- Parse query params ---
+  const limitRaw = typeof req.query.limit === "string" ? parseInt(req.query.limit, 10) : 100;
+  const limit = isNaN(limitRaw) || limitRaw <= 0 ? 100 : Math.min(limitRaw, 500);
+
+  const offsetRaw = typeof req.query.offset === "string" ? parseInt(req.query.offset, 10) : 0;
+  const offset = isNaN(offsetRaw) || offsetRaw < 0 ? 0 : offsetRaw;
+
+  let sinceDate: Date | undefined;
+  if (typeof req.query.since === "string" && req.query.since) {
+    const d = new Date(req.query.since);
+    if (!isNaN(d.getTime())) sinceDate = d;
+  }
 
   const vidaIds = buildVidaIds();
   const emailMap = buildEmailMap();
   const excludedProducts = buildExcludedProducts();
 
-  // 1. Conversations that have a pending follow-up (JSONB filter)
+  // 1. Conversations with followUpNecessario = true, optionally filtered by date
   const conversations = await db
     .select()
     .from(conversationsTable)
-    .where(sql`${conversationsTable.analysisJson}->>'followUpNecessario' = 'true'`);
+    .where(
+      and(
+        sql`${conversationsTable.analysisJson}->>'followUpNecessario' = 'true'`,
+        sinceDate ? gte(conversationsTable.updatedAt, sinceDate) : undefined,
+      ),
+    );
 
   if (conversations.length === 0) {
-    res.json({ pending: [], count: 0 });
+    res.json({ pending: [], count: 0, total: 0, offset, has_more: false });
     return;
   }
 
-  const convIds = conversations.map((c) => c.id);
+  const allConvIds = conversations.map((c) => c.id);
 
-  // 2. Already-acked follow-up IDs (emitted OR completed — both excluded)
+  // 2. Already-acked follow-up IDs
   const acks = await db
     .select({ followUpId: followUpAcksTable.followUpId })
     .from(followUpAcksTable)
-    .where(inArray(followUpAcksTable.conversationId, convIds));
+    .where(inArray(followUpAcksTable.conversationId, allConvIds));
   const ackedIds = new Set(acks.map((a) => a.followUpId));
 
-  // 3. Linked Zoho Desk ticket IDs (case_calls → case_tickets, batched)
-  const caseCallRows = await db
-    .select({ convId: caseCallsTable.conversationId, caseId: caseCallsTable.caseId })
-    .from(caseCallsTable)
-    .where(inArray(caseCallsTable.conversationId, convIds));
+  // 3. Apply JS filters (vida, products, acked) to determine full filtered set
+  type FilteredConv = (typeof conversations)[number] & {
+    _agentNumId: number;
+    _produto: string;
+    _followUpDescricao: string;
+  };
 
-  const caseIds = [...new Set(caseCallRows.map((r) => r.caseId))];
-  const ticketByCaseId = new Map<string, string>();
-  if (caseIds.length > 0) {
-    const ticketRows = await db
-      .select({ caseId: caseTicketsTable.caseId, ticketId: caseTicketsTable.ticketId })
-      .from(caseTicketsTable)
-      .where(inArray(caseTicketsTable.caseId, caseIds));
-    for (const row of ticketRows) {
-      // Keep the first ticket per case (deterministic ordering from DB)
-      if (!ticketByCaseId.has(row.caseId)) ticketByCaseId.set(row.caseId, row.ticketId);
-    }
-  }
-
-  // Build convId → first Desk ticket ID
-  const ticketByConvId = new Map<number, string>();
-  for (const cc of caseCallRows) {
-    if (!ticketByConvId.has(cc.convId)) {
-      const t = ticketByCaseId.get(cc.caseId);
-      if (t) ticketByConvId.set(cc.convId, t);
-    }
-  }
-
-  // 4. Apply filters and build response
-  const pending: object[] = [];
-
+  const filtered: FilteredConv[] = [];
   for (const conv of conversations) {
-    if (pending.length >= limit) break;
-
     const followUpId = `conv_${conv.id}`;
-
-    // Exclude already emitted / completed
     if (ackedIds.has(followUpId)) continue;
 
-    // Exclude Vida-team agents (by numeric Ringover user_id)
     const agentNumId = conv.agentId != null ? parseInt(conv.agentId, 10) : NaN;
     if (!isNaN(agentNumId) && vidaIds.has(agentNumId)) continue;
 
-    // Exclude filtered products
     const a = (conv.analysisJson ?? {}) as Record<string, unknown>;
     const produto = typeof a.produto === "string" ? a.produto.trim() : "";
     if (produto && excludedProducts.has(produto.toLowerCase())) continue;
@@ -145,20 +137,84 @@ router.get("/followups/pending", requireToken, async (req, res): Promise<void> =
         ? a.followUpDescricao.trim()
         : "Follow-up necessário — sem descrição registada.";
 
-    pending.push({
-      id: followUpId,
-      agent_email: (!isNaN(agentNumId) && emailMap.get(agentNumId)) || null,
-      contact_phone: conv.customerPhone || null,
-      contact_email: null, // not stored in current schema
-      follow_up_descricao: followUpDescricao,
-      follow_up_sla_hours: 24,
-      linked_ticket_id: ticketByConvId.get(conv.id) ?? null,
-      product: produto || null,
-      detected_at: conv.updatedAt.toISOString(),
-    });
+    filtered.push({ ...conv, _agentNumId: agentNumId, _produto: produto, _followUpDescricao: followUpDescricao });
   }
 
-  res.json({ pending, count: pending.length });
+  const total = filtered.length;
+  const page = filtered.slice(offset, offset + limit);
+  const hasMore = offset + limit < total;
+
+  // 4. Batch load linked ticket IDs for this page only
+  const pageConvIds = page.map((c) => c.id);
+  const ticketByConvId = new Map<number, string>();
+
+  if (pageConvIds.length > 0) {
+    const caseCallRows = await db
+      .select({ convId: caseCallsTable.conversationId, caseId: caseCallsTable.caseId })
+      .from(caseCallsTable)
+      .where(inArray(caseCallsTable.conversationId, pageConvIds));
+
+    const caseIds = [...new Set(caseCallRows.map((r) => r.caseId))];
+    if (caseIds.length > 0) {
+      const ticketRows = await db
+        .select({ caseId: caseTicketsTable.caseId, ticketId: caseTicketsTable.ticketId })
+        .from(caseTicketsTable)
+        .where(inArray(caseTicketsTable.caseId, caseIds));
+      const ticketByCaseId = new Map<string, string>();
+      for (const row of ticketRows) {
+        if (!ticketByCaseId.has(row.caseId)) ticketByCaseId.set(row.caseId, row.ticketId);
+      }
+      for (const cc of caseCallRows) {
+        if (!ticketByConvId.has(cc.convId)) {
+          const t = ticketByCaseId.get(cc.caseId);
+          if (t) ticketByConvId.set(cc.convId, t);
+        }
+      }
+    }
+  }
+
+  // 5. Build response
+  const pending = page.map((conv) => {
+    const agentEmail =
+      (!isNaN(conv._agentNumId) && emailMap.get(conv._agentNumId)) || null;
+
+    return {
+      id: `conv_${conv.id}`,
+      agent_email: agentEmail,
+      /** Raw Ringover agent ID — always present so n8n can route unmapped agents */
+      agent_ref: conv.agentId ?? null,
+      contact_phone: conv.customerPhone || null,
+      contact_email: null,
+      follow_up_descricao: conv._followUpDescricao,
+      follow_up_sla_hours: 24,
+      linked_ticket_id: ticketByConvId.get(conv.id) ?? null,
+      product: conv._produto || null,
+      detected_at: conv.updatedAt.toISOString(),
+    };
+  });
+
+  // 6. Log email coverage for observability
+  const withEmail = pending.filter((p) => p.agent_email !== null).length;
+  const withoutEmail = pending.length - withEmail;
+  if (withoutEmail > 0) {
+    req.log.warn(
+      { total, page_size: pending.length, with_email: withEmail, without_email: withoutEmail, sinceDate },
+      "followups/pending: some items have no resolved agent_email",
+    );
+  } else {
+    req.log.info(
+      { total, page_size: pending.length, with_email: withEmail, sinceDate },
+      "followups/pending: all items have agent_email resolved",
+    );
+  }
+
+  res.json({
+    pending,
+    count: pending.length,
+    total,
+    offset,
+    has_more: hasMore,
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -178,7 +234,6 @@ router.post("/followups/:id/ack", requireToken, async (req, res): Promise<void> 
     return;
   }
 
-  // Parse follow-up ID to get conversation ID
   const match = /^conv_(\d+)$/.exec(followUpId);
   if (!match) {
     res.status(404).json({ error: "Follow-up não encontrado" });
@@ -186,7 +241,6 @@ router.post("/followups/:id/ack", requireToken, async (req, res): Promise<void> 
   }
   const convId = parseInt(match[1], 10);
 
-  // Verify conversation exists and has a follow-up
   const [conv] = await db
     .select({ id: conversationsTable.id })
     .from(conversationsTable)
@@ -199,7 +253,6 @@ router.post("/followups/:id/ack", requireToken, async (req, res): Promise<void> 
 
   const emittedAt = emitted_at ? new Date(emitted_at) : new Date();
 
-  // Upsert — idempotent (re-sending does not break anything)
   await db
     .insert(followUpAcksTable)
     .values({
