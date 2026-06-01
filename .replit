@@ -37,3 +37,8 @@ externalPort = 3001
 [[ports]]
 localPort = 21898
 externalPort = 3000
+
+[userenv]
+
+[userenv.shared]
+AGENT_EMAIL_MAP = "{\"23275673\":\"vania.rodrigues@alfaseguros.pt\",\"23275674\":\"tiago.paiva@alfaseguros.pt\",\"23275675\":\"marina.fernandes@alfaseguros.pt\",\"23275677\":\"andreia.coelho@alfaseguros.pt\",\"23275678\":\"joao.martins@alfaseguros.pt\",\"23275679\":\"ana.inacio@alfaseguros.pt\"}"

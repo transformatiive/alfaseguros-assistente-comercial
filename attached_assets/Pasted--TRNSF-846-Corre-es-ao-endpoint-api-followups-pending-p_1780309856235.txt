@@ -1,0 +1,93 @@
+# TRNSF-846 — Correções ao endpoint `/api/followups/pending` (pós-teste ao vivo)
+
+> **Para:** Claude Code / Replit, repo `alfaseguros-supervisor`
+> **Contexto:** o endpoint está vivo e o contrato JSON está correto — obrigado. Mas um teste real (1 Jun, 200 promessas devolvidas) revelou **três problemas** que impedem a ativação. Todos são do lado do Supervisor. Abaixo, por ordem de gravidade.
+
+---
+
+## Problema 1 — `agent_email` vem `null` em 100% dos casos (BLOQUEADOR)
+
+Nas 200 promessas devolvidas, **todas** trazem `agent_email: null`. O n8n precisa do email para encontrar o agente no Zoho Desk e atribuir-lhe a tarefa. Sem isto, todas as tarefas ficam sem dono — não dá para ativar.
+
+A causa provável: o `AGENT_EMAIL_MAP` está vazio, mal formado, ou a chave usada para o lookup não corresponde ao identificador de agente que existe na conversa.
+
+### O que é preciso
+
+O `AGENT_EMAIL_MAP` mapeia **o ID de agente que o Supervisor tem na conversa** (o ID interno do Ringover/Supervisor, ex.: `"23275677"`) → **o email do agente no Desk**.
+
+**Eu (n8n side) só conheço metade do mapa: os emails de destino válidos no Desk.** A outra metade — que ID interno do Supervisor corresponde a cada pessoa — só o Supervisor sabe. Por isso preciso que do lado do Replit se faça a correspondência.
+
+**Emails válidos no Desk (lado direito do mapa) — usar exatamente estes, são os que existem no Desk:**
+
+Agentes ATIVOS (prioridade — são estes que fazem promessas hoje):
+```
+ana.inacio@alfaseguros.pt
+andreia.almeida@alfaseguros.pt
+andreia.coelho@alfaseguros.pt
+carmen.machado@alfaseguros.pt
+claudia.sanches@alfaseguros.pt
+joao.catalao@alfaseguros.pt
+joao.martins@alfaseguros.pt
+marina.fernandes@alfaseguros.pt
+ricardo.barge@alfaseguros.pt
+rui.almeida@alfaseguros.pt
+tiago.paiva@alfaseguros.pt
+vania.rodrigues@alfaseguros.pt
+```
+
+(Há também agentes DISABLED no Desk — alexandre.silva, margarida.amaral, mjoao.correia, miguel.pedroso, sofia.pais, andreia.rodrigues — não devem receber tarefas novas.)
+
+### Ação
+
+1. Construir `AGENT_EMAIL_MAP` com `{"<id_interno_supervisor>": "<email_acima>"}` para cada agente ativo. Os IDs internos saem da tua BD (a coluna que identifica o agente na `conversation` / `case_calls`).
+2. Se um agente da conversa **não** estiver no mapa, ainda assim devolver a promessa, mas deixar `agent_email: null` **e** acrescentar um campo novo `agent_ref` com o ID interno em bruto — assim o n8n consegue, no mínimo, registar/encaminhar para uma fila de "sem dono" em vez de perder a promessa. (Campo novo, opcional, não quebra o contrato.)
+3. Idealmente, logar quantas conversas ficaram sem email resolvido, para sabermos a cobertura do mapa.
+
+---
+
+## Problema 2 — backlog histórico inteiro a ser devolvido (BLOQUEADOR para arranque)
+
+As 200 promessas vão de **5 a 26 de maio** — é todo o histórico acumulado, não "o que está pendente agora". 198 das 200 têm mais de uma semana. Se o n8n ativar contra isto, cria centenas de tarefas atrasadas, muitas já tratadas offline.
+
+### Decisão de negócio (do Nuno): **ignorar o histórico — só promessas a partir de hoje (1 Jun 2026).**
+
+### Ação — adicionar filtro de data ao `GET /pending`
+
+- Aceitar query param **`since`** (ISO 8601). Quando presente, devolver só promessas com `detected_at >= since`.
+- O n8n passará `?since=2026-06-01T00:00:00Z` no arranque, e depois manterá uma janela móvel.
+- **Importante para o arranque:** para o histórico antigo não voltar a aparecer eternamente, o ideal é marcá-lo como já-tratado. Duas opções (à tua escolha):
+  - (a) endpoint admin one-shot que insere acks "sintéticos" para tudo antes de `2026-06-01` (sem criar tarefas), ou
+  - (b) simplesmente confiar no `since` — o n8n nunca pede o histórico, e ele fica adormecido na BD.
+- A opção (b) é mais simples e suficiente, desde que o `since` seja respeitado rigorosamente. Preferir (b) salvo objeção.
+
+---
+
+## Problema 3 — `count` preso em 200 (sinal de limite implícito)
+
+A resposta devolveu exatamente 200 e `count: 200`. Cheira a um `LIMIT 200` sem paginação. Pode haver mais promessas escondidas.
+
+### Ação
+
+- Confirmar se há um limite hardcoded. Com o filtro `since` do Problema 2, o volume cai drasticamente (só dias recentes), por isso isto deixa de ser urgente — mas:
+- Aceitar query param **`limit`** (default razoável, ex.: 100) e, se o total exceder, suportar **`offset`** ou um cursor. Em alternativa, garantir que com `since` aplicado o resultado nunca é truncado silenciosamente.
+- No mínimo, se truncar, indicá-lo (ex.: `"has_more": true`).
+
+---
+
+## Resumo das alterações pedidas
+
+| # | Alteração | Onde |
+|---|---|---|
+| 1 | Preencher `AGENT_EMAIL_MAP` (ID interno → email Desk); add campo `agent_ref`; logar cobertura | `/pending` + env |
+| 2 | Query param `since` (ISO) → filtrar `detected_at >= since` | `/pending` |
+| 3 | Query param `limit`/`offset` (ou `has_more`) para evitar truncagem silenciosa | `/pending` |
+
+O contrato JSON existente mantém-se — estes são acréscimos, não alterações de forma. Assim que estiver, faço novo teste com `?since=2026-06-01T00:00:00Z` e confirmo que os emails vêm preenchidos antes de ativar.
+
+---
+
+## Nota sobre o que NÃO muda
+
+- Os caminhos, a auth Bearer, e a forma do objeto `pending[]` ficam iguais.
+- O `/ack` e o `/close-loop` estão bem — não mexer.
+- A exclusão de Vida/TVDE/Caravela está a funcionar (confirmado no teste: produtos devolvidos foram Outro/Auto/Multirriscos/Condomínio/Empresas/Saúde, sem TVDE nem Caravela).
