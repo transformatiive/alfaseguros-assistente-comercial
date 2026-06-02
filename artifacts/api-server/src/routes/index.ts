@@ -9,6 +9,7 @@ import operatorsRouter from "./operators.js";
 import casesRouter from "./cases.js";
 import actionsRouter from "./actions.js";
 import followupsRouter from "./followups.js";
+import emailSummaryRouter from "./email-summary.js";
 import { requireAuth } from "../middleware/require-auth.js";
 
 const router: IRouter = Router();
@@ -18,6 +19,7 @@ router.use(healthRouter);
 router.use(authRouter);
 // n8n-facing routes — authenticated by bearer token, not session
 router.use(followupsRouter);
+router.use(emailSummaryRouter);
 
 // Protected routes — must be authenticated
 router.use(requireAuth);
