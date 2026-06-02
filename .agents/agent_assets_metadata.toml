@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "cxpfLpS2wkFgCMqcglOOP"
+uri = "file://.agents/skills/n8n-daily-summary-email/SKILL.md"
+type = "text"
+title = "Skill: n8n Daily Summary Email"
