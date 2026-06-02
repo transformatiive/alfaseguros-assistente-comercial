@@ -7,7 +7,7 @@
  * Returns executive summary + operator coaching + stats for the given date.
  * If `date` is omitted, defaults to today in the Europe/Lisbon timezone.
  */
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type RequestHandler } from "express";
 import { eq, sql } from "drizzle-orm";
 import {
   db,
@@ -21,24 +21,24 @@ import { env } from "../lib/env.js";
 const router: IRouter = Router();
 
 // ---------------------------------------------------------------------------
-// Bearer-token auth (shared with /api/followups/*)
+// Bearer-token middleware — same scheme as /api/followups/*
 // ---------------------------------------------------------------------------
-function checkToken(req: Parameters<typeof router.get>[1] extends (...args: infer A) => unknown ? A[0] : never, res: Parameters<typeof router.get>[1] extends (...args: infer A) => unknown ? A[1] : never): boolean {
+const requireToken: RequestHandler = (req, res, next) => {
   const token = env().FOLLOWUP_API_TOKEN;
   if (!token) {
     res.status(503).json({ error: "FOLLOWUP_API_TOKEN not configured on server" });
-    return false;
+    return;
   }
-  const header = String(req.headers["authorization"] ?? "");
+  const header = req.headers["authorization"] ?? "";
   if (header !== `Bearer ${token}`) {
     res.status(401).json({ error: "Unauthorized" });
-    return false;
+    return;
   }
-  return true;
-}
+  next();
+};
 
 // ---------------------------------------------------------------------------
-// Helpers (shared with summary route)
+// Helpers
 // ---------------------------------------------------------------------------
 function normalizeSection(raw: unknown): { paragraph: string; bullets: string[] } {
   if (Array.isArray(raw)) {
@@ -64,8 +64,7 @@ function todayLisbon(): string {
 // ---------------------------------------------------------------------------
 // GET /api/email/summary
 // ---------------------------------------------------------------------------
-router.get("/email/summary", async (req, res): Promise<void> => {
-  if (!checkToken(req as never, res as never)) return;
+router.get("/email/summary", requireToken, async (req, res): Promise<void> => {
 
   const dateParam =
     typeof req.query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)
