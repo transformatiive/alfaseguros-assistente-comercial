@@ -26,12 +26,12 @@ router.post("/run", async (req, res): Promise<void> => {
   const isCron = body.source === "cron";
   if (isCron) {
     const cfg = env();
-    if (!cfg.CRON_SECRET) {
+    if (!cfg.CRON_WEBHOOK_SECRET) {
       res.status(503).json({ error: "Cron secret not configured on server" });
       return;
     }
     const supplied = req.header("x-cron-secret");
-    if (supplied !== cfg.CRON_SECRET) {
+    if (supplied !== cfg.CRON_WEBHOOK_SECRET) {
       res.status(401).json({ error: "Invalid X-Cron-Secret" });
       return;
     }
