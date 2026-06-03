@@ -6,7 +6,7 @@ const envSchema = z.object({
   RINGOVER_API_KEY: z.string().optional(),
   OPENROUTER_API_KEY: z.string().optional(),
   OPENROUTER_MODEL: z.string().default("anthropic/claude-sonnet-4-6"),
-  CRON_SECRET: z.string().optional(),
+  CRON_WEBHOOK_SECRET: z.string().optional(),
   PUBLIC_APP_URL: z.string().optional(),
   ANALYSIS_CONCURRENCY: z.coerce.number().int().positive().default(4),
   ZOHO_DESK_CLIENT_ID: z.string().optional(),

@@ -20,11 +20,12 @@ router.use(authRouter);
 // n8n-facing routes — authenticated by bearer token, not session
 router.use(followupsRouter);
 router.use(emailSummaryRouter);
+// /api/run has its own cron-secret guard; move before requireAuth so n8n can call it
+router.use(runsRouter);
 
 // Protected routes — must be authenticated
 router.use(requireAuth);
 router.use(adminRouter);
-router.use(runsRouter);
 router.use(conversationsRouter);
 router.use(summaryRouter);
 router.use(operatorsRouter);
