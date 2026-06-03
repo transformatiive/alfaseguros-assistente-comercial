@@ -1,0 +1,13 @@
+Resposta: 202 { "id": 8, "date": "2026-06-02", "status": "pending", ... }
+
+Passados mais de 8 minutos, a run id 8 continua presa em running. O endpoint de leitura confirma: GET /api/email/summary?date=2026-06-02 devolve 404 com hint “Run encontrada com status ‘running’ — análise pode estar em progresso”. Não consigo ver o progresso fino porque as rotas de leitura de runs (/api/runs/8, /api/runs/latest) continuam atrás do requireAuth — só lá chego com sessão de browser.
+
+O que preciso que faças
+
+	1.	Inspeciona a run id 8 diretamente na base de dados. Mostra-me: status, totalConversations, analyzedConversations, errorMessage, createdAt, updatedAt. Quero saber se o contador analyzedConversations está a subir (a processar) ou parado (encravado).
+	2.	Verifica os logs do deployment desde 2026-06-03T11:08:34Z (arranque da run 8). Procura: erros de OpenRouter (rate limit, timeout, 402/insuficiência de créditos), exceções não tratadas no job de análise, ou se o processo background morreu silenciosamente deixando o status running órfão.
+	3.	Diz-me se há um timeout / mecanismo de recuperação para runs que ficam presas em running. Se a run 8 estiver morta mas marcada como running, marca-a como failed (ou limpa-a) para eu poder voltar a arrancar limpo.
+	4.	Confirma o volume esperado para 2026-06-02. Quantas conversas existem nessa data na BD? Se forem 0, a run devia terminar completed com totalConversations: 0 — não ficar presa. Se forem muitas (tipo as 176 de 1 jun), diz-me o tempo médio de processamento por conversa para eu calibrar o polling.
+	5.	Expõe uma rota de leitura de estado de run autenticável por X-Cron-Secret (ex.: GET /api/run/:id/status ou GET /api/run/latest, fora do requireAuth, tal como o POST /api/run). Sem isto, não tenho como monitorizar runs programaticamente a partir do n8n — só via o /api/email/summary, que só responde quando a run termina.
+
+Resumo: a auth está resolvida, mas a run 8 (2 jun) parece encravada em running. Preciso de saber porquê (logs + estado na BD), de a poder destrancar, e de uma rota de status acessível por cron secret para monitorização futur
