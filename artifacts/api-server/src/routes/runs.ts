@@ -102,6 +102,53 @@ router.post("/run", async (req, res): Promise<void> => {
   });
 });
 
+/**
+ * PATCH /api/run/:date
+ * Admin-only (X-Cron-Secret). Force-sets run status — used to recover runs
+ * that were left in "running" state after a server restart mid-job.
+ * Body: { "status": "completed" | "failed", "error_message"?: string }
+ */
+router.patch("/run/:date", async (req, res): Promise<void> => {
+  const cfg = env();
+  if (!cfg.CRON_WEBHOOK_SECRET) {
+    res.status(503).json({ error: "Cron secret not configured on server" });
+    return;
+  }
+  if (req.header("x-cron-secret") !== cfg.CRON_WEBHOOK_SECRET) {
+    res.status(401).json({ error: "Invalid X-Cron-Secret" });
+    return;
+  }
+
+  const { date } = req.params;
+  if (!isValidIsoDate(date)) {
+    res.status(400).json({ error: "Invalid date format — use YYYY-MM-DD" });
+    return;
+  }
+
+  const body = (req.body ?? {}) as { status?: unknown; error_message?: unknown };
+  const newStatus = body.status;
+  if (newStatus !== "completed" && newStatus !== "failed") {
+    res.status(400).json({ error: "status must be 'completed' or 'failed'" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(runsTable)
+    .set({
+      status: newStatus,
+      errorMessage: typeof body.error_message === "string" ? body.error_message : null,
+    })
+    .where(eq(runsTable.date, date))
+    .returning();
+
+  if (!updated) {
+    res.status(404).json({ error: "No run found for this date" });
+    return;
+  }
+
+  res.json(serializeRun(updated));
+});
+
 router.get("/run/:date", async (req, res): Promise<void> => {
   const params = GetRunStatusParams.safeParse(req.params);
   if (!params.success) {
