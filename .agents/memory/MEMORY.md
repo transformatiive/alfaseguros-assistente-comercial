@@ -1,0 +1,2 @@
+- [DB push broken — use psql](db-push-esm-issue.md) — drizzle-kit push fails with ESM .js imports; post-merge uses psql directly instead.
+- [team_summaries_json caching](email-summary-teams.md) — lazy LLM per-team summaries cached in daily_summaries.team_summaries_json; 360 ops get followups[] with desk_url.

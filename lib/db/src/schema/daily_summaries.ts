@@ -14,6 +14,8 @@ export const dailySummariesTable = pgTable("daily_summaries", {
   risks: jsonb("risks").notNull().default(emptySection),
   closingRateRecommendations: jsonb("closing_rate_recommendations").notNull().default(emptySection),
   automationOpportunities: jsonb("automation_opportunities").notNull().default(emptyAutomation),
+  /** Lazily generated per-team summaries (360 / vida). Null until first GET /api/email/summary. */
+  teamSummariesJson: jsonb("team_summaries_json"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

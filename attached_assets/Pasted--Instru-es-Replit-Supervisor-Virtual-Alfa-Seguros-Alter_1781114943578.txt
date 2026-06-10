@@ -1,0 +1,128 @@
+# Instruções Replit — Supervisor Virtual Alfa Seguros
+
+## Alterações ao endpoint `/api/email/summary`
+
+Estas alterações servem o novo email diário **por equipa**. Abrangem **as equipas 360 e Vida** (as que têm dados de chamadas no Replit). A equipa **Corporate não é abrangida** — os dados Corporate vêm do Zoho Desk e são tratados fora do Replit (no n8n).
+
+-----
+
+### Contexto e problema
+
+`GET /api/email/summary?date=YYYY-MM-DD` devolve hoje uma análise **global** de todas as conversas do dia:
+
+```json
+{
+  "date": "2026-06-09",
+  "run_status": "completed",
+  "executive_summary": "…texto único, todas as equipas misturadas…",
+  "sections": {
+    "working_well": { "paragraph": "…", "bullets": ["…"] },
+    "to_improve":   { "paragraph": "…", "bullets": ["…"] },
+    "risks":        { "paragraph": "…", "bullets": ["…"] },
+    "closing_rate_recommendations": { … }
+  },
+  "operators": [
+    { "name": "Andreia Coelho", "overview": "…", "strengths": ["…"], "blind_spots": ["…"], "coaching": ["…"] }
+  ],
+  "stats": { "total_conversations": 72, "with_follow_up": 70, "operators_analyzed": 7 }
+}
+```
+
+**Problema 1 — sumário global.** O `executive_summary` e as `sections` misturam as equipas. O email da equipa Vida acaba a mostrar produtos Não Vida (e vice-versa). Cada equipa precisa de um sumário e secções **gerados só com os seus próprios dados**.
+
+**Problema 2 — follow-ups da 360 sem ticket Desk.** Os follow-ups por operador referem chamadas em texto livre (“conversa 939”), sem o ticket Zoho Desk correspondente. Isto impede linkar o email diretamente ao ticket. **Aplica-se só à equipa 360** (a Vida não usa Zoho Desk — ver abaixo).
+
+-----
+
+### Mapa de equipas (por nome de operador)
+
+- **Equipa 360 (usa Zoho Desk):** Andreia Almeida, Andreia Coelho, Vânia Rodrigues, Marina Fernandes, João Martins, João Catalão, Tiago Paiva, Ana Inácio.
+- **Equipa Vida (NÃO usa Zoho Desk — só chamadas):** todos os restantes operadores de chamadas (ex.: Ana Rodrigues, Beatriz Assunção, Ligia Ferreira, Rute Rio).
+
+Normalizar acentos e maiúsculas ao comparar nomes.
+
+-----
+
+### Alteração 1 — Sumário e secções por equipa (360 e Vida)
+
+Adicionar ao JSON uma chave nova **`teams`**, **sem remover** as chaves globais atuais (retrocompatibilidade):
+
+```json
+"teams": {
+  "360": {
+    "executive_summary": "…sumário gerado só com as conversas/operadores da equipa 360…",
+    "sections": {
+      "working_well": { "bullets": ["…"] },
+      "to_improve":   { "bullets": ["…"] },
+      "risks":        { "bullets": ["…"] }
+    }
+  },
+  "vida": {
+    "executive_summary": "…sumário gerado só com as conversas/operadores da equipa Vida…",
+    "sections": {
+      "working_well": { "bullets": ["…"] },
+      "to_improve":   { "bullets": ["…"] },
+      "risks":        { "bullets": ["…"] }
+    }
+  }
+}
+```
+
+Regras:
+
+- O `executive_summary` e as `sections` de cada equipa devem ser gerados **apenas a partir das conversas/operadores dessa equipa**. Reutiliza o mesmo prompt do sumário global, mas alimenta-o só com o subconjunto de conversas da equipa.
+- Manter o campo **`bullets`** por secção (é o que o email usa). O `paragraph` é opcional.
+- Não é preciso bloco para Corporate.
+
+-----
+
+### Alteração 2 — Ticket Zoho Desk nos follow-ups (SÓ equipa 360)
+
+Para cada operador da **equipa 360**, devolver os follow-ups de forma **estruturada**, com o ticket Desk associado:
+
+```json
+"operators": [
+  {
+    "name": "Andreia Coelho",
+    "overview": "…",
+    "coaching": ["…"],
+    "blind_spots": ["…"],
+    "followups": [
+      {
+        "action": "Ligar ao cliente até final do dia para confirmar dados em falta.",
+        "conversation_id": "963",
+        "desk_ticket_id": "367662000121477605",
+        "desk_url": "https://desk.zoho.com/support/alfaseguros/ShowHomePage.do#Cases/dv/367662000121477605"
+      }
+    ]
+  }
+]
+```
+
+Regras:
+
+- Os campos essenciais são **`desk_ticket_id`** e **`desk_url`** (o n8n usa o `desk_url` para o link “Abrir ticket no Desk”).
+- Formato do URL: `https://desk.zoho.com/support/alfaseguros/ShowHomePage.do#Cases/dv/{desk_ticket_id}`.
+- **`conversation_id` ≠ número do ticket Desk.** A numeração das conversas (chamadas Ringover) é independente da numeração de tickets. Usar o mapa real conversa→ticket (a chamada que origina/está associada ao ticket). Se uma conversa não tiver ticket associado, **omitir os campos `desk_*`** desse follow-up (o n8n não mostra link nesse item).
+- **Equipa Vida: NÃO incluir campos `desk_*`.** A Vida não usa Zoho Desk; os follow-ups da Vida são só chamadas e ficam sem link. Isto está correto e é intencional.
+
+-----
+
+### Pré-requisito da Alteração 2 — mapa conversa → ticket
+
+Se a app ainda não guarda, por conversa, o ticket Desk correspondente, é esse o pré-requisito. Onde guardar: no registo da conversa/call, um campo `desk_ticket_id` preenchido no momento em que a chamada é associada a um ticket (webhook Ringover ↔ Desk, ou no processamento existente). Sem esse mapa, os follow-ups do 360 continuam sem link — o email degrada graciosamente.
+
+-----
+
+### O que NÃO alterar
+
+- Não remover `executive_summary`, `sections` nem `operators` globais (ainda usados).
+- Não gerar bloco Corporate (tratado no n8n a partir do Zoho Desk).
+- Vida sem campos `desk_*` — é propositado.
+
+### Como validamos
+
+Confirmar que `/api/email/summary?date=2026-06-09` traz:
+
+1. `teams.360` e `teams.vida`, cada um com `executive_summary` próprio + `sections.bullets`.
+1. Nos operadores da equipa 360, `followups[].desk_url` preenchido quando há ticket associado.
