@@ -79,6 +79,7 @@ function badge(text: string, color: string): string {
 // ---------------------------------------------------------------------------
 export interface DigestPonto {
   validacao: string;
+  texto: string;
   chamadas_falhadas: number;
   motivo: "compliance" | "categoria_obrigatoria";
   mensagemMelhoria: string;
@@ -89,9 +90,10 @@ export function renderColaboradorDigest(input: { nome: string; data: string; pon
     .map((p) => {
       const b = p.motivo === "compliance" ? badge("Obrigatório · legal", RED) : badge("A melhorar", AMBER);
       return `<tr><td style="padding:14px 0;border-bottom:1px solid ${LINE}">
-        <div style="font-size:14px;font-weight:700;color:${INK}">${esc(p.validacao)}${b}</div>
-        <div style="font-size:12px;color:${MUTE};margin-top:3px">Falhou em ${p.chamadas_falhadas} ${p.chamadas_falhadas === 1 ? "chamada" : "chamadas"}</div>
-        <div style="font-size:13px;color:${BODY};margin-top:6px;line-height:1.55">${esc(p.mensagemMelhoria)}</div>
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:${MUTE}">${esc(p.validacao)}${b}</div>
+        <div style="font-size:14px;font-weight:700;color:${INK};margin-top:4px;line-height:1.4">${esc(p.texto)}</div>
+        <div style="font-size:12px;color:${MUTE};margin-top:3px">Critério não cumprido em ${p.chamadas_falhadas} ${p.chamadas_falhadas === 1 ? "chamada" : "chamadas"}</div>
+        <div style="font-size:13px;color:${BODY};margin-top:6px;line-height:1.55"><strong style="color:${ORANGE}">Como melhorar:</strong> ${esc(p.mensagemMelhoria)}</div>
       </td></tr>`;
     })
     .join("");
@@ -117,6 +119,7 @@ export interface ResumoCategoria {
   cumprido: number;
   naoCumprido: number;
   pontoMaisFracoNome: string | null;
+  pontoMaisFracoCriterio: string | null;
 }
 export interface ResumoKpis {
   chamadas: number;
@@ -152,7 +155,10 @@ export function renderEquipaResumo(input: { data: string; kpis: ResumoKpis; cate
         ? `<span style="font-family:Georgia,serif;font-size:22px;color:${rateColor(c.taxaPercent)}">${c.taxaPercent}%</span>`
         : `<span style="font-size:14px;color:${BODY}">${esc(c.absoluto)} <span style="color:${AMBER};font-size:11px">(amostra pequena)</span></span>`;
       const driver = c.pontoMaisFracoNome
-        ? `<div style="font-size:12px;color:${BODY};margin-top:8px"><span style="color:${MUTE}">Ponto mais fraco:</span> <strong>${esc(c.pontoMaisFracoNome)}</strong></div>`
+        ? `<div style="margin-top:10px;padding:10px 12px;background:#fff8f0;border-left:3px solid ${AMBER};border-radius:0 6px 6px 0">
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:${MUTE}">Ponto mais fraco · ${esc(c.pontoMaisFracoNome)}</div>
+            <div style="font-size:13px;color:${INK};font-weight:600;margin-top:3px;line-height:1.4">${esc(c.pontoMaisFracoCriterio ?? c.pontoMaisFracoNome)}</div>
+          </div>`
         : "";
       const obr = c.obrigatoria ? badge("Obrigatória", RED) : "";
       return `<tr><td style="padding:16px 18px;border:1px solid ${LINE};border-radius:8px;background:${CARD}">

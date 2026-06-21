@@ -5,7 +5,7 @@ import {
   loadColaboradores,
   loadConversationBasic,
   loadChecklistResultsForConversation,
-  loadChecklistForPrompt,
+  loadChecklistLabels,
   type CategoriaMeta,
 } from "../storage/repo.js";
 import {
@@ -36,26 +36,39 @@ function readPeriod(req: { query: Record<string, unknown> }, res: import("expres
   return { de, ate };
 }
 
+interface ItemLabel {
+  validacao: string;
+  texto: string;
+  mensagem: string;
+}
+
 /** Merge aggregated stats with category + weakest-point labels for the UI. */
-function enrich(stats: CategoryStats[], cats: CategoriaMeta[], itemNameById: Map<number, string>) {
+function enrich(stats: CategoryStats[], cats: CategoriaMeta[], itemById: Map<number, ItemLabel>) {
   const byId = new Map(cats.map((c) => [c.id, c]));
   return stats.map((s) => {
     const meta = byId.get(s.categoryId);
+    const weak = s.pontoMaisFraco ? itemById.get(s.pontoMaisFraco.itemId) : undefined;
     return {
       ...s,
       nome: meta?.nome ?? `Categoria ${s.categoryId}`,
       obrigatoria: meta?.obrigatoria ?? false,
       // Honesty guardrail surfaced explicitly: only send the % when allowed.
       taxaPercent: s.exibePercentagem && s.taxa !== null ? Math.round(s.taxa * 100) : null,
-      pontoMaisFracoNome: s.pontoMaisFraco ? (itemNameById.get(s.pontoMaisFraco.itemId) ?? null) : null,
+      // Short tag + the full criterion text (the question the checklist measured)
+      // + the concrete coaching tip — so the view is actionable, not just a %.
+      pontoMaisFracoNome: weak?.validacao ?? null,
+      pontoMaisFracoCriterio: weak?.texto ?? null,
+      pontoMaisFracoMensagem: weak?.mensagem ?? null,
     };
   });
 }
 
-/** Map item id → short label for the weakest-point display. */
-async function loadItemNames(): Promise<Map<number, string>> {
-  const items = await loadChecklistForPrompt(ESCOPO_VIDA, "primeiro_contacto");
-  return new Map(items.map((i) => [i.id, i.validacao || i.texto]));
+/** Map item id → { validacao (short tag), texto (full criterion), mensagem }. */
+async function loadItemNames(): Promise<Map<number, ItemLabel>> {
+  const items = await loadChecklistLabels(ESCOPO_VIDA, "primeiro_contacto");
+  return new Map(
+    items.map((i) => [i.id, { validacao: i.validacao || i.texto, texto: i.texto, mensagem: i.mensagemMelhoria }]),
+  );
 }
 
 // GET /api/stats/categoria?de&ate&colaborador_id

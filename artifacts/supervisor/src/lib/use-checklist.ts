@@ -17,6 +17,8 @@ export interface CategoriaStat {
   taxaPercent: number | null;
   pontoMaisFraco: { itemId: number; taxa: number; cumprido: number; aplicavel: number } | null;
   pontoMaisFracoNome: string | null;
+  pontoMaisFracoCriterio: string | null;
+  pontoMaisFracoMensagem: string | null;
   dispersaoColaboradores: number | null;
 }
 
