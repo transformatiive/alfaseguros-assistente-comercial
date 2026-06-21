@@ -14,6 +14,12 @@ export const conversationsTable = pgTable("conversations", {
   legsJson: jsonb("legs_json").notNull().default([]),
   analysisJson: jsonb("analysis_json"),
   analysisError: text("analysis_error"),
+  // V2 (Supervisor Virtual V2): resolved operator + inferred sales-script phase.
+  // Nullable/additive — existing rows and the legacy pipeline are unaffected.
+  colaboradorId: integer("colaborador_id"),
+  faseDetectada: text("fase_detectada", {
+    enum: ["primeiro_contacto", "follow_up", "proposta", "pos_venda"],
+  }),
   costUsd: numeric("cost_usd", { precision: 10, scale: 6 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

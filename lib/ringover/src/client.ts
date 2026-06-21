@@ -1,4 +1,9 @@
-import { listCallsResponseSchema, type RingoverCall } from "./types.js";
+import {
+  listCallsResponseSchema,
+  ringoverUserSchema,
+  type RingoverCall,
+  type RingoverUser,
+} from "./types.js";
 
 const DEFAULT_BASE_URL = "https://public-api.ringover.com/v2";
 
@@ -99,6 +104,45 @@ export class RingoverClient {
     }
     return all;
   }
+
+  /**
+   * List every Ringover user (agent) on the account, to build the operator
+   * roster (user_id ↔ name ↔ email ↔ team). Read-only.
+   *
+   * The Public API isn't as well documented for this endpoint as for /calls, so
+   * we accept the common envelope shapes defensively: a bare array, or an object
+   * keyed by `user_list` / `list` / `users`.
+   */
+  async listUsers(): Promise<RingoverUser[]> {
+    const url = new URL(`${this.baseUrl}/users`);
+    url.searchParams.set("limit_count", String(RINGOVER_MAX_LIMIT));
+
+    const res = await this.fetchImpl(url.toString(), {
+      method: "GET",
+      headers: {
+        Authorization: this.apiKey,
+        Accept: "application/json",
+      },
+    });
+
+    if (!res.ok) {
+      const body = await safeText(res);
+      throw new RingoverError(res.status, body, `Ringover GET /users failed (${res.status})`);
+    }
+
+    const json: unknown = await res.json();
+    const rawList: unknown = Array.isArray(json)
+      ? json
+      : isRecord(json)
+        ? (json.user_list ?? json.list ?? json.users ?? [])
+        : [];
+    if (!Array.isArray(rawList)) return [];
+    return rawList.map((u) => ringoverUserSchema.parse(u));
+  }
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
 async function safeText(res: Response): Promise<string> {
