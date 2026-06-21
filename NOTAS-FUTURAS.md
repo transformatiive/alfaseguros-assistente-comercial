@@ -24,17 +24,26 @@ drasticamente o `indeterminado`** e tornar a taxa de cumprimento muito mais fiá
      a transcrição completa ao analisador (narrativa **e** checklist).
    - Custos a considerar: download de áudio, tempo/custo de STT, armazenamento.
 
-2. **Transcrição direta da Ringover, sem a síntese de IA deles** *(verificar)*
-   - **Estado atual:** o nosso schema (`lib/ringover/src/types.ts`) só conhece
-     `note` (resumo), `record` (áudio) e `recording_url`. **Não há campo de
-     transcrição literal.** O HANDOVER §1 confirma que, à data da descoberta, a
-     API só dava o resumo + o áudio.
-   - **A FAZER:** sondar a API pública v2 da Ringover para confirmar se existe
-     hoje um endpoint/campo de **transcrição direta** (ex.: segmentos de diálogo
-     por chamada). Criar um `ringover:probe-transcription` (à imagem do
-     `ringover:probe-users`) que tente obter a transcrição de uma chamada com
-     `record`. Se existir em segmentos, **concatenar os segmentos** na transcrição
-     completa (sem qualquer síntese de IA) e usá-la como input.
+2. **Transcrição direta da Ringover, sem a síntese de IA deles** *(✅ CONFIRMADO que existe)*
+   - **Descoberta (sondagem real à API v2, 21/06):** a Ringover **fornece a
+     transcrição completa** via `GET /transcriptions/{call_id}`.
+   - Resposta: lista com `transcription_data.speeches[]` — cada segmento tem
+     `channelId` (0/1 → separa interlocutores), `start`, `end`, `text` e
+     `words[]`. Há `transcription_status` (`DONE`) e info do utilizador/agente.
+   - **Concatenar os `speeches[].text`** dá o diálogo completo, sem qualquer
+     síntese de IA. Pode-se prefixar por canal (ex.: `Agente:` / `Cliente:`).
+   - **Prova de valor (mesma chamada):** resumo (`note`) = 606 caracteres;
+     transcrição concatenada = **2828 caracteres / 40 segmentos** (~4,7×), com
+     o diálogo literal ("*Olá, sou a Ana de Alfa Seguros…*").
+   - Endpoints úteis confirmados: `GET /transcriptions` (lista),
+     `GET /transcriptions/{call_id}` (por chamada). A chave da API está nos
+     workflows Ringover do n8n (`Authorization: <key>`, sem prefixo Bearer).
+   - **Ressalvas:** só chamadas **gravadas** têm transcrição; verificar
+     cobertura (nem todas terão `record`/transcrição) e o `transcription_status`
+     (pode estar pendente em chamadas recentes). Tratar 404/vazio com fallback
+     para o `note`.
+   - **A FAZER:** método `getTranscription(callId)` no cliente Ringover +
+     concatenador; alimentar a transcrição (em vez do `note`) ao grupo/legs.
 
 **Onde mexe (quando for feito):**
 - `lib/ringover/` — cliente + tipos (novo campo/endpoint de transcrição, ou
