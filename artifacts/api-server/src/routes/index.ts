@@ -11,6 +11,7 @@ import actionsRouter from "./actions.js";
 import followupsRouter from "./followups.js";
 import emailSummaryRouter from "./email-summary.js";
 import alertasRouter from "./alertas.js";
+import checklistAdminRouter from "./checklist-admin.js";
 import statsRouter from "./stats.js";
 import { requireAuth } from "../middleware/require-auth.js";
 
@@ -25,6 +26,8 @@ router.use(emailSummaryRouter);
 router.use(alertasRouter);
 // /api/run has its own cron-secret guard; move before requireAuth so n8n can call it
 router.use(runsRouter);
+// Checklist admin (seed/backfill/stats) — cron-secret guarded, before requireAuth
+router.use(checklistAdminRouter);
 
 // Protected routes — must be authenticated
 router.use(requireAuth);

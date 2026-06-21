@@ -1,4 +1,4 @@
-import { and, eq, gte, lte, or, type SQL } from "drizzle-orm";
+import { and, eq, gte, lte, or, sql, type SQL } from "drizzle-orm";
 import {
   db,
   conversationsTable,
@@ -172,6 +172,65 @@ export interface CategoriaMeta {
   fase: string;
   obrigatoria: boolean;
   ordem: number;
+}
+
+export interface ConversationRow {
+  id: number;
+  customerPhone: string;
+  agentId: string | null;
+  agentName: string | null;
+  durationSec: number | null;
+  legsJson: unknown;
+  callIds: string[];
+  recordingUrls: string[];
+}
+
+/** All conversations for a run date (for the Vida checklist backfill). */
+export async function loadConversationsForDate(date: string): Promise<ConversationRow[]> {
+  return db
+    .select({
+      id: conversationsTable.id,
+      customerPhone: conversationsTable.customerPhone,
+      agentId: conversationsTable.agentId,
+      agentName: conversationsTable.agentName,
+      durationSec: conversationsTable.durationSec,
+      legsJson: conversationsTable.legsJson,
+      callIds: conversationsTable.callIds,
+      recordingUrls: conversationsTable.recordingUrls,
+    })
+    .from(conversationsTable)
+    .where(eq(conversationsTable.runDate, date));
+}
+
+/** Number of conversations on a date whose agent is a Vida operator. */
+export async function countVidaConversationsForDate(date: string): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(conversationsTable)
+    .innerJoin(colaboradoresTable, eq(colaboradoresTable.ringoverUserId, conversationsTable.agentId))
+    .where(and(eq(conversationsTable.runDate, date), eq(colaboradoresTable.equipa, "vida")));
+  return row?.n ?? 0;
+}
+
+export interface ChecklistDistribution {
+  total: number;
+  chamadas: number;
+  porEstado: Array<{ estado: string; n: number }>;
+}
+
+/** Global distribution of checklist result states (diagnostics). */
+export async function checklistDistribution(): Promise<ChecklistDistribution> {
+  const [tot] = await db
+    .select({
+      total: sql<number>`count(*)::int`,
+      chamadas: sql<number>`count(distinct ${callChecklistResultsTable.conversationId})::int`,
+    })
+    .from(callChecklistResultsTable);
+  const porEstado = await db
+    .select({ estado: callChecklistResultsTable.estado, n: sql<number>`count(*)::int` })
+    .from(callChecklistResultsTable)
+    .groupBy(callChecklistResultsTable.estado);
+  return { total: tot?.total ?? 0, chamadas: tot?.chamadas ?? 0, porEstado };
 }
 
 /** Active operators of a team. */
