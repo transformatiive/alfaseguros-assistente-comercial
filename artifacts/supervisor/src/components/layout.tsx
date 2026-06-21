@@ -14,9 +14,14 @@ import { useAuth } from "@/lib/auth-context";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
 
   const initials = user?.username?.slice(0, 2).toUpperCase() ?? "SV";
+
+  const navLinks = [
+    { href: "/", label: "Resumo Diário" },
+    { href: "/checklist", label: "Checklist Vida" },
+  ];
 
   const handleLogout = async () => {
     await logout();
@@ -30,6 +35,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <Building className="h-4 w-4 text-sidebar-primary" />
           <span className="font-semibold text-sm tracking-tight">Alfaseguros</span>
         </div>
+
+        <nav className="flex items-center gap-1 ml-6">
+          {navLinks.map((l) => {
+            const active = l.href === "/" ? location === "/" : location.startsWith(l.href);
+            return (
+              <Link
+                key={l.href}
+                href={l.href}
+                className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
+                  active
+                    ? "bg-sidebar-accent text-sidebar-foreground font-medium"
+                    : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+                }`}
+              >
+                {l.label}
+              </Link>
+            );
+          })}
+        </nav>
 
         <div className="flex-1" />
 
