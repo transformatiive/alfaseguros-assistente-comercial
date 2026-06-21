@@ -67,11 +67,10 @@ describe("groupIntoConversations", () => {
     expect(out.map((c) => c.customerPhone).sort()).toEqual(["351911111111", "351922222222"]);
   });
 
-  it("drops unanalyzable calls (unanswered, short note, Vida team)", () => {
+  it("drops unanalyzable calls (unanswered, short note)", () => {
     const out = groupIntoConversations([
       call({ cdr_id: 1, is_answered: false }), // unanswered
       call({ cdr_id: 2, note: "tt" }), // too short
-      call({ cdr_id: 3, user: { user_id: 23185416 } }), // Hélio
       call({ cdr_id: 4 }), // OK
     ]);
     expect(out).toHaveLength(1);

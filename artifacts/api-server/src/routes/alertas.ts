@@ -8,7 +8,22 @@
  */
 import { Router, type IRouter, type RequestHandler } from "express";
 import { env } from "../lib/env.js";
-import { loadEligibleAlerts, confirmarAlertas } from "../storage/repo.js";
+import {
+  loadEligibleAlerts,
+  confirmarAlertas,
+  loadPointEvaluations,
+  loadCategorias,
+  loadChecklistForPrompt,
+} from "../storage/repo.js";
+import {
+  computeAllCategoryStats,
+  MIN_CHAMADAS_PADRAO_DEFAULT,
+} from "../analysis/category-stats.js";
+import {
+  renderColaboradorDigest,
+  renderEquipaResumo,
+  type ResumoCategoria,
+} from "../lib/email-template.js";
 
 const router: IRouter = Router();
 
@@ -49,7 +64,8 @@ router.get("/alertas-dia", requireToken, async (req, res): Promise<void> => {
       ? req.query.data
       : todayLisbon();
 
-  const rows = await loadEligibleAlerts(data);
+  const incluirEnviados = req.query.preview === "true";
+  const rows = await loadEligibleAlerts(data, { incluirEnviados });
 
   // Two-level grouping: operator → point. The digest lists each failed POINT
   // once (with how many calls it failed + a few example calls), not one line
@@ -101,6 +117,17 @@ router.get("/alertas-dia", requireToken, async (req, res): Promise<void> => {
       email: b.email,
       total_pontos: pontos.length,
       pontos,
+      // Ready-to-send branded HTML (logo + cards) so n8n just forwards it.
+      htmlEmail: renderColaboradorDigest({
+        nome: b.nome ?? "colega",
+        data,
+        pontos: pontos.map((p) => ({
+          validacao: p.validacao,
+          chamadas_falhadas: p.chamadas_falhadas,
+          motivo: p.motivo,
+          mensagemMelhoria: p.mensagemMelhoria,
+        })),
+      }),
     };
   });
 
@@ -109,6 +136,59 @@ router.get("/alertas-dia", requireToken, async (req, res): Promise<void> => {
     total_incumprimentos: rows.length,
     colaboradores,
   });
+});
+
+function minChamadas(): number {
+  const raw = process.env["MIN_CHAMADAS_PADRAO"];
+  const n = raw ? Number.parseInt(raw, 10) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : MIN_CHAMADAS_PADRAO_DEFAULT;
+}
+
+/**
+ * GET /api/resumo-checklist-dia?data=YYYY-MM-DD
+ * Coordinator team summary (dashboard-style, branded HTML) for the Vida lead.
+ */
+router.get("/resumo-checklist-dia", requireToken, async (req, res): Promise<void> => {
+  const data =
+    typeof req.query.data === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.data)
+      ? req.query.data
+      : todayLisbon();
+
+  const [evals, cats, items] = await Promise.all([
+    loadPointEvaluations({ de: data, ate: data }),
+    loadCategorias("vida", "primeiro_contacto"),
+    loadChecklistForPrompt("vida", "primeiro_contacto"),
+  ]);
+  const itemNome = new Map(items.map((i) => [i.id, i.validacao || i.texto]));
+  const catMeta = new Map(cats.map((c) => [c.id, c]));
+  const stats = computeAllCategoryStats(evals, { minChamadas: minChamadas() });
+
+  let cumprido = 0;
+  let aplicavel = 0;
+  let chamadas = 0;
+  const categorias: ResumoCategoria[] = stats.map((s) => {
+    cumprido += s.cumprido;
+    aplicavel += s.aplicavel;
+    chamadas = Math.max(chamadas, s.cobertura);
+    const meta = catMeta.get(s.categoryId);
+    return {
+      nome: meta?.nome ?? `Categoria ${s.categoryId}`,
+      obrigatoria: meta?.obrigatoria ?? false,
+      taxaPercent: s.exibePercentagem && s.taxa !== null ? Math.round(s.taxa * 100) : null,
+      exibePercentagem: s.exibePercentagem,
+      absoluto: s.absoluto,
+      cobertura: s.cobertura,
+      cumprido: s.cumprido,
+      naoCumprido: s.naoCumprido,
+      pontoMaisFracoNome: s.pontoMaisFraco ? (itemNome.get(s.pontoMaisFraco.itemId) ?? null) : null,
+    };
+  });
+
+  const taxaPct = aplicavel > 0 ? Math.round((cumprido / aplicavel) * 100) : null;
+  const naoCumprido = aplicavel - cumprido;
+  const htmlEmail = renderEquipaResumo({ data, kpis: { chamadas, taxaPct, naoCumprido }, categorias });
+
+  res.json({ data, kpis: { chamadas, taxaPct, cumprido, naoCumprido }, categorias, htmlEmail });
 });
 
 /**

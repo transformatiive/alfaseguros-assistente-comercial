@@ -97,7 +97,7 @@ describe("isAnalyzable", () => {
     expect(isAnalyzable(call({ note: null }))).toBe(false);
   });
 
-  it("rejects Vida-team agents (Hélio Vazão, user_id 23185416)", () => {
-    expect(isAnalyzable(call({ user: { user_id: 23185416, firstname: "Hélio", lastname: "Vazão" } }))).toBe(false);
+  it("now accepts the former Vida exclusion (VIDA_AGENT_IDS is empty)", () => {
+    expect(isAnalyzable(call({ user: { user_id: 23185416, firstname: "Hélio", lastname: "Vazão" } }))).toBe(true);
   });
 });
