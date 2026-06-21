@@ -1,4 +1,4 @@
-import { and, eq, gte, lte, type SQL } from "drizzle-orm";
+import { and, eq, gte, lte, or, type SQL } from "drizzle-orm";
 import {
   db,
   conversationsTable,
@@ -19,6 +19,7 @@ import type { PointEvaluation, Estado } from "../analysis/category-stats.js";
  */
 
 type Fase = "primeiro_contacto" | "follow_up" | "proposta" | "pos_venda";
+type Equipa = "360" | "vida" | "admin" | "mkt" | "sinistros";
 
 /**
  * Load the active checklist for a scope/phase, shaped for the LLM prompt.
@@ -163,4 +164,168 @@ export async function loadPointEvaluations(
     itemId: r.itemId,
     estado: r.estado as Estado,
   }));
+}
+
+export interface CategoriaMeta {
+  id: number;
+  nome: string;
+  fase: string;
+  obrigatoria: boolean;
+  ordem: number;
+}
+
+/** Active operators of a team. */
+export async function loadColaboradores(equipa: Equipa): Promise<Colaborador[]> {
+  return db
+    .select()
+    .from(colaboradoresTable)
+    .where(and(eq(colaboradoresTable.equipa, equipa), eq(colaboradoresTable.ativo, true)))
+    .orderBy(colaboradoresTable.nome);
+}
+
+export interface ConversationBasic {
+  id: number;
+  customerPhone: string;
+  agentName: string | null;
+  runDate: string;
+  faseDetectada: string | null;
+  colaboradorId: number | null;
+  analysisJson: unknown;
+}
+
+/** Minimal conversation row for the drill-down detail. Null if absent. */
+export async function loadConversationBasic(id: number): Promise<ConversationBasic | null> {
+  const [row] = await db
+    .select({
+      id: conversationsTable.id,
+      customerPhone: conversationsTable.customerPhone,
+      agentName: conversationsTable.agentName,
+      runDate: conversationsTable.runDate,
+      faseDetectada: conversationsTable.faseDetectada,
+      colaboradorId: conversationsTable.colaboradorId,
+      analysisJson: conversationsTable.analysisJson,
+    })
+    .from(conversationsTable)
+    .where(eq(conversationsTable.id, id))
+    .limit(1);
+  return row ?? null;
+}
+
+/** Category metadata for a scope (to enrich the aggregated stats with names). */
+export async function loadCategorias(escopo: string, fase?: Fase): Promise<CategoriaMeta[]> {
+  const conds: SQL[] = [
+    eq(checklistCategoriesTable.escopo, escopo),
+    eq(checklistCategoriesTable.ativo, true),
+  ];
+  if (fase) conds.push(eq(checklistCategoriesTable.fase, fase));
+  return db
+    .select({
+      id: checklistCategoriesTable.id,
+      nome: checklistCategoriesTable.nome,
+      fase: checklistCategoriesTable.fase,
+      obrigatoria: checklistCategoriesTable.obrigatoria,
+      ordem: checklistCategoriesTable.ordem,
+    })
+    .from(checklistCategoriesTable)
+    .where(and(...conds))
+    .orderBy(checklistCategoriesTable.ordem);
+}
+
+export interface ConversationChecklistRow {
+  itemId: number;
+  categoryId: number;
+  categoria: string;
+  validacao: string;
+  texto: string;
+  estado: Estado;
+  evidencia: string | null;
+}
+
+/** All checklist results for one conversation, with item + category labels. */
+export async function loadChecklistResultsForConversation(
+  conversationId: number,
+): Promise<ConversationChecklistRow[]> {
+  const rows = await db
+    .select({
+      itemId: callChecklistResultsTable.itemId,
+      categoryId: checklistItemsTable.categoryId,
+      categoria: checklistCategoriesTable.nome,
+      validacao: checklistItemsTable.validacao,
+      texto: checklistItemsTable.texto,
+      estado: callChecklistResultsTable.estado,
+      evidencia: callChecklistResultsTable.evidencia,
+      ordemCat: checklistCategoriesTable.ordem,
+      ordemItem: checklistItemsTable.ordem,
+    })
+    .from(callChecklistResultsTable)
+    .innerJoin(checklistItemsTable, eq(callChecklistResultsTable.itemId, checklistItemsTable.id))
+    .innerJoin(
+      checklistCategoriesTable,
+      eq(checklistItemsTable.categoryId, checklistCategoriesTable.id),
+    )
+    .where(eq(callChecklistResultsTable.conversationId, conversationId))
+    .orderBy(checklistCategoriesTable.ordem, checklistItemsTable.ordem);
+
+  return rows.map((r) => ({
+    itemId: r.itemId,
+    categoryId: r.categoryId,
+    categoria: r.categoria,
+    validacao: r.validacao,
+    texto: r.texto,
+    estado: r.estado as Estado,
+    evidencia: r.evidencia,
+  }));
+}
+
+export interface EligibleAlertRow {
+  conversationId: number;
+  colaboradorId: number | null;
+  colaboradorNome: string | null;
+  colaboradorEmail: string | null;
+  itemId: number;
+  categoria: string;
+  validacao: string;
+  texto: string;
+  mensagemMelhoria: string;
+  compliance: boolean;
+  categoriaObrigatoria: boolean;
+}
+
+/**
+ * Eligible non-compliances for a given day: estado = nao_cumprido AND
+ * (category.obrigatoria OR item.compliance). Joined with the operator so the
+ * n8n digest has names/emails. Drives GET /api/alertas-dia.
+ */
+export async function loadEligibleAlerts(data: string): Promise<EligibleAlertRow[]> {
+  const rows = await db
+    .select({
+      conversationId: callChecklistResultsTable.conversationId,
+      colaboradorId: callChecklistResultsTable.colaboradorId,
+      colaboradorNome: colaboradoresTable.nome,
+      colaboradorEmail: colaboradoresTable.email,
+      itemId: callChecklistResultsTable.itemId,
+      categoria: checklistCategoriesTable.nome,
+      validacao: checklistItemsTable.validacao,
+      texto: checklistItemsTable.texto,
+      mensagemMelhoria: checklistItemsTable.mensagemMelhoria,
+      compliance: checklistItemsTable.compliance,
+      categoriaObrigatoria: checklistCategoriesTable.obrigatoria,
+    })
+    .from(callChecklistResultsTable)
+    .innerJoin(checklistItemsTable, eq(callChecklistResultsTable.itemId, checklistItemsTable.id))
+    .innerJoin(
+      checklistCategoriesTable,
+      eq(checklistItemsTable.categoryId, checklistCategoriesTable.id),
+    )
+    .innerJoin(conversationsTable, eq(callChecklistResultsTable.conversationId, conversationsTable.id))
+    .leftJoin(colaboradoresTable, eq(callChecklistResultsTable.colaboradorId, colaboradoresTable.id))
+    .where(
+      and(
+        eq(conversationsTable.runDate, data),
+        eq(callChecklistResultsTable.estado, "nao_cumprido"),
+        or(eq(checklistCategoriesTable.obrigatoria, true), eq(checklistItemsTable.compliance, true)),
+      ),
+    );
+
+  return rows;
 }
