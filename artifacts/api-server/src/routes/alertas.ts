@@ -162,6 +162,7 @@ router.get("/resumo-checklist-dia", requireToken, async (req, res): Promise<void
   ]);
   const itemNome = new Map(items.map((i) => [i.id, i.validacao || i.texto]));
   const itemCriterio = new Map(items.map((i) => [i.id, i.texto]));
+  const itemMensagem = new Map(items.map((i) => [i.id, i.mensagemMelhoria]));
   const catMeta = new Map(cats.map((c) => [c.id, c]));
   const stats = computeAllCategoryStats(evals, { minChamadas: minChamadas() });
 
@@ -184,6 +185,9 @@ router.get("/resumo-checklist-dia", requireToken, async (req, res): Promise<void
       naoCumprido: s.naoCumprido,
       pontoMaisFracoNome: s.pontoMaisFraco ? (itemNome.get(s.pontoMaisFraco.itemId) ?? null) : null,
       pontoMaisFracoCriterio: s.pontoMaisFraco ? (itemCriterio.get(s.pontoMaisFraco.itemId) ?? null) : null,
+      pontoMaisFracoMensagem: s.pontoMaisFraco ? (itemMensagem.get(s.pontoMaisFraco.itemId) ?? null) : null,
+      pontoMaisFracoTaxa: s.pontoMaisFraco ? s.pontoMaisFraco.taxa : null,
+      pontoMaisFracoAplicavel: s.pontoMaisFraco ? s.pontoMaisFraco.aplicavel : null,
     };
   });
 
