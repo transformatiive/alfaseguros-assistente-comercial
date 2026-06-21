@@ -120,6 +120,9 @@ export interface ResumoCategoria {
   naoCumprido: number;
   pontoMaisFracoNome: string | null;
   pontoMaisFracoCriterio: string | null;
+  pontoMaisFracoMensagem: string | null;
+  pontoMaisFracoTaxa: number | null; // 0..1 — weakest point's compliance
+  pontoMaisFracoAplicavel: number | null;
 }
 export interface ResumoKpis {
   chamadas: number;
@@ -154,10 +157,18 @@ export function renderEquipaResumo(input: { data: string; kpis: ResumoKpis; cate
       const taxa = c.exibePercentagem && c.taxaPercent !== null
         ? `<span style="font-family:Georgia,serif;font-size:22px;color:${rateColor(c.taxaPercent)}">${c.taxaPercent}%</span>`
         : `<span style="font-size:14px;color:${BODY}">${esc(c.absoluto)} <span style="color:${AMBER};font-size:11px">(amostra pequena)</span></span>`;
+      const falha = c.pontoMaisFracoTaxa !== null
+        ? `<div style="font-size:12px;color:${BODY};margin-top:6px;line-height:1.5"><span style="color:${MUTE}">O que está a falhar:</span> cumprido em apenas <strong style="color:${rateColor(Math.round(c.pontoMaisFracoTaxa * 100))}">${Math.round(c.pontoMaisFracoTaxa * 100)}%</strong>${c.pontoMaisFracoAplicavel !== null ? ` de ${c.pontoMaisFracoAplicavel} ${c.pontoMaisFracoAplicavel === 1 ? "chamada aplicável" : "chamadas aplicáveis"}` : ""}.</div>`
+        : "";
+      const melhoria = c.pontoMaisFracoMensagem
+        ? `<div style="font-size:12px;color:${BODY};margin-top:5px;line-height:1.5"><strong style="color:${ORANGE}">Como melhorar:</strong> ${esc(c.pontoMaisFracoMensagem)}</div>`
+        : "";
       const driver = c.pontoMaisFracoNome
-        ? `<div style="margin-top:10px;padding:10px 12px;background:#fff8f0;border-left:3px solid ${AMBER};border-radius:0 6px 6px 0">
+        ? `<div style="margin-top:10px;padding:11px 13px;background:#fff8f0;border-left:3px solid ${AMBER};border-radius:0 6px 6px 0">
             <div style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:${MUTE}">Ponto mais fraco · ${esc(c.pontoMaisFracoNome)}</div>
             <div style="font-size:13px;color:${INK};font-weight:600;margin-top:3px;line-height:1.4">${esc(c.pontoMaisFracoCriterio ?? c.pontoMaisFracoNome)}</div>
+            ${falha}
+            ${melhoria}
           </div>`
         : "";
       const obr = c.obrigatoria ? badge("Obrigatória", RED) : "";
