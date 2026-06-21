@@ -729,6 +729,9 @@ importers:
 
   scripts:
     dependencies:
+      '@workspace/db':
+        specifier: workspace:*
+        version: link:../lib/db
       '@workspace/ringover':
         specifier: workspace:*
         version: link:../lib/ringover

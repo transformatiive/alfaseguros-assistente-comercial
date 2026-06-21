@@ -17,12 +17,12 @@
  */
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { and, eq } from "drizzle-orm";
-import * as schema from "../schema/index.js";
+import * as schema from "../schema/index";
 import {
   colaboradoresTable,
   checklistCategoriesTable,
   checklistItemsTable,
-} from "../schema/index.js";
+} from "../schema/index";
 
 type DB = NodePgDatabase<typeof schema>;
 
