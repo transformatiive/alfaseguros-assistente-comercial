@@ -13,7 +13,7 @@ import {
   confirmarAlertas,
   loadPointEvaluations,
   loadCategorias,
-  loadChecklistForPrompt,
+  loadChecklistLabels,
 } from "../storage/repo.js";
 import {
   computeAllCategoryStats,
@@ -123,6 +123,7 @@ router.get("/alertas-dia", requireToken, async (req, res): Promise<void> => {
         data,
         pontos: pontos.map((p) => ({
           validacao: p.validacao,
+          texto: p.texto,
           chamadas_falhadas: p.chamadas_falhadas,
           motivo: p.motivo,
           mensagemMelhoria: p.mensagemMelhoria,
@@ -157,9 +158,10 @@ router.get("/resumo-checklist-dia", requireToken, async (req, res): Promise<void
   const [evals, cats, items] = await Promise.all([
     loadPointEvaluations({ de: data, ate: data }),
     loadCategorias("vida", "primeiro_contacto"),
-    loadChecklistForPrompt("vida", "primeiro_contacto"),
+    loadChecklistLabels("vida", "primeiro_contacto"),
   ]);
   const itemNome = new Map(items.map((i) => [i.id, i.validacao || i.texto]));
+  const itemCriterio = new Map(items.map((i) => [i.id, i.texto]));
   const catMeta = new Map(cats.map((c) => [c.id, c]));
   const stats = computeAllCategoryStats(evals, { minChamadas: minChamadas() });
 
@@ -181,6 +183,7 @@ router.get("/resumo-checklist-dia", requireToken, async (req, res): Promise<void
       cumprido: s.cumprido,
       naoCumprido: s.naoCumprido,
       pontoMaisFracoNome: s.pontoMaisFraco ? (itemNome.get(s.pontoMaisFraco.itemId) ?? null) : null,
+      pontoMaisFracoCriterio: s.pontoMaisFraco ? (itemCriterio.get(s.pontoMaisFraco.itemId) ?? null) : null,
     };
   });
 

@@ -57,6 +57,45 @@ export async function loadChecklistForPrompt(
   return rows;
 }
 
+/** Item label set for dashboards/emails: short tag + full criterion + coaching tip. */
+export interface ChecklistItemLabel {
+  id: number;
+  validacao: string;
+  texto: string;
+  mensagemMelhoria: string;
+}
+
+/**
+ * Load id → { validacao, texto, mensagemMelhoria } for a scope/phase. Used to
+ * surface the *measured criterion* (and how to improve it) in the dashboard and
+ * the coordinator/coaching emails — not just the cryptic short tag.
+ */
+export async function loadChecklistLabels(
+  escopo: string,
+  fase: Fase,
+): Promise<ChecklistItemLabel[]> {
+  return db
+    .select({
+      id: checklistItemsTable.id,
+      validacao: checklistItemsTable.validacao,
+      texto: checklistItemsTable.texto,
+      mensagemMelhoria: checklistItemsTable.mensagemMelhoria,
+    })
+    .from(checklistItemsTable)
+    .innerJoin(
+      checklistCategoriesTable,
+      eq(checklistItemsTable.categoryId, checklistCategoriesTable.id),
+    )
+    .where(
+      and(
+        eq(checklistCategoriesTable.escopo, escopo),
+        eq(checklistCategoriesTable.fase, fase),
+        eq(checklistCategoriesTable.ativo, true),
+        eq(checklistItemsTable.ativo, true),
+      ),
+    );
+}
+
 /** Resolve an operator by their Ringover user_id (the call agent id). */
 export async function resolveColaboradorByRingoverId(
   ringoverUserId: string,
