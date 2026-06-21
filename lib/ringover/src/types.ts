@@ -42,3 +42,31 @@ export const listCallsResponseSchema = z.object({
 }).passthrough();
 
 export type ListCallsResponse = z.infer<typeof listCallsResponseSchema>;
+
+/** One transcribed speech segment. `channelId` separates the two speakers. */
+export const ringoverSpeechSchema = z.object({
+  channelId: z.number().nullish(),
+  start: z.number().nullish(),
+  end: z.number().nullish(),
+  text: z.string().nullish(),
+}).passthrough();
+
+export type RingoverSpeech = z.infer<typeof ringoverSpeechSchema>;
+
+/** A call transcription from GET /transcriptions/{call_id}. */
+export const ringoverTranscriptionSchema = z.object({
+  call_id: z.union([z.number(), z.string()]).nullish(),
+  cdr_id: z.union([z.number(), z.string()]).nullish(),
+  transcription_status: z.string().nullish(),
+  transcription_data: z.object({
+    text: z.string().nullish(),
+    duration: z.number().nullish(),
+    speeches: z.array(ringoverSpeechSchema).nullish(),
+  }).nullish(),
+}).passthrough();
+
+export type RingoverTranscription = z.infer<typeof ringoverTranscriptionSchema>;
+
+/** GET /transcriptions/{call_id} returns a list (usually one item). */
+export const transcriptionsResponseSchema = z.array(ringoverTranscriptionSchema);
+

@@ -1,7 +1,9 @@
 import {
   listCallsResponseSchema,
   ringoverUserSchema,
+  transcriptionsResponseSchema,
   type RingoverCall,
+  type RingoverTranscription,
   type RingoverUser,
 } from "./types.js";
 
@@ -138,6 +140,32 @@ export class RingoverClient {
         : [];
     if (!Array.isArray(rawList)) return [];
     return rawList.map((u) => ringoverUserSchema.parse(u));
+  }
+
+  /**
+   * Fetch the full transcription for a call (GET /transcriptions/{call_id}).
+   * Returns null on 404 / empty / unparseable response so callers can fall back
+   * to the `note` summary. Use {@link concatenateTranscript} to render it.
+   */
+  async getTranscription(callId: string | number): Promise<RingoverTranscription | null> {
+    const res = await this.fetchImpl(`${this.baseUrl}/transcriptions/${callId}`, {
+      method: "GET",
+      headers: {
+        Authorization: this.apiKey,
+        Accept: "application/json",
+      },
+    });
+
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      const body = await safeText(res);
+      throw new RingoverError(res.status, body, `Ringover GET /transcriptions failed (${res.status})`);
+    }
+
+    const json: unknown = await res.json();
+    const parsed = transcriptionsResponseSchema.safeParse(json);
+    if (!parsed.success || parsed.data.length === 0) return null;
+    return parsed.data[0];
   }
 }
 
