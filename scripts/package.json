@@ -7,9 +7,11 @@
     "hello": "tsx ./src/hello.ts",
     "zoho:probe-tickets": "tsx ./src/zoho-probe-tickets.ts",
     "ringover:probe-users": "tsx ./src/ringover-probe-users.ts",
+    "db:seed:vida": "tsx ./src/seed-vida-fase1.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@workspace/db": "workspace:*",
     "@workspace/ringover": "workspace:*",
     "@workspace/zoho-desk": "workspace:*"
   },
