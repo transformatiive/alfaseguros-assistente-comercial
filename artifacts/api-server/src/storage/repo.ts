@@ -67,6 +67,16 @@ export async function resolveColaboradorByRingoverId(
   return row ?? null;
 }
 
+/** True if a conversation already has any checklist result (cache guard). */
+export async function hasChecklistResults(conversationId: number): Promise<boolean> {
+  const [row] = await db
+    .select({ id: callChecklistResultsTable.id })
+    .from(callChecklistResultsTable)
+    .where(eq(callChecklistResultsTable.conversationId, conversationId))
+    .limit(1);
+  return row != null;
+}
+
 export interface SaveChecklistInput {
   conversationId: number;
   colaboradorId: number | null;

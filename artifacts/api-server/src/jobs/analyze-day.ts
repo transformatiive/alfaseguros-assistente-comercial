@@ -31,6 +31,7 @@ import { logger } from "../lib/logger.js";
 import { publishRunEvent } from "./bus.js";
 import { syncTickets } from "./sync-tickets.js";
 import { buildCases, CASE_PROXIMITY_DAYS } from "../cases/linker.js";
+import { runVidaChecklistPass } from "./vida-checklist.js";
 import type { ConversationAnalysis } from "../analysis/schema.js";
 
 export interface AnalyzeDayOptions {
@@ -353,6 +354,29 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
         })
         .where(eq(runsTable.date, date));
     });
+
+    // Vida checklist pass (V2) — additive + isolated: runs only for Vida-team
+    // conversations and writes only to the V2 tables. The 360 narrative pipeline
+    // and existing emails are untouched. Wrapped so a failure never breaks the run.
+    try {
+      const vida = await runVidaChecklistPass({
+        groups,
+        rowIdByPhone,
+        client: openrouter,
+        model,
+        concurrency: cfg.ANALYSIS_CONCURRENCY,
+        force,
+      });
+      if (vida.costUsd > 0) {
+        totalCost += vida.costUsd;
+        await db
+          .update(runsTable)
+          .set({ totalCostUsd: totalCost.toFixed(6) })
+          .where(eq(runsTable.date, date));
+      }
+    } catch (err) {
+      logger.warn({ date, err }, "Vida checklist pass failed");
+    }
 
     // Enrich analyzed conversations with related Zoho tickets + comment threads
     // (for daily summary and operator coaching). Re-fetched after Phase 2A so
