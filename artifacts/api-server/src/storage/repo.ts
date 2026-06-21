@@ -382,7 +382,13 @@ export async function loadEligibleAlerts(data: string): Promise<EligibleAlertRow
       and(
         eq(conversationsTable.runDate, data),
         eq(callChecklistResultsTable.estado, "nao_cumprido"),
-        or(eq(checklistCategoriesTable.obrigatoria, true), eq(checklistItemsTable.compliance, true)),
+        // Eligible = obligatory category (non-conditional points only) OR a
+        // compliance point (always). Conditional points never alert via the
+        // category, only as compliance.
+        or(
+          and(eq(checklistCategoriesTable.obrigatoria, true), eq(checklistItemsTable.condicional, false)),
+          eq(checklistItemsTable.compliance, true),
+        ),
       ),
     );
 
