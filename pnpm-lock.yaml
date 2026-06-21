@@ -729,6 +729,9 @@ importers:
 
   scripts:
     dependencies:
+      '@workspace/ringover':
+        specifier: workspace:*
+        version: link:../lib/ringover
       '@workspace/zoho-desk':
         specifier: workspace:*
         version: link:../lib/zoho-desk
