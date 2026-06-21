@@ -356,7 +356,10 @@ export interface EligibleAlertRow {
  * (category.obrigatoria OR item.compliance). Joined with the operator so the
  * n8n digest has names/emails. Drives GET /api/alertas-dia.
  */
-export async function loadEligibleAlerts(data: string): Promise<EligibleAlertRow[]> {
+export async function loadEligibleAlerts(
+  data: string,
+  opts: { incluirEnviados?: boolean } = {},
+): Promise<EligibleAlertRow[]> {
   const rows = await db
     .select({
       conversationId: callChecklistResultsTable.conversationId,
@@ -398,7 +401,8 @@ export async function loadEligibleAlerts(data: string): Promise<EligibleAlertRow
           and(eq(checklistCategoriesTable.obrigatoria, true), eq(checklistItemsTable.condicional, false)),
           eq(checklistItemsTable.compliance, true),
         ),
-        isNull(alertLogTable.id),
+        // For previews/demos, include already-sent pairs.
+        opts.incluirEnviados ? undefined : isNull(alertLogTable.id),
       ),
     );
 

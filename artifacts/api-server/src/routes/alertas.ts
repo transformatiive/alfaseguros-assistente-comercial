@@ -64,7 +64,8 @@ router.get("/alertas-dia", requireToken, async (req, res): Promise<void> => {
       ? req.query.data
       : todayLisbon();
 
-  const rows = await loadEligibleAlerts(data);
+  const incluirEnviados = req.query.preview === "true";
+  const rows = await loadEligibleAlerts(data, { incluirEnviados });
 
   // Two-level grouping: operator → point. The digest lists each failed POINT
   // once (with how many calls it failed + a few example calls), not one line
