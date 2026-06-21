@@ -5,6 +5,7 @@ import {
   loadColaboradores,
   loadConversationBasic,
   loadChecklistResultsForConversation,
+  loadChecklistForPrompt,
   type CategoriaMeta,
 } from "../storage/repo.js";
 import {
@@ -35,8 +36,8 @@ function readPeriod(req: { query: Record<string, unknown> }, res: import("expres
   return { de, ate };
 }
 
-/** Merge aggregated stats with category names/obrigatoriedade for the UI. */
-function enrich(stats: CategoryStats[], cats: CategoriaMeta[]) {
+/** Merge aggregated stats with category + weakest-point labels for the UI. */
+function enrich(stats: CategoryStats[], cats: CategoriaMeta[], itemNameById: Map<number, string>) {
   const byId = new Map(cats.map((c) => [c.id, c]));
   return stats.map((s) => {
     const meta = byId.get(s.categoryId);
@@ -46,8 +47,15 @@ function enrich(stats: CategoryStats[], cats: CategoriaMeta[]) {
       obrigatoria: meta?.obrigatoria ?? false,
       // Honesty guardrail surfaced explicitly: only send the % when allowed.
       taxaPercent: s.exibePercentagem && s.taxa !== null ? Math.round(s.taxa * 100) : null,
+      pontoMaisFracoNome: s.pontoMaisFraco ? (itemNameById.get(s.pontoMaisFraco.itemId) ?? null) : null,
     };
   });
+}
+
+/** Map item id → short label for the weakest-point display. */
+async function loadItemNames(): Promise<Map<number, string>> {
+  const items = await loadChecklistForPrompt(ESCOPO_VIDA, "primeiro_contacto");
+  return new Map(items.map((i) => [i.id, i.validacao || i.texto]));
 }
 
 // GET /api/stats/categoria?de&ate&colaborador_id
@@ -57,34 +65,37 @@ router.get("/stats/categoria", async (req, res): Promise<void> => {
   const colaboradorIdRaw = typeof req.query.colaborador_id === "string" ? Number.parseInt(req.query.colaborador_id, 10) : NaN;
   const colaboradorId = Number.isFinite(colaboradorIdRaw) ? colaboradorIdRaw : undefined;
 
-  const [evals, cats] = await Promise.all([
+  const [evals, cats, itemNames] = await Promise.all([
     loadPointEvaluations({ de: period.de, ate: period.ate, colaboradorId }),
     loadCategorias(ESCOPO_VIDA, "primeiro_contacto"),
+    loadItemNames(),
   ]);
   const stats = computeAllCategoryStats(evals, { minChamadas: minChamadas() });
-  res.json({ de: period.de, ate: period.ate, minChamadas: minChamadas(), categorias: enrich(stats, cats) });
+  res.json({ de: period.de, ate: period.ate, minChamadas: minChamadas(), categorias: enrich(stats, cats, itemNames) });
 });
 
 // GET /api/stats/equipa?de&ate — team aggregate incl. dispersion
 router.get("/stats/equipa", async (req, res): Promise<void> => {
   const period = readPeriod(req, res);
   if (!period) return;
-  const [evals, cats] = await Promise.all([
+  const [evals, cats, itemNames] = await Promise.all([
     loadPointEvaluations({ de: period.de, ate: period.ate }),
     loadCategorias(ESCOPO_VIDA, "primeiro_contacto"),
+    loadItemNames(),
   ]);
   const stats = computeAllCategoryStats(evals, { minChamadas: minChamadas() });
-  res.json({ de: period.de, ate: period.ate, minChamadas: minChamadas(), categorias: enrich(stats, cats) });
+  res.json({ de: period.de, ate: period.ate, minChamadas: minChamadas(), categorias: enrich(stats, cats, itemNames) });
 });
 
 // GET /api/stats/colaborador?de&ate — per-operator breakdown
 router.get("/stats/colaborador", async (req, res): Promise<void> => {
   const period = readPeriod(req, res);
   if (!period) return;
-  const [evals, cats, colaboradores] = await Promise.all([
+  const [evals, cats, colaboradores, itemNames] = await Promise.all([
     loadPointEvaluations({ de: period.de, ate: period.ate }),
     loadCategorias(ESCOPO_VIDA, "primeiro_contacto"),
     loadColaboradores(ESCOPO_VIDA),
+    loadItemNames(),
   ]);
 
   const evalsByColaborador = new Map<number, typeof evals>();
@@ -100,7 +111,7 @@ router.get("/stats/colaborador", async (req, res): Promise<void> => {
     return {
       colaboradorId: c.id,
       nome: c.nome,
-      categorias: enrich(stats, cats),
+      categorias: enrich(stats, cats, itemNames),
     };
   });
 
