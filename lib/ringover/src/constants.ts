@@ -10,12 +10,11 @@ export const ALFASEGUROS_NUMBERS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Ringover user_ids to exclude from analysis — Vida-team agents are out of
- * scope for the Não Vida supervisor.
+ * Ringover user_ids to exclude from analysis. Empty now: Hélio Vazão (the Vida
+ * coordinator) was previously excluded, but the V2 supervisor analyses the Vida
+ * team, so his calls are included too.
  */
-export const VIDA_AGENT_IDS: ReadonlySet<number> = new Set([
-  23185416, // Hélio Vazão
-]);
+export const VIDA_AGENT_IDS: ReadonlySet<number> = new Set([]);
 
 /** Minimum length of `note` (Ringover AI summary) to be worth analyzing. */
 export const MIN_NOTE_LENGTH = 50;
