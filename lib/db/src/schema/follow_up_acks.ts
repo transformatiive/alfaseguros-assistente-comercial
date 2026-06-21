@@ -1,5 +1,5 @@
 import { pgTable, serial, text, integer, timestamp, index } from "drizzle-orm/pg-core";
-import { conversationsTable } from "./conversations.js";
+import { conversationsTable } from "./conversations";
 
 /**
  * Tracks which follow-up promises have been emitted to Zoho Desk by n8n.

@@ -1,9 +1,9 @@
 import { pgTable, serial, text, integer, boolean, timestamp, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { conversationsTable } from "./conversations.js";
-import { checklistCategoriesTable, checklistItemsTable } from "./checklist.js";
-import { colaboradoresTable } from "./colaboradores.js";
+import { conversationsTable } from "./conversations";
+import { checklistCategoriesTable, checklistItemsTable } from "./checklist";
+import { colaboradoresTable } from "./colaboradores";
 
 /** Four-valued point state. Only cumprido/nao_cumprido count toward the rate. */
 export const ESTADOS = ["cumprido", "nao_cumprido", "nao_aplicavel", "indeterminado"] as const;
