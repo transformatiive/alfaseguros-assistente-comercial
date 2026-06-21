@@ -8,7 +8,7 @@
  */
 import { Router, type IRouter, type RequestHandler } from "express";
 import { env } from "../lib/env.js";
-import { loadEligibleAlerts } from "../storage/repo.js";
+import { loadEligibleAlerts, confirmarAlertas } from "../storage/repo.js";
 
 const router: IRouter = Router();
 
@@ -109,6 +109,20 @@ router.get("/alertas-dia", requireToken, async (req, res): Promise<void> => {
     total_incumprimentos: rows.length,
     colaboradores,
   });
+});
+
+/**
+ * POST /api/alertas-dia/confirmar?data=YYYY-MM-DD
+ * Called by n8n after the digest is sent: records the day's eligible alerts in
+ * alert_log so they are never re-sent (idempotency, incl. force re-analysis).
+ */
+router.post("/alertas-dia/confirmar", requireToken, async (req, res): Promise<void> => {
+  const data =
+    typeof req.query.data === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.data)
+      ? req.query.data
+      : todayLisbon();
+  const marcados = await confirmarAlertas(data);
+  res.json({ data, marcados });
 });
 
 export default router;

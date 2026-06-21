@@ -1,4 +1,4 @@
-import { and, eq, gte, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, eq, gte, lte, or, sql, isNull, type SQL } from "drizzle-orm";
 import {
   db,
   conversationsTable,
@@ -6,6 +6,7 @@ import {
   checklistCategoriesTable,
   checklistItemsTable,
   callChecklistResultsTable,
+  alertLogTable,
   type Colaborador,
 } from "@workspace/db";
 import type { ChecklistItemForPrompt } from "../analysis/checklist-prompt.js";
@@ -378,6 +379,14 @@ export async function loadEligibleAlerts(data: string): Promise<EligibleAlertRow
     )
     .innerJoin(conversationsTable, eq(callChecklistResultsTable.conversationId, conversationsTable.id))
     .leftJoin(colaboradoresTable, eq(callChecklistResultsTable.colaboradorId, colaboradoresTable.id))
+    // Idempotency: exclude (conversation, item) pairs already recorded as sent.
+    .leftJoin(
+      alertLogTable,
+      and(
+        eq(alertLogTable.conversationId, callChecklistResultsTable.conversationId),
+        eq(alertLogTable.itemId, callChecklistResultsTable.itemId),
+      ),
+    )
     .where(
       and(
         eq(conversationsTable.runDate, data),
@@ -389,8 +398,36 @@ export async function loadEligibleAlerts(data: string): Promise<EligibleAlertRow
           and(eq(checklistCategoriesTable.obrigatoria, true), eq(checklistItemsTable.condicional, false)),
           eq(checklistItemsTable.compliance, true),
         ),
+        isNull(alertLogTable.id),
       ),
     );
 
   return rows;
+}
+
+/**
+ * Mark the day's eligible alerts as sent (idempotency log). Inserts one
+ * alert_log row per eligible (conversation, item); the unique (conversation,
+ * item) index + ON CONFLICT DO NOTHING make repeated calls and force
+ * re-analysis safe — a sent alert is never re-sent. Returns rows newly marked.
+ */
+export async function confirmarAlertas(data: string): Promise<number> {
+  const pendentes = await loadEligibleAlerts(data); // already excludes sent
+  if (pendentes.length === 0) return 0;
+  await db
+    .insert(alertLogTable)
+    .values(
+      pendentes.map((r) => ({
+        conversationId: r.conversationId,
+        itemId: r.itemId,
+        colaboradorId: r.colaboradorId,
+        canal: "email" as const,
+        estadoEnvio: "enviado" as const,
+        enviadoEm: new Date(),
+      })),
+    )
+    .onConflictDoNothing({
+      target: [alertLogTable.conversationId, alertLogTable.itemId],
+    });
+  return pendentes.length;
 }
