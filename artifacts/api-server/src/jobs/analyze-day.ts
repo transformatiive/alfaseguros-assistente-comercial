@@ -12,7 +12,7 @@ import {
   ticketCommentsTable,
 } from "@workspace/db";
 import { OpenRouterClient } from "@workspace/openrouter";
-import { RingoverClient } from "@workspace/ringover";
+import { RingoverClient, isAnalyzable, concatenateTranscript } from "@workspace/ringover";
 import { ZohoAuth, ZohoDeskClient } from "@workspace/zoho-desk";
 import { phoneFingerprint } from "@workspace/phone";
 import { groupIntoConversations, type GroupedConversation } from "../grouping/conversations.js";
@@ -101,7 +101,37 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
     const [start, end] = lisbonDayBoundsISO(date);
     const calls = await ringover.listCallsBetween(start, end);
 
+    // Fetch the FULL transcription for each analyzable call and use it instead
+    // of Ringover's short AI `note` summary (applies to all teams). Falls back
+    // to the note when a transcription is missing/pending. Keyed by cdr_id,
+    // which is what the conversation legs use.
+    const analyzableCalls = calls.filter(isAnalyzable);
+    const transcriptByCdr = new Map<string, string>();
+    await mapWithConcurrency(analyzableCalls, cfg.ANALYSIS_CONCURRENCY, async (call) => {
+      const callId = call.call_id ?? call.cdr_id;
+      if (callId == null) return;
+      try {
+        const transcription = await ringover.getTranscription(callId);
+        const text = concatenateTranscript(transcription);
+        if (text) transcriptByCdr.set(String(call.cdr_id), text);
+      } catch (err) {
+        logger.warn({ cdrId: call.cdr_id, err }, "Transcription fetch failed; will fall back to note");
+      }
+    });
+    logger.info(
+      { date, analyzable: analyzableCalls.length, withTranscript: transcriptByCdr.size },
+      "Transcriptions fetched",
+    );
+
     const groups = groupIntoConversations(calls);
+
+    // Replace each leg's summary with the full transcript when available.
+    for (const g of groups) {
+      for (const leg of g.legs) {
+        const transcript = transcriptByCdr.get(leg.callId);
+        if (transcript) leg.ringoverSummary = transcript;
+      }
+    }
 
     // Upsert conversation rows; remember row ids so we can save analysis later.
     const rowIdByPhone = new Map<string, number>();

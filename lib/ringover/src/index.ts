@@ -23,7 +23,13 @@ export {
   listCallsResponseSchema,
   ringoverCallSchema,
   ringoverUserSchema,
+  ringoverSpeechSchema,
+  ringoverTranscriptionSchema,
+  transcriptionsResponseSchema,
   type ListCallsResponse,
   type RingoverCall,
   type RingoverUser,
+  type RingoverSpeech,
+  type RingoverTranscription,
 } from "./types.js";
+export { concatenateTranscript, type ConcatenateOptions } from "./transcript.js";
