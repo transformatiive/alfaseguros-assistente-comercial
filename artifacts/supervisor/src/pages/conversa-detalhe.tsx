@@ -1,4 +1,5 @@
-import { Link, useParams } from "wouter";
+import { useEffect } from "react";
+import { Link, useParams, useSearch } from "wouter";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -388,8 +389,22 @@ function InterleaveTimeline({
 
 export default function ConversaDetalhe() {
   const params = useParams<{ id: string }>();
-  const { dateStr } = useDateContext();
+  const search = useSearch();
+  const { dateStr: ctxDate, setSelectedDate } = useDateContext();
   const conversationId = parseInt(params.id ?? "", 10);
+
+  // Allow deep-links from the daily-summary email: /conversas/:id?date=YYYY-MM-DD.
+  // The API requires the conversation's runDate, so prefer the URL date over the
+  // global context, and sync the context so the rest of the page stays coherent.
+  const dateParam = new URLSearchParams(search).get("date");
+  const validDate = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : null;
+  const dateStr = validDate ?? ctxDate;
+
+  useEffect(() => {
+    if (validDate && validDate !== ctxDate) {
+      setSelectedDate(new Date(`${validDate}T12:00:00`));
+    }
+  }, [validDate, ctxDate, setSelectedDate]);
 
   const { data: conv, isLoading } = useGetConversation(dateStr, conversationId, {
     query: {
