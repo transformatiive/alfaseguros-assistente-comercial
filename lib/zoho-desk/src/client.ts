@@ -108,6 +108,39 @@ export class ZohoDeskClient {
   }
 
   /**
+   * Search tickets of a single `channel` created in `[createdTimeFrom,
+   * createdTimeTo]` via the Desk Search API, which filters server-side — so we
+   * fetch only the matching rows instead of paging the whole ticket stream.
+   * Newest first; paginated at 100 (Zoho's max).
+   */
+  async searchTicketsByChannel(params: {
+    channel: string;
+    createdTimeFrom: string;
+    createdTimeTo: string;
+    departmentId?: string;
+  }): Promise<ZohoTicket[]> {
+    const all: ZohoTicket[] = [];
+    let from = 0;
+    for (let page = 0; page < 40; page++) {
+      const json = await this.request("/tickets/search", {
+        channel: params.channel,
+        createdTimeRange: `${params.createdTimeFrom},${params.createdTimeTo}`,
+        sortBy: "-createdTime",
+        from: String(from),
+        limit: "100",
+        ...(params.departmentId ? { departmentId: params.departmentId } : {}),
+      });
+      const parsed = ticketsListResponseSchema.parse(json);
+      const batch = parsed.data ?? [];
+      if (batch.length === 0) break;
+      all.push(...batch);
+      if (batch.length < 100) break;
+      from += 100;
+    }
+    return all;
+  }
+
+  /**
    * Page through tickets created in `[createdTimeFrom, createdTimeTo]`.
    *
    * The Zoho Desk v1 API does not support date-range query parameters — only
