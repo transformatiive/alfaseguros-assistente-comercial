@@ -47,6 +47,8 @@ export interface ListTicketsParams {
   fields?: string[];
   /** Defaults to `contacts,assignee` per HANDOVER §1. */
   include?: string;
+  /** Restrict to a single Zoho Desk department (passed to every `/tickets` request). */
+  departmentId?: string;
 }
 
 export class ZohoDeskError extends Error {
@@ -117,11 +119,12 @@ export class ZohoDeskClient {
   async listTicketsCreatedBetween(params: ListTicketsParams): Promise<ZohoTicket[]> {
     const include = params.include ?? "contacts,assignee";
     const fields = (params.fields ?? DEFAULT_TICKET_FIELDS).join(",");
+    const departmentId = params.departmentId;
     const winFrom = new Date(params.createdTimeFrom).getTime();
     const winTo = new Date(params.createdTimeTo).getTime();
 
     // Step 1 — binary search for a safe starting offset (first ticket >= winFrom).
-    const startOffset = await this.binarySearchCreatedTime(winFrom);
+    const startOffset = await this.binarySearchCreatedTime(winFrom, departmentId);
 
     // Step 2 — paginate forward from startOffset, stopping once past winTo.
     const all: ZohoTicket[] = [];
@@ -134,6 +137,7 @@ export class ZohoDeskClient {
         include,
         fields,
         sortBy: "createdTime",
+        ...(departmentId ? { departmentId } : {}),
       });
       const parsed = ticketsListResponseSchema.parse(json);
       const batch = parsed.data ?? [];
@@ -162,7 +166,7 @@ export class ZohoDeskClient {
    * Uses only `from`, `limit=1`, and `sortBy=createdTime` — the minimal set
    * of parameters accepted by the Zoho Desk v1 `/tickets` endpoint.
    */
-  private async binarySearchCreatedTime(targetMs: number): Promise<number> {
+  private async binarySearchCreatedTime(targetMs: number, departmentId?: string): Promise<number> {
     let lo = 0;
     let hi = 200_000; // generous upper bound; binary search stays fast
 
@@ -172,6 +176,7 @@ export class ZohoDeskClient {
         from: String(mid),
         limit: "1",
         sortBy: "createdTime",
+        ...(departmentId ? { departmentId } : {}),
       });
       const parsed = ticketsListResponseSchema.parse(json);
       const batch = parsed.data ?? [];

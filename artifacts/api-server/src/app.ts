@@ -5,6 +5,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { pool } from "@workspace/db";
 import router from "./routes/index.js";
+import leadsRouter from "./routes/leads.js";
 import { logger } from "./lib/logger.js";
 import { env } from "./lib/env.js";
 
@@ -62,6 +63,9 @@ app.use(
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Public, server-rendered HTML dashboard (no auth, not under /api).
+app.use(leadsRouter);
 
 app.use("/api", router);
 
