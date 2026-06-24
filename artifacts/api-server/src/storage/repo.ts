@@ -242,6 +242,24 @@ export async function loadConversationsForDate(date: string): Promise<Conversati
     .where(eq(conversationsTable.runDate, date));
 }
 
+/**
+ * Backfill ONLY the recordingUrls column for an existing conversation row,
+ * matched by (runDate, customerPhone). No analysis is touched. Returns the
+ * number of rows updated (0 if the conversation doesn't exist for that date).
+ */
+export async function backfillRecordingUrls(
+  date: string,
+  customerPhone: string,
+  recordingUrls: string[],
+): Promise<number> {
+  const updated = await db
+    .update(conversationsTable)
+    .set({ recordingUrls })
+    .where(and(eq(conversationsTable.runDate, date), eq(conversationsTable.customerPhone, customerPhone)))
+    .returning({ id: conversationsTable.id });
+  return updated.length;
+}
+
 /** Number of conversations on a date whose agent is a Vida operator. */
 export async function countVidaConversationsForDate(date: string): Promise<number> {
   const [row] = await db

@@ -15,6 +15,7 @@ import { OpenRouterClient } from "@workspace/openrouter";
 import { env } from "../lib/env.js";
 import { logger } from "../lib/logger.js";
 import { backfillVidaChecklistForDate } from "../jobs/vida-checklist.js";
+import { backfillRecordingsForDate } from "../jobs/backfill-recordings.js";
 import { checklistDistribution, countVidaConversationsForDate } from "../storage/repo.js";
 
 const router: IRouter = Router();
@@ -65,6 +66,27 @@ router.post("/checklist/backfill", requireCronSecret, async (req, res): Promise<
     force,
   });
   res.json({ ok: true, data, ...result });
+});
+
+/**
+ * POST /api/recordings/backfill?data=YYYY-MM-DD
+ * Repopulate recordingUrls on stored conversations from Ringover, without an
+ * LLM re-analysis (cheap fix for rows persisted before recording extraction).
+ */
+router.post("/recordings/backfill", requireCronSecret, async (req, res): Promise<void> => {
+  const data = typeof req.query.data === "string" && DATE_RE.test(req.query.data) ? req.query.data : "";
+  if (!data) {
+    res.status(400).json({ error: "Parâmetro 'data' (YYYY-MM-DD) é obrigatório" });
+    return;
+  }
+  const cfg = env();
+  if (!cfg.RINGOVER_API_KEY) {
+    res.status(503).json({ error: "RINGOVER_API_KEY not configured" });
+    return;
+  }
+  const result = await backfillRecordingsForDate(data);
+  logger.info(result, "recordings backfill via admin endpoint");
+  res.json({ ok: true, ...result });
 });
 
 router.get("/checklist/stats", requireCronSecret, async (req, res): Promise<void> => {
