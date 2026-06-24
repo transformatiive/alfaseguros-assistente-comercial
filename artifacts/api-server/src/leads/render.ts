@@ -5,6 +5,7 @@
  */
 import type { LeadsView } from "./compute.js";
 import { formatDDMM } from "./compute.js";
+import { LOGO } from "../lib/email-template.js";
 
 const MAROON = "#762023";
 const ORANGE = "#E87D1D";
@@ -60,14 +61,31 @@ function shell(body: string): string {
   .chip{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;color:#fff;white-space:nowrap}
   .pos{color:${GREEN};font-weight:bold}
   .neg{color:${RED};font-weight:bold}
-  .week-row td{border-bottom:1px solid ${LINE}}
   .pager{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:12px;color:${MUTE};font-size:13px}
   .muted{color:${MUTE}}
   .err{background:${CARD};border:1px solid ${LINE};border-left:4px solid ${RED};border-radius:8px;padding:20px;margin-top:24px}
+  /* Vertical bar chart (evolução semanal) */
+  .vchart{display:flex;align-items:flex-end;gap:6px;height:180px;padding-top:8px}
+  .vcol{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0}
+  .vcol .vnum{font-size:11px;font-weight:bold;color:${INK};margin-bottom:4px}
+  .vcol .vbar{width:60%;max-width:34px;border-radius:4px 4px 0 0;min-height:3px}
+  .vcol .vlbl{font-size:10px;color:${MUTE};margin-top:6px;white-space:nowrap}
+  /* Channel breakdown rows */
+  .chrow{padding:12px 0;border-bottom:1px solid ${LINE}}
+  .chrow:last-child{border-bottom:0}
+  .chrow .chtop{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .chrow .chval{font-size:18px;font-weight:bold;color:${INK};font-variant-numeric:tabular-nums}
+  .chrow .chbar-track{background:${BG};border-radius:5px;height:10px;width:100%;overflow:hidden;margin:7px 0 6px}
+  .chrow .chbar-fill{height:10px;border-radius:5px}
+  .chrow .chmeta{font-size:11.5px;color:${MUTE}}
+  .chrow .chmeta b{color:${INK};font-weight:600}
   .hide-mobile{}
   @media (max-width:680px){
     .kpis{grid-template-columns:repeat(2,1fr)}
     .header .brand{font-size:19px}
+    .vchart{height:150px;gap:3px}
+    .vcol .vlbl{font-size:8px}
+    .vcol .vnum{font-size:9px}
     .hide-mobile{display:none}
   }
 </style></head><body>${body}</body></html>`;
@@ -75,7 +93,10 @@ function shell(body: string): string {
 
 function header(periodLabel: string): string {
   return `<div class="header"><div class="inner">
-    <div><div class="brand">Alfa Seguros</div><div class="sub">Dashboard de Leads</div></div>
+    <div>
+      <img src="${LOGO}" height="30" alt="Alfa Seguros" style="display:block;height:30px;border:0">
+      <div class="sub" style="margin-top:7px;letter-spacing:1.5px;text-transform:uppercase;font-size:11px">Dashboard de Leads</div>
+    </div>
     <div class="period-label">${esc(periodLabel)}</div>
   </div></div>`;
 }
@@ -118,46 +139,47 @@ function kpis(v: LeadsView): string {
 function weeksChart(v: LeadsView): string {
   if (v.weeks.length === 0) return "";
   const max = Math.max(1, ...v.weeks.map((w) => w.count));
-  const rows = v.weeks
+  const cols = v.weeks
     .map((w) => {
-      const pct = Math.round((w.count / max) * 100);
+      const h = Math.max(3, Math.round((w.count / max) * 150));
       const color = w.isLatestComplete ? ORANGE : MAROON;
-      return `<tr class="week-row">
-        <td style="width:64px;color:${MUTE};white-space:nowrap">${esc(w.label)}</td>
-        <td><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div></td>
-        <td class="num" style="width:48px;font-weight:bold">${w.count}</td>
-      </tr>`;
+      return `<div class="vcol" title="${esc(w.label)}: ${w.count}">
+        <div class="vnum">${w.count}</div>
+        <div class="vbar" style="height:${h}px;background:${color}"></div>
+        <div class="vlbl">${esc(w.label)}</div>
+      </div>`;
     })
     .join("");
   return `<div class="section-title">Evolução semanal</div>
-    <div class="card"><table>${rows}</table>
-    <div class="muted" style="margin-top:8px;font-size:12px">A laranja: semana completa mais recente.</div></div>`;
+    <div class="card"><div class="vchart">${cols}</div>
+    <div class="muted" style="margin-top:10px;font-size:12px">Leads por semana (início à segunda-feira). A laranja: semana completa mais recente.</div></div>`;
 }
 
 function breakdownTable(v: LeadsView): string {
+  // Bar length = leads in the SELECTED period (the bold number), so the visual
+  // and the headline figure always agree. Ontem/7d/30d are secondary context.
   const maxTotal = Math.max(1, ...v.breakdown.map((b) => b.total));
   const rows = v.breakdown
     .map((b) => {
       const pct = Math.round((b.total / maxTotal) * 100);
-      let delta = `<span class="muted">0</span>`;
-      if (b.delta > 0) delta = `<span class="pos">+${b.delta}</span>`;
-      else if (b.delta < 0) delta = `<span class="neg">${b.delta}</span>`;
-      return `<tr>
-        <td><span class="chip" style="background:${b.color}">${esc(b.label)}</span>
-          <div class="bar-track" style="margin-top:6px;max-width:220px"><div class="bar-fill" style="width:${pct}%;background:${b.color}"></div></div></td>
-        <td class="num">${b.ontem}</td>
-        <td class="num">${b.d7}</td>
-        <td class="num">${b.d30}</td>
-        <td class="num" style="font-weight:bold">${b.total}</td>
-        <td class="num">${delta}</td>
-      </tr>`;
+      let delta = `<span class="muted">→ 0</span>`;
+      if (b.delta > 0) delta = `<span class="pos">▲ +${b.delta}</span>`;
+      else if (b.delta < 0) delta = `<span class="neg">▼ ${b.delta}</span>`;
+      return `<div class="chrow">
+        <div class="chtop">
+          <span class="chip" style="background:${b.color}">${esc(b.label)}</span>
+          <span class="chval">${b.total}</span>
+        </div>
+        <div class="chbar-track"><div class="chbar-fill" style="width:${pct}%;background:${b.color}"></div></div>
+        <div class="chmeta">no período · ${delta} vs anterior &nbsp;·&nbsp; ontem <b>${b.ontem}</b> · 7d <b>${b.d7}</b> · 30d <b>${b.d30}</b></div>
+      </div>`;
     })
     .join("");
   return `<div class="section-title">Por canal</div>
-    <div class="card"><table>
-      <thead><tr><th>Canal</th><th class="num">Ontem</th><th class="num">7d</th><th class="num">30d</th><th class="num">Período</th><th class="num">Δ ant.</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table></div>`;
+    <div class="card">
+      <div class="muted" style="font-size:12px;margin-bottom:6px">A barra e o número grande representam os leads no período seleccionado (${formatDDMM(v.period.from)}–${formatDDMM(v.period.to)}).</div>
+      ${rows}
+    </div>`;
 }
 
 function pager(v: LeadsView, base: string): string {
