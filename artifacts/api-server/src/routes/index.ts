@@ -13,6 +13,7 @@ import emailSummaryRouter from "./email-summary.js";
 import alertasRouter from "./alertas.js";
 import checklistAdminRouter from "./checklist-admin.js";
 import statsRouter from "./stats.js";
+import leadsRouter from "./leads.js";
 import { requireAuth } from "../middleware/require-auth.js";
 
 const router: IRouter = Router();
@@ -28,6 +29,9 @@ router.use(alertasRouter);
 router.use(runsRouter);
 // Checklist admin (seed/backfill/stats) — cron-secret guarded, before requireAuth
 router.use(checklistAdminRouter);
+// Public leads dashboard, also reachable at /api/leads (the front-end SPA layer
+// serves the top-level /leads, so this alias guarantees a backend-reachable URL).
+router.use(leadsRouter);
 
 // Protected routes — must be authenticated
 router.use(requireAuth);

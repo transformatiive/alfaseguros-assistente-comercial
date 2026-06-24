@@ -17,11 +17,15 @@ router.get("/leads", async (req, res): Promise<void> => {
   const period = resolvePeriod({ preset: q.preset, from: q.from, to: q.to }, today);
   const page = Number.parseInt(q.page ?? "1", 10);
 
+  // The router is mounted both at app level ("/leads") and under /api
+  // ("/api/leads"); use the real path so internal links stay on this route.
+  const base = `${req.baseUrl}/leads`;
+
   try {
     // One fetch covers both the period and its preceding comparison window.
     const rows = await fetchLeads(period.prevFrom, period.to);
     const view = buildView(rows, period, today, Number.isFinite(page) ? page : 1);
-    res.set("Content-Type", "text/html; charset=utf-8").send(renderLeadsPage(view));
+    res.set("Content-Type", "text/html; charset=utf-8").send(renderLeadsPage(view, base));
   } catch (err) {
     const isConfig = err instanceof LeadsConfigError;
     const isTimeout = err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
