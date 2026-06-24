@@ -85,12 +85,12 @@ function periodLabelText(v: LeadsView): string {
   return `${names[v.period.preset] ?? "Período"} · ${formatDDMM(v.period.from)} – ${formatDDMM(v.period.to)}`;
 }
 
-function filters(v: LeadsView): string {
+function filters(v: LeadsView, base: string): string {
   const presets: Array<[string, string]> = [["hoje", "Hoje"], ["7d", "7 dias"], ["30d", "30 dias"], ["90d", "90 dias"]];
   const btns = presets
-    .map(([key, label]) => `<a class="btn${v.period.preset === key ? " active" : ""}" href="/leads?preset=${key}">${label}</a>`)
+    .map(([key, label]) => `<a class="btn${v.period.preset === key ? " active" : ""}" href="${base}?preset=${key}">${label}</a>`)
     .join("");
-  const custom = `<form class="custom" method="get" action="/leads">
+  const custom = `<form class="custom" method="get" action="${base}">
     <span class="muted">De</span><input type="date" name="from" value="${esc(v.period.from)}">
     <span class="muted">a</span><input type="date" name="to" value="${esc(v.period.to)}">
     <button type="submit">Aplicar</button>
@@ -160,15 +160,15 @@ function breakdownTable(v: LeadsView): string {
     </table></div>`;
 }
 
-function pager(v: LeadsView): string {
+function pager(v: LeadsView, base: string): string {
   if (v.totalPages <= 1) return "";
-  const q = (p: number) => `/leads?preset=${v.period.preset}&from=${v.period.from}&to=${v.period.to}&page=${p}`;
+  const q = (p: number) => `${base}?preset=${v.period.preset}&from=${v.period.from}&to=${v.period.to}&page=${p}`;
   const prev = v.page > 1 ? `<a class="btn" href="${q(v.page - 1)}">‹ Anteriores</a>` : "";
   const next = v.page < v.totalPages ? `<a class="btn" href="${q(v.page + 1)}">Seguintes ›</a>` : "";
   return `<div class="pager">${prev}<span>Página ${v.page} de ${v.totalPages}</span>${next}</div>`;
 }
 
-function leadsTable(v: LeadsView): string {
+function leadsTable(v: LeadsView, base: string): string {
   if (v.pageRows.length === 0) {
     return `<div class="section-title">Leads</div><div class="card muted">Sem leads neste período.</div>`;
   }
@@ -187,17 +187,19 @@ function leadsTable(v: LeadsView): string {
     <div class="card"><table>
       <thead><tr><th>Data</th><th>Canal</th><th class="hide-mobile">Assunto</th><th>Estado</th></tr></thead>
       <tbody>${rows}</tbody>
-    </table>${pager(v)}</div>`;
+    </table>${pager(v, base)}</div>`;
 }
 
-export function renderLeadsPage(v: LeadsView): string {
+/** `base` is the dashboard's own URL path (e.g. "/leads" or "/api/leads") so
+ *  filter/pagination links resolve to the same route regardless of mount. */
+export function renderLeadsPage(v: LeadsView, base: string): string {
   const body = `${header(periodLabelText(v))}
   <div class="wrap">
-    ${filters(v)}
+    ${filters(v, base)}
     ${kpis(v)}
     ${weeksChart(v)}
     ${breakdownTable(v)}
-    ${leadsTable(v)}
+    ${leadsTable(v, base)}
   </div>`;
   return shell(body);
 }
