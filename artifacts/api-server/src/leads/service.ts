@@ -73,9 +73,16 @@ export async function fetchLeads(from: string, to: string): Promise<LeadRow[]> {
     ),
   );
 
+  // Exclude tickets whose subject contains "APRIL" (case-insensitive) right
+  // after the fetch, before any aggregation — applies to every channel, so it
+  // flows into KPIs, weekly chart, channel breakdown, table and the Δ vs prev.
+  const filtered = perChannel.map((tickets) =>
+    tickets.filter((t) => !(t.subject || "").toUpperCase().includes("APRIL")),
+  );
+
   const byId = new Map<string, LeadRow>();
   let fetched = 0;
-  for (const tickets of perChannel) {
+  for (const tickets of filtered) {
     fetched += tickets.length;
     for (const t of tickets) {
       if (!t.createdTime || byId.has(t.id)) continue;
