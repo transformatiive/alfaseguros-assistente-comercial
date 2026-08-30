@@ -162,6 +162,64 @@ None — no auth surface touched.
 - A diff of `.env.example` keys against the `envSchema` keys in
   `artifacts/api-server/src/lib/env.ts`.
 
+## Addendum — `PORT` no longer required at build time (decisão do utilizador: opção B)
+
+The handoff above flagged that `vite.config.ts` throws when `PORT` is unset,
+including for `vite build`, and that this would likely break the Railway build.
+Two options were put to the user: (A) set `PORT` as a Railway service variable,
+no code change; (B) make `PORT` optional at build time. **The user chose B.**
+
+This is a deliberate, user-approved deviation from the change's "no behaviour
+change" rule. It is recorded here rather than applied silently.
+
+### What changed
+
+`PORT` becomes optional in both Vite configs:
+
+- `artifacts/supervisor/vite.config.ts`
+- `artifacts/mockup-sandbox/vite.config.ts` — same guard, same fix; it is part of
+  `pnpm run build`, so leaving it would have failed the Railway build anyway
+
+Behaviour when `PORT` **is** set is unchanged: the value is still validated, and
+`server.port` / `preview.port` are still bound to it. In the supervisor config
+`strictPort: true` is still applied. When `PORT` is **unset**, the port keys are
+simply omitted and Vite falls back to its own default.
+
+`mockup-sandbox` also got the same `runtimeErrorOverlay` treatment as task 1.1
+applied to the supervisor — it had an identical unconditional static import that
+would have broken a non-Replit build.
+
+### Behaviour delta, stated plainly
+
+| Scenario | Before | After |
+|---|---|---|
+| `PORT` set to a valid value | binds to it | binds to it (unchanged) |
+| `PORT` set to a non-numeric or `<= 0` value | throws | throws (unchanged) |
+| `PORT` unset, `vite build` | **throws** | builds |
+| `PORT` unset, `vite dev` / `vite preview` | **throws** | starts on Vite's default port |
+
+The last two rows are the change. On Replit `PORT` is always set, so nothing
+there is expected to alter.
+
+### Tests executed
+
+```
+env -u REPL_ID -u PORT BASE_PATH=/ pnpm run build          # ok  (was failing before)
+env -u REPL_ID       BASE_PATH=/ PORT=8080 pnpm run build  # ok  (unchanged path)
+cd artifacts/supervisor && env -u REPL_ID BASE_PATH=/ PORT=abc npx vite build
+                                                           # throws: Invalid PORT value: "abc"
+```
+
+### Not verified (addendum)
+
+- That the Replit dev server still binds to the Replit-assigned port. `PORT` is
+  always set there so the code path is the unchanged one, but this was not
+  exercised on Replit.
+- That Vite's fallback port does not collide with anything in a local dev setup
+  that previously relied on the throw to catch a missing `PORT`.
+- Whether Railway's build environment exposes `PORT` — now moot for the build,
+  but still relevant to the runtime start command.
+
 ## Final status
 
 **READY FOR INDEPENDENT QA**

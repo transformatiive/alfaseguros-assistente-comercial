@@ -3,17 +3,15 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 
+// PORT is only meaningful for the dev server and `vite preview`. A production
+// build does not need it, and platforms that inject PORT at runtime only (e.g.
+// Railway) would otherwise be unable to run `vite build`. When it is set it is
+// still validated strictly — a bad value is a mistake, not a default.
 const rawPort = process.env.PORT;
 
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
+const port = rawPort === undefined ? undefined : Number(rawPort);
 
-const port = Number(rawPort);
-
-if (Number.isNaN(port) || port <= 0) {
+if (port !== undefined && (Number.isNaN(port) || port <= 0)) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
@@ -62,8 +60,9 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port,
-    strictPort: true,
+    // When PORT is set, bind to exactly it and fail loudly if taken — the
+    // behaviour Replit relies on. When unset, let Vite pick as it normally does.
+    ...(port === undefined ? {} : { port, strictPort: true }),
     host: "0.0.0.0",
     allowedHosts: true,
     fs: {
@@ -71,7 +70,7 @@ export default defineConfig({
     },
   },
   preview: {
-    port,
+    ...(port === undefined ? {} : { port, strictPort: true }),
     host: "0.0.0.0",
     allowedHosts: true,
   },
