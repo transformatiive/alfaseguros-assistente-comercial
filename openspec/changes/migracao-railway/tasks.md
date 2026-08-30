@@ -4,9 +4,9 @@
 
 ## 1. Make the build platform-neutral
 
-- [ ] 1.1 In `artifacts/supervisor/vite.config.ts`, move `runtimeErrorOverlay()` inside the existing `REPL_ID`-guarded block
-- [ ] 1.2 Confirm `pnpm run build` succeeds with `REPL_ID` unset and `BASE_PATH=/`
-- [ ] 1.3 Add `BASE_PATH` to `.env.example` with a comment
+- [x] 1.1 In `artifacts/supervisor/vite.config.ts`, move `runtimeErrorOverlay()` inside the existing `REPL_ID`-guarded block
+- [x] 1.2 Confirm `pnpm run build` succeeds with `REPL_ID` unset and `BASE_PATH=/`
+- [x] 1.3 Add `BASE_PATH` to `.env.example` with a comment
 
 ## 2. Serve the SPA from Express
 
