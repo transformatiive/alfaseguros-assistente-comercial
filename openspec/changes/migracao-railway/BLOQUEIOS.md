@@ -17,11 +17,30 @@
 | Domínio | `supervisor-production-f030.up.railway.app` |
 | Volume da BD | `postgres-volume`, montado em `/var/lib/postgresql/data` |
 
-O serviço `Postgres` é a imagem `postgres:16` configurada à mão, não o template
-gerido do Railway: volume persistente, `PGDATA` em `/var/lib/postgresql/data/pgdata`,
-e `POSTGRES_PASSWORD` gerada pelo próprio Railway com `${{secret(40)}}` — o valor
-nunca passou por esta sessão nem por ficheiro nenhum. `DATABASE_URL` e
-`DATABASE_PUBLIC_URL` são compostas por referência a essa variável.
+O serviço `Postgres` corre a **imagem oficial do Railway**,
+`ghcr.io/railwayapp-templates/postgres-ssl:16`, com volume persistente,
+`PGDATA` em `/var/lib/postgresql/data/pgdata`, e `POSTGRES_PASSWORD` gerada pelo
+próprio Railway com `${{secret(40)}}` — o valor nunca passou por esta sessão nem
+por ficheiro nenhum. `DATABASE_URL` e `DATABASE_PUBLIC_URL` são compostas por
+referência a essa variável, e as variáveis de conveniência `PGHOST`, `PGPORT`,
+`PGUSER`, `PGPASSWORD` e `PGDATABASE` estão expostas como no template oficial.
+
+A imagem oficial não é um detalhe cosmético. A documentação do Railway é
+explícita: *"PITR and HA require an official Railway PostgreSQL image"*, e a
+conversão para alta disponibilidade só aceita
+`ghcr.io/railwayapp-templates/postgres-ssl` ou
+`ghcr.io/railwayapp-templates/postgres-ha/postgres-patroni`. A tag tem também de
+estar **fixada numa versão maior** — o `:latest` não é suportado para HA. Está
+fixada em `:16`, a mesma versão que o Replit corre (`.replit`, `postgresql-16`).
+
+Uma primeira tentativa usou a imagem `postgres:16` do Docker Hub, configurada à
+mão. Funcionava, mas ficava sem point-in-time recovery, sem caminho de conversão
+para HA, e sem os backups do template. Foi substituída antes de qualquer dado
+real lá entrar; o volume foi apagado e recriado para a imagem oficial
+inicializar de raiz.
+
+Fontes: https://docs.railway.com/databases/postgresql-ha e
+https://docs.railway.com/cli/postgres
 
 ### Variáveis já postas no serviço `supervisor`
 
@@ -60,20 +79,14 @@ não passarem por uma conversa.
 
 Duas coisas em falta:
 
-1. **O `DATABASE_URL` do Replit**, para o `pg_dump`. Não o tenho.
-2. **Um proxy TCP no serviço `Postgres` do Railway**, para conseguir restaurar de
-   fora da rede privada. Tentei criá-lo e a ação foi **negada por permissões**
-   nesta sessão. Ou se desbloqueia a permissão, ou o proxy é criado à mão na
-   dashboard do Railway (serviço `Postgres` → Settings → Networking → TCP Proxy,
-   porta 5432).
+1. **O `DATABASE_URL` do Replit**, para o `pg_dump`. Não o tenho. **É o único
+   bloqueio que resta nesta secção.**
+2. ~~Um proxy TCP no serviço `Postgres` do Railway~~ — **feito.** Ativo em
+   `sakura.proxy.rlwy.net:50707` → porta 5432. O `DATABASE_PUBLIC_URL` no serviço
+   `Postgres` resolve agora corretamente, e é por aí que a restauração deve
+   entrar.
 
-Sem o proxy ainda é possível restaurar, correndo o `pg_restore` a partir de um
-serviço temporário dentro do próprio projeto Railway — mas o proxy é bem mais
-simples.
-
-O `DATABASE_PUBLIC_URL` já está composto no serviço `Postgres` à espera das
-variáveis `RAILWAY_TCP_PROXY_DOMAIN` e `RAILWAY_TCP_PROXY_PORT`, que só existem
-depois de o proxy ser criado.
+Falta portanto **apenas o `DATABASE_URL` do Replit** para esta secção.
 
 ## Bloqueio 3 — o n8n (secção 7)
 
