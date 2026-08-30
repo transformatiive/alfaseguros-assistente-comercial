@@ -19,6 +19,8 @@ For project context, read `/CONTEXT.md` and `/HANDOVER.md` at the repo root firs
 
 - **`phase-2a-desk-cases/`** — Zoho Desk integration: cases that span calls + tickets + email threads, outcome classification, case-level analysis, pipeline view UI. Soft target: demo to Rui.
 - **`phase-2b-commercial-intelligence/`** — lead temperature, why-we-lost analysis, follow-up SLA engine, closer playbook. Queued; depends on 2A being live.
+- **`migracao-railway/`** — lift-and-shift from Replit to Railway. No behaviour change. Blocks `phase-3-painel-agente`.
+- **`phase-3-painel-agente/`** — per-agent panel embedded in Zoho Desk plus the supervisor team view (Jira TRNSF-1410, Plan v2.0 §7). Additive only; the existing supervisor app is not modified.
 
 ## Workflow
 
