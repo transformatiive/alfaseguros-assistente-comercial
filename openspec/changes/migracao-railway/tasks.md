@@ -21,7 +21,7 @@
 
 - [x] 3.1 Create Railway project `alfaseguros-supervisor` in the `transformatiive's Projects` workspace
 - [x] 3.2 Add a Postgres service; note the reference variable `${{Postgres.DATABASE_URL}}`
-- [ ] 3.3 Create the app service from the GitHub repo `transformatiive/alfaseguros-assistente-comercial`, branch `main`
+- [x] 3.3 Create the app service from the GitHub repo `transformatiive/alfaseguros-assistente-comercial`, branch `main`
 - [x] 3.4 Add `railway.json` with build command `pnpm install --frozen-lockfile && pnpm run build`, start command `node artifacts/api-server/dist/index.mjs`, healthcheck path `/api/health`
 - [x] 3.5 Pin Node 24 and pnpm (Nixpacks config or Dockerfile)
 - [x] 3.6 Generate a Railway domain
