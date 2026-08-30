@@ -2,20 +2,17 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
-import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import { mockupPreviewPlugin } from "./mockupPreviewPlugin";
 
+// PORT is only meaningful for the dev server and `vite preview`. A production
+// build does not need it, and platforms that inject PORT at runtime only (e.g.
+// Railway) would otherwise be unable to run `vite build`. When it is set it is
+// still validated strictly — a bad value is a mistake, not a default.
 const rawPort = process.env.PORT;
 
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
+const port = rawPort === undefined ? undefined : Number(rawPort);
 
-const port = Number(rawPort);
-
-if (Number.isNaN(port) || port <= 0) {
+if (port !== undefined && (Number.isNaN(port) || port <= 0)) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
@@ -33,10 +30,14 @@ export default defineConfig({
     mockupPreviewPlugin(),
     react(),
     tailwindcss(),
-    runtimeErrorOverlay(),
+    // Replit-only dev plugins. Imported dynamically inside the guard so a build
+    // outside Replit (e.g. Railway) never needs them to resolve.
     ...(process.env.NODE_ENV !== "production" &&
     process.env.REPL_ID !== undefined
       ? [
+          await import("@replit/vite-plugin-runtime-error-modal").then((m) =>
+            m.default(),
+          ),
           await import("@replit/vite-plugin-cartographer").then((m) =>
             m.cartographer({
               root: path.resolve(import.meta.dirname, ".."),
@@ -56,7 +57,8 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port,
+    // When PORT is set, bind to it. When unset, let Vite pick as it normally does.
+    ...(port === undefined ? {} : { port }),
     host: "0.0.0.0",
     allowedHosts: true,
     fs: {
@@ -64,7 +66,7 @@ export default defineConfig({
     },
   },
   preview: {
-    port,
+    ...(port === undefined ? {} : { port }),
     host: "0.0.0.0",
     allowedHosts: true,
   },
