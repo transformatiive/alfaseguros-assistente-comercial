@@ -19,21 +19,21 @@
 
 ## 3. Provision Railway
 
-- [ ] 3.1 Create Railway project `alfaseguros-supervisor` in the `transformatiive's Projects` workspace
-- [ ] 3.2 Add a Postgres service; note the reference variable `${{Postgres.DATABASE_URL}}`
+- [x] 3.1 Create Railway project `alfaseguros-supervisor` in the `transformatiive's Projects` workspace
+- [x] 3.2 Add a Postgres service; note the reference variable `${{Postgres.DATABASE_URL}}`
 - [ ] 3.3 Create the app service from the GitHub repo `transformatiive/alfaseguros-assistente-comercial`, branch `main`
-- [ ] 3.4 Add `railway.json` with build command `pnpm install --frozen-lockfile && pnpm run build`, start command `node artifacts/api-server/dist/index.mjs`, healthcheck path `/api/health`
-- [ ] 3.5 Pin Node 24 and pnpm (Nixpacks config or Dockerfile)
-- [ ] 3.6 Generate a Railway domain
+- [x] 3.4 Add `railway.json` with build command `pnpm install --frozen-lockfile && pnpm run build`, start command `node artifacts/api-server/dist/index.mjs`, healthcheck path `/api/health`
+- [x] 3.5 Pin Node 24 and pnpm (Nixpacks config or Dockerfile)
+- [x] 3.6 Generate a Railway domain
 
 ## 4. Move configuration
 
 - [ ] 4.1 Copy every variable listed in `design.md` → "Environment variables to move" into Railway
-- [ ] 4.2 Set `DATABASE_URL` as a reference to the Railway Postgres service
-- [ ] 4.3 Set `NODE_ENV=production`, `BASE_PATH=/`
-- [ ] 4.4 Set `PUBLIC_APP_URL` to the new Railway domain (do not copy the Replit value)
+- [x] 4.2 Set `DATABASE_URL` as a reference to the Railway Postgres service
+- [x] 4.3 Set `NODE_ENV=production`, `BASE_PATH=/`
+- [x] 4.4 Set `PUBLIC_APP_URL` to the new Railway domain (do not copy the Replit value)
 - [ ] 4.5 Copy `AGENT_EMAIL_MAP` from `.replit` `[userenv.shared]` — it is not in Replit Secrets
-- [ ] 4.6 Confirm `SESSION_SECRET` is a real secret, not the `change-me-in-production` default
+- [x] 4.6 Confirm `SESSION_SECRET` is a real secret, not the `change-me-in-production` default
 
 ## 5. Move the data
 
