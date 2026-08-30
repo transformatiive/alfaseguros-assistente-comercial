@@ -6,6 +6,8 @@
 
 > This file tells Claude Code how to navigate, extend, and maintain this project. Read it before making any changes.
 
+> **Every code change in this repo runs under `.claude/skills/implementation-qa-handoff/SKILL.md`.** Claude Code implements and tests; an independent QA agent validates and accepts. The terminal state of any implementation or bug-fix task is **READY FOR INDEPENDENT QA** — never approved, done, or production-ready.
+
 ## What this is
 
 Daily AI-powered analysis of phone conversations from Alfaseguros (Portuguese insurance broker), Não Vida / 360 team. For each conversation (which may span multiple calls), an LLM produces:
