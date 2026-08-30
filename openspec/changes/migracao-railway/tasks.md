@@ -10,12 +10,12 @@
 
 ## 2. Serve the SPA from Express
 
-- [ ] 2.1 In `artifacts/api-server/src/app.ts`, after `app.use("/api", router)`, mount `express.static` on the supervisor build output
-- [ ] 2.2 Add an SPA fallback that excludes `/api/` and `/leads`
-- [ ] 2.3 Resolve the client directory from the **built** file location — verify it works from `dist/index.mjs`, not only from `src/`
-- [ ] 2.4 If the path does not resolve after bundling, copy `artifacts/supervisor/dist/public` into `artifacts/api-server/dist/public` as a build step and serve from there
-- [ ] 2.5 Verify locally: `pnpm run build && PORT=3000 node artifacts/api-server/dist/index.mjs` serves the UI at `/` and the API at `/api/health`
-- [ ] 2.6 Verify `/leads` still returns the server-rendered HTML and is not swallowed by the fallback
+- [x] 2.1 In `artifacts/api-server/src/app.ts`, after `app.use("/api", router)`, mount `express.static` on the supervisor build output
+- [x] 2.2 Add an SPA fallback that excludes `/api/` and `/leads`
+- [x] 2.3 Resolve the client directory from the **built** file location — verify it works from `dist/index.mjs`, not only from `src/`
+- [x] 2.4 (não foi preciso — o caminho resolve) If the path does not resolve after bundling, copy `artifacts/supervisor/dist/public` into `artifacts/api-server/dist/public` as a build step and serve from there
+- [x] 2.5 Verify locally: `pnpm run build && PORT=3000 node artifacts/api-server/dist/index.mjs` serves the UI at `/` and the API at `/api/health`
+- [x] 2.6 Verify `/leads` still returns the server-rendered HTML and is not swallowed by the fallback
 
 ## 3. Provision Railway
 

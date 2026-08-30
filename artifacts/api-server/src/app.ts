@@ -1,4 +1,7 @@
 import express, { type Express } from "express";
+import path from "node:path";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import session from "express-session";
@@ -68,5 +71,98 @@ app.use(express.urlencoded({ extended: true }));
 app.use(leadsRouter);
 
 app.use("/api", router);
+
+// --- Static SPA hosting -----------------------------------------------------
+//
+// On Replit the API and the browser client ran as two artifacts on two ports,
+// stitched into one origin by Replit's application router. Railway routes by
+// domain, not by path, so the Express process serves the client itself. This is
+// mounted AFTER the /leads router and AFTER /api, so no existing path changes
+// meaning.
+
+/**
+ * Locate the built supervisor client. Checked in order:
+ *  1. `<dist>/public` — present when the build copies the client into the API
+ *     bundle directory (a self-contained image).
+ *  2. `<dist>/../../supervisor/dist/public` — the pnpm workspace layout, where
+ *     `artifacts/supervisor` sits next to `artifacts/api-server`.
+ *
+ * Resolved from `import.meta.url` rather than the source tree, because esbuild
+ * bundles this module into `dist/index.mjs` and the path must be correct there.
+ */
+function resolveClientDir(): string | null {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.resolve(here, "public"),
+    path.resolve(here, "../../supervisor/dist/public"),
+  ];
+  return candidates.find((dir) => existsSync(path.join(dir, "index.html"))) ?? null;
+}
+
+const clientDir = resolveClientDir();
+
+if (clientDir === null) {
+  // The API is still fully functional without the client — /api and /leads are
+  // unaffected. Warn rather than crash so a misbuilt image is diagnosable.
+  logger.warn(
+    "Built supervisor client not found; serving API only. Run `pnpm run build`.",
+  );
+} else {
+  logger.info({ clientDir }, "Serving supervisor client");
+
+  app.use(express.static(clientDir, { index: false, maxAge: "1h" }));
+
+  // File extensions that mean "this is a static asset request". A request for a
+  // missing asset must 404 as an asset — if it fell through to index.html the
+  // browser would receive HTML with a 200 and fail with "Unexpected token '<'",
+  // which is a genuinely confusing way to discover a broken build.
+  //
+  // Matching a known list rather than "has any extension" keeps SPA routes safe:
+  // a path like /conversas/some.id is still routed to the client.
+  const ASSET_EXTENSIONS = new Set([
+    ".css",
+    ".js",
+    ".mjs",
+    ".map",
+    ".json",
+    ".svg",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".avif",
+    ".ico",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".otf",
+    ".eot",
+    ".mp4",
+    ".webm",
+    ".txt",
+    ".xml",
+    ".webmanifest",
+  ]);
+
+  // SPA fallback. Deliberately narrow:
+  //  - only GET/HEAD, so a stray POST does not receive HTML
+  //  - never /api/*, so unmatched API routes keep returning their own response
+  //  - never /leads, which is server-rendered HTML by leadsRouter above
+  //  - never a static asset path, per ASSET_EXTENSIONS above
+  //  - only when the client will accept HTML
+  const indexHtml = path.join(clientDir, "index.html");
+
+  app.use((req, res, next) => {
+    if (req.method !== "GET" && req.method !== "HEAD") return next();
+    if (req.path === "/api" || req.path.startsWith("/api/")) return next();
+    if (req.path === "/leads" || req.path.startsWith("/leads/")) return next();
+    if (ASSET_EXTENSIONS.has(path.extname(req.path).toLowerCase())) {
+      return next();
+    }
+    if (!req.accepts("html")) return next();
+    res.sendFile(indexHtml);
+  });
+}
 
 export default app;
