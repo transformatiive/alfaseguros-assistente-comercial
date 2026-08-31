@@ -50,13 +50,7 @@ The agent MUST reach their panel without a login screen, a password, or an agent
 - WHEN they click the panel button in the top band
 - THEN the dashboard opens as a full page already showing their data
 - AND at no point is a credential requested
-
-#### Scenario: Full page inside Zoho CRM
-
-- GIVEN an agent is logged into Zoho CRM and the Web Tab is on their profile
-- WHEN they open that tab
-- THEN the dashboard renders as a full page inside the CRM
-- AND the agent is identified from the CRM session before the first paint
+- AND no other Zoho application is involved
 
 #### Scenario: Returning within the working day
 
@@ -67,7 +61,7 @@ The agent MUST reach their panel without a login screen, a password, or an agent
 
 #### Scenario: Framed context never uses a cookie
 
-- GIVEN the dashboard is running inside the CRM Web Tab iframe
+- GIVEN the dashboard is running inside any iframe
 - WHEN it loads
 - THEN it neither sets nor reads the first-party session cookie
 - AND it relies only on the in-memory bearer token
@@ -83,12 +77,12 @@ The agent MUST reach their panel without a login screen, a password, or an agent
 
 The dashboard MUST be presented as a full page.
 
-#### Scenario: Zoho Desk cannot host it
+#### Scenario: Zoho Desk hosts it full screen
 
-- GIVEN Zoho Desk offers no full-page extension location
+- GIVEN `desk.topband` renders a widget as a full-screen view from the top navigation bar
 - WHEN the Desk embed is built
-- THEN it is a `desk.topband` launcher that opens the dashboard elsewhere
-- AND the dashboard is NOT rendered inside a Desk right panel, left tab, or record sub-tab
+- THEN the dashboard occupies the full Desk screen
+- AND it is NOT rendered inside a Desk right panel, left tab, or record sub-tab
 
 ### Requirement: Show each agent only their own work
 

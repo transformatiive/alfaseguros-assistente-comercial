@@ -4,12 +4,14 @@ import { env } from "../lib/env.js";
 import { logger } from "../lib/logger.js";
 import { todayLisbon } from "../lib/dates.js";
 import { mintAgentToken } from "../painel/token.js";
-import { resolveColaborador } from "../painel/identity.js";
+import { resolveColaborador, loadColaboradorAtivo } from "../painel/identity.js";
 import { requireAgent, agenteDe } from "../middleware/require-agent.js";
 import {
   listDevolucoesPendentes,
   concluirDevolucao,
 } from "../storage/devolucoes-repo.js";
+
+import { buildAgentePainel } from "../painel/agente.js";
 
 const router: IRouter = Router();
 
@@ -202,6 +204,32 @@ router.post("/agente/devolucoes/:id/concluir", requireAgent, (req, res, next) =>
         res.json({ id: resultado.row.id, estado: resultado.row.estado });
         return;
     }
+  })().catch(next);
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/agente/painel — the four blocks
+// ---------------------------------------------------------------------------
+
+router.get("/agente/painel", requireAgent, resolveData, (req, res, next) => {
+  void (async () => {
+    const claims = agenteDe(req);
+    const data = typeof req.query.data === "string" ? req.query.data : todayLisbon();
+
+    // Re-read the colaborador rather than trusting the token: a 15-minute token
+    // must not outlive a deactivation, and the panel needs fields the token
+    // does not carry.
+    const colaborador = await loadColaboradorAtivo(Number(claims.sub));
+    if (!colaborador || colaborador.papel === "nenhum") {
+      res.status(403).json({ error: "Sem acesso ao painel" });
+      return;
+    }
+
+    const { painel, erros } = await buildAgentePainel(colaborador, data);
+    for (const erro of erros) {
+      logger.error({ err: erro, colaboradorId: colaborador.id, data }, "painel: bloco falhou");
+    }
+    res.json(painel);
   })().catch(next);
 });
 
