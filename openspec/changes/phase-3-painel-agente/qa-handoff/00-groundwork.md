@@ -27,7 +27,7 @@ precisam. Nenhum comportamento visível mudou: nada lê ainda `papel`,
 |---|---|---|
 | 0.1 `papel` em `colaboradores` | Sim | typecheck |
 | 0.2 tabela `devolucoes` | Sim | typecheck |
-| 0.3 export + `drizzle-kit push` | Export sim; **push NÃO corrido** | **não verificado** |
+| 0.3 export + `drizzle-kit push` | Sim | **exercitado — schema aplicado no Railway** |
 | 0.4 3 variáveis em `env.ts` e `.env.example` | Sim | typecheck |
 | 0.5 confirmar licenças CRM com o Rui | **Não** — depende de terceiro | não verificado |
 | 0.6 `crmUserId` | Sim | typecheck |
@@ -35,9 +35,13 @@ precisam. Nenhum comportamento visível mudou: nada lê ainda `papel`,
 
 ## Desvios e riscos
 
-1. **O schema não está aplicado.** As tabelas e colunas existem no código, não na
-   base de dados do Railway. Qualquer endpoint da secção 2 falha até o push
-   correr. É o próximo passo operacional, não uma decisão pendente.
+1. ~~O schema não está aplicado.~~ **Resolvido.** O schema está aplicado na
+   base de dados do Railway, por um serviço dedicado `db-schema-push` — o
+   `preDeployCommand` do Railway não cria sequer o passo de pre-deploy neste
+   projeto. Ver `openspec/changes/migracao-railway/RAILWAY-CONFIG.md`.
+   Verificado em produção: `/api/agente/sessao` devolve 403 "Colaborador não
+   reconhecido" em vez de 500, o que prova que a consulta a `colaboradores`
+   com as colunas novas executa.
 2. **O backfill nunca correu.** Sem `colaboradores.zid` preenchido, nenhum agente
    se resolve pelo Desk — só por email. O script existe e é seguro (modo
    simulação por omissão), mas o seu output real é desconhecido.
