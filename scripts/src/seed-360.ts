@@ -1,6 +1,9 @@
 /**
- * Create the equipa-360 rows in `colaboradores`, joining the two authoritative
- * sources that already exist in the environment:
+ * Create the equipa-360 rows in `colaboradores`.
+ *
+ * Membership comes from the committed roster in `equipa-360.ts` — NOT from
+ * whoever happens to appear in an API listing. The roster is then enriched
+ * from two sources:
  *
  *   AGENT_EMAIL_MAP  — Ringover numeric user_id → email (load-bearing for
  *                      /api/followups/pending, so it is already correct)
@@ -15,16 +18,16 @@
  *   pnpm --filter @workspace/scripts run db:seed:360           # dry run
  *   pnpm --filter @workspace/scripts run db:seed:360 -- --apply
  *
- * Idempotent: upserts on `ringover_user_id`. Deliberately conservative — an
- * email that matches no Desk agent still gets a colaborador (so the panel can
- * at least show calls and follow-ups), but with `zid` null, and it is logged.
- * An email matching more than one Desk agent is logged and skipped entirely
- * rather than guessed: a wrong `zid` hands one agent another agent's tickets.
+ * Idempotent. Deliberately conservative — a roster member who matches no Desk
+ * agent is still created, with `zid` null, and it is logged: the panel then
+ * shows their calls and follow-ups and explains the missing tickets block. A
+ * member matching MORE than one Desk agent is skipped entirely rather than
+ * guessed, because a wrong `zid` hands one agent another agent's tickets.
  */
 import { db, pool, colaboradoresTable } from "@workspace/db";
 import { ZohoAuth, ZohoDeskClient } from "@workspace/zoho-desk";
-import { VIDA_AGENT_IDS } from "@workspace/ringover";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+import { EQUIPA_360 } from "./equipa-360.js";
 
 function requireEnv(name: string): string {
   const v = process.env[name];
@@ -50,10 +53,11 @@ function nomeDoEmail(email: string): string {
 }
 
 interface Proposta {
-  ringoverUserId: string;
+  ringoverUserId: string | null;
   email: string;
   nome: string;
   zid: string | null;
+  papel: "agente" | "supervisor";
 }
 
 async function main(): Promise<void> {
@@ -66,12 +70,6 @@ async function main(): Promise<void> {
   } catch {
     console.error("AGENT_EMAIL_MAP não é JSON válido. Nada foi feito.");
     process.exit(1);
-  }
-
-  const vidaExtra = new Set<number>(VIDA_AGENT_IDS);
-  for (const p of (process.env.VIDA_AGENT_IDS ?? "").split(",")) {
-    const n = parseInt(p.trim(), 10);
-    if (!isNaN(n)) vidaExtra.add(n);
   }
 
   const auth = new ZohoAuth({
@@ -92,26 +90,23 @@ async function main(): Promise<void> {
 
   console.log(`Agentes no Zoho Desk: ${agentes.length}`);
   console.log(`Entradas no AGENT_EMAIL_MAP: ${Object.keys(mapa).length}`);
+  console.log(`Membros no roster da equipa 360: ${EQUIPA_360.length}`);
   console.log(apply ? "Modo: APLICAR\n" : "Modo: simulação (usa --apply para escrever)\n");
 
   const propostas: Proposta[] = [];
   let ignorados = 0;
 
+  // AGENT_EMAIL_MAP is email → ringover id for lookup by roster email.
+  const ringoverPorEmail = new Map<string, string>();
   for (const [ringoverId, emailRaw] of Object.entries(mapa)) {
-    const num = parseInt(ringoverId, 10);
-    if (isNaN(num)) {
-      console.warn(`IGNORADO   chave "${ringoverId}" não é um user_id numérico`);
-      ignorados++;
-      continue;
-    }
-    if (vidaExtra.has(num)) {
-      console.log(`VIDA       ${ringoverId} <${emailRaw}> — fora do âmbito da 360`);
-      ignorados++;
-      continue;
-    }
-    const email = norm(emailRaw);
+    const e = norm(emailRaw);
+    if (e && !isNaN(parseInt(ringoverId, 10))) ringoverPorEmail.set(e, ringoverId);
+  }
+
+  for (const membro of EQUIPA_360) {
+    const email = norm(membro.email);
     if (!email) {
-      console.warn(`IGNORADO   ${ringoverId} não tem email`);
+      console.warn(`IGNORADO   entrada do roster sem email`);
       ignorados++;
       continue;
     }
@@ -119,7 +114,7 @@ async function main(): Promise<void> {
     const matches = deskPorEmail.get(email) ?? [];
     if (matches.length > 1) {
       console.warn(
-        `AMBÍGUO    ${ringoverId} <${email}> — ${matches.length} agentes no Desk (${matches
+        `AMBÍGUO    <${email}> — ${matches.length} agentes no Desk (${matches
           .map((m) => m.id)
           .join(", ")}). Não criado.`,
       );
@@ -127,53 +122,76 @@ async function main(): Promise<void> {
       continue;
     }
 
+    // AGENT_EMAIL_MAP wins when both exist: it is the same value that
+    // /api/followups/pending already runs on, so agreeing with it keeps the
+    // panel and the n8n payload attributing calls to the same person.
+    const ringoverUserId = ringoverPorEmail.get(email) ?? membro.ringoverUserId ?? null;
     const desk = matches[0];
     const nome = desk?.nome || nomeDoEmail(email);
+
     if (!desk) {
       console.warn(
-        `SEM DESK   ${ringoverId} <${email}> — nenhum agente no Desk com este email. ` +
-          `Criado na mesma, sem zid: vê chamadas e follow-ups, não vê tickets.`,
+        `SEM DESK   ${nome} <${email}> — nenhum agente no Desk. Criado sem zid: ` +
+          `vê chamadas e follow-ups, não vê tickets.`,
       );
     }
+    if (!ringoverUserId) {
+      console.warn(
+        `SEM RINGOVER ${nome} <${email}> — sem user_id. Criado: vê tickets, ` +
+          `não vê chamadas nem follow-ups.`,
+      );
+    }
+
+    const origem = ringoverPorEmail.has(email) ? "env" : membro.ringoverUserId ? "roster" : "—";
     console.log(
-      `CRIAR      ${nome.padEnd(24)} ${ringoverId.padEnd(10)} <${email}> zid=${desk?.id ?? "—"}`,
+      `CRIAR      ${nome.padEnd(22)} ${membro.papel.padEnd(10)} ` +
+        `rid=${(ringoverUserId ?? "—").padEnd(10)}(${origem.padEnd(6)}) ` +
+        `zid=${desk?.id ?? "—"}  <${email}>`,
     );
-    propostas.push({ ringoverUserId: ringoverId, email, nome, zid: desk?.id ?? null });
+    propostas.push({ ringoverUserId, email, nome, zid: desk?.id ?? null, papel: membro.papel });
   }
 
-  if (apply && propostas.length > 0) {
-    await db
-      .insert(colaboradoresTable)
-      .values(
-        propostas.map((p) => ({
-          nome: p.nome,
-          ringoverUserId: p.ringoverUserId,
-          zid: p.zid,
-          email: p.email,
-          equipa: "360" as const,
-          papel: "agente" as const,
-          ativo: true,
-        })),
-      )
-      .onConflictDoUpdate({
-        target: colaboradoresTable.ringoverUserId,
-        // `papel` is deliberately NOT overwritten: promoting someone to
-        // supervisor is a human decision, and re-running this must not undo it.
-        set: {
-          nome: sql`excluded.nome`,
-          zid: sql`excluded.zid`,
-          email: sql`excluded.email`,
-          equipa: sql`excluded.equipa`,
-          ativo: sql`excluded.ativo`,
-        },
-      });
+  if (apply) {
+    // Done row by row rather than with ON CONFLICT. `email` has no unique
+    // constraint in the schema, and `ringover_user_id` is unique but nullable
+    // — and in Postgres several NULLs do not conflict, so an ON CONFLICT on it
+    // would insert a duplicate row on every run for anyone lacking an id.
+    // Matching on email in code is unambiguous and needs no schema change.
+    for (const p of propostas) {
+      const [existente] = await db
+        .select({ id: colaboradoresTable.id })
+        .from(colaboradoresTable)
+        .where(sql`lower(${colaboradoresTable.email}) = ${p.email}`)
+        .limit(1);
+
+      const valores = {
+        nome: p.nome,
+        ringoverUserId: p.ringoverUserId,
+        zid: p.zid,
+        email: p.email,
+        equipa: "360" as const,
+        papel: p.papel,
+        ativo: true,
+      };
+
+      if (existente) {
+        await db
+          .update(colaboradoresTable)
+          .set(valores)
+          .where(eq(colaboradoresTable.id, existente.id));
+      } else {
+        await db.insert(colaboradoresTable).values(valores);
+      }
+    }
   }
 
   const comZid = propostas.filter((p) => p.zid).length;
+  const comRid = propostas.filter((p) => p.ringoverUserId).length;
+  const supervisores = propostas.filter((p) => p.papel === "supervisor").length;
   console.log(
-    `\nResumo: ${propostas.length} ${apply ? "criados/atualizados" : "a criar"}, ` +
-      `${comZid} com zid do Desk, ${propostas.length - comZid} sem zid, ` +
-      `${ignorados} ignorados.`,
+    `\nResumo: ${propostas.length} ${apply ? "criados/atualizados" : "a criar"} ` +
+      `(${supervisores} supervisor), ${comZid} com zid do Desk, ` +
+      `${comRid} com user_id do Ringover, ${ignorados} ignorados.`,
   );
   if (!apply) console.log("Nada foi escrito. Corre com --apply para aplicar.");
 
