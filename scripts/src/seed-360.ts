@@ -17,6 +17,7 @@
  *
  *   pnpm --filter @workspace/scripts run db:seed:360           # dry run
  *   pnpm --filter @workspace/scripts run db:seed:360 -- --apply
+ *   SEED_APPLY=1 pnpm --filter @workspace/scripts run db:seed:360
  *
  * Idempotent. Deliberately conservative — a roster member who matches no Desk
  * agent is still created, with `zid` null, and it is logged: the panel then
@@ -61,7 +62,14 @@ interface Proposta {
 }
 
 async function main(): Promise<void> {
-  const apply = process.argv.slice(2).includes("--apply");
+  // Accepts either the flag or SEED_APPLY=1. The env var exists because
+  // Railway's start command is word-split rather than shell-interpreted, and
+  // the `--` separator that forwards args through pnpm is lost in transit —
+  // the script then runs as a dry run while the operator believes it is
+  // writing. An env var cannot be silently dropped that way.
+  const apply =
+    process.argv.slice(2).includes("--apply") ||
+    ["1", "true", "yes"].includes((process.env.SEED_APPLY ?? "").trim().toLowerCase());
 
   const raw = requireEnv("AGENT_EMAIL_MAP");
   let mapa: Record<string, string>;
