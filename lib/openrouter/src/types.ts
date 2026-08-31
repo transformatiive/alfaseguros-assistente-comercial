@@ -85,6 +85,12 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     cacheWriteUsdPerMillion: 3.75,
     cacheReadUsdPerMillion: 0.3,
   },
+  "anthropic/claude-sonnet-5": {
+    inputUsdPerMillion: 2,
+    outputUsdPerMillion: 10,
+    cacheWriteUsdPerMillion: 2.5,
+    cacheReadUsdPerMillion: 0.2,
+  },
   "anthropic/claude-3.5-haiku": {
     inputUsdPerMillion: 0.8,
     outputUsdPerMillion: 4,
