@@ -91,3 +91,38 @@ GET https://supervisor-production-f030.up.railway.app/api/healthz  →  200 {"st
 
 E, na dashboard do Railway, confirmar que o serviço mostra o healthcheck em
 `/api/healthz` — não basta o endpoint responder.
+
+## Pre-deploy: aplicar o schema (2026-08-31)
+
+O schema da fase 3 (`devolucoes`, `colaboradores.papel`, `colaboradores.crm_user_id`)
+não entrou na base de dados e a app passou a devolver 500 em
+`/api/agente/sessao`, com este erro nos logs do Railway:
+
+```
+Error: Failed query: select "id", "nome", "ringover_user_id", "zid",
+"crm_user_id", "email", "telefone", "equipa", "papel", "ativo", ...
+from "colaboradores" where (lower("colaboradores"."email") = $1 ...)
+```
+
+O `preDeployCommand` foi definido no serviço, mas o deploy passou do build
+direto para "Starting Container" sem uma única linha de output do
+`drizzle-kit`. Uma leitura posterior da configuração do serviço mostra
+`"preDeployCommand": []` — ou seja, **a definição ao nível do serviço não
+persistiu**, tal como o `startCommand` e o healthcheck não tinham persistido
+na secção 3.
+
+Passa a estar no `railway.json`, que é versionado e que, segundo os docs de
+Config as Code, tem precedência sobre o dashboard:
+
+```json
+"preDeployCommand": ["pnpm --filter @workspace/db run push"]
+```
+
+Nota importante sobre o risco desta escolha: um `drizzle-kit push` que faça
+uma pergunta interativa fica pendurado para sempre — os docs dizem que, por
+omissão, o pre-deploy **não tem limite de tempo**. É por isso que o
+`tablesFilter: ["*", "!user_sessions"]` da `drizzle.config.ts` não é
+opcional: sem ele, o push volta a perguntar se a `runs` é um rename da
+`user_sessions` e o deploy nunca mais termina. Convém definir também um
+**Pre-deploy Timeout** (600s é folgado) na página do serviço, para que um
+bloqueio falhe em voz alta em vez de ficar pendurado.
