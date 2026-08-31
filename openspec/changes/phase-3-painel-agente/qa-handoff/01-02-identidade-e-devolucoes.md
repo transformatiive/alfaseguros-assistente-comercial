@@ -33,9 +33,9 @@ Os critérios são os blocos `#### Scenario:` de
 | Scenario | Implementado | Teste do programador | Resultado |
 |---|---|---|---|
 | Known, active agent opens the panel | Sim | `token.test.ts` (round-trip das claims); `resolveColaborador` **não testado** | **parcial — a emissão do token está exercitada, a resolução da identidade não** |
-| Agent not yet registered | Sim — 403 + `logger.warn` com a identidade pedida | nenhum | não exercitado |
+| Agent not yet registered | Sim — 403 + `logger.warn` com a identidade pedida | `POST /api/agente/sessao` em produção com um email desconhecido → 403 "Colaborador não reconhecido" | **exercitado — passa** |
 | Deactivated agent | Sim — `ativo = true` está no WHERE de todos os caminhos | nenhum | não exercitado |
-| Request from the wrong portal | Sim — 403 antes de qualquer consulta à BD | nenhum | não exercitado |
+| Request from the wrong portal | Sim — 403 antes de qualquer consulta à BD | `portalId: "999"` em produção → 403 "Organização não autorizada" | **exercitado — passa** |
 | Expired token | Sim — 401 | `token.test.ts` e `require-agent.test.ts` | **exercitado — passa** |
 | Two agents, two panels | Sim — a listagem filtra por `colaboradorId` do token | nenhum | não exercitado |
 | Cross-agent write is refused | Sim — 403, ver "Desvios" | nenhum | **não exercitado contra uma BD real** |
@@ -50,8 +50,8 @@ Os critérios são os blocos `#### Scenario:` de
 | Redistribution suggestion is rule-based | Não — secção 4 | nenhum | não exercitado |
 | Scheduled refresh / Refresh without the cron secret | Não — secção 5 | nenhum | não exercitado |
 | Tudo em "Reach the panel without ever authenticating" | Não — secções 6, 7A, 7B, 7C | nenhum | não exercitado |
-| Existing login still works | Sim, por construção — nada em `artifacts/supervisor/**` nem em `require-auth.ts` foi tocado | `git diff` | **exercitado por inspeção do diff, não em runtime** |
-| n8n integrations unaffected | Sim, por construção — nenhum endpoint existente mudou | `git diff` | **exercitado por inspeção do diff, não em runtime** |
+| Existing login still works | Sim, por construção — nada em `artifacts/supervisor/**` nem em `require-auth.ts` foi tocado | login real + `GET /api/run/2026-08-28` → 200 no domínio público | **exercitado — passa** |
+| n8n integrations unaffected | Sim, por construção — nenhum endpoint existente mudou | `GET /leads` → 200 e `/api/healthz` → 200 depois do deploy | **parcial — os endpoints continuam vivos; o output do `/api/followups/pending` não foi comparado byte a byte** |
 
 ## Testes executados
 
@@ -100,6 +100,24 @@ tem 5 testes a falhar. Confirmado com `git stash -u` que falham igualmente na
 4. **O rate limit da emissão é por processo e em memória.** Não sobrevive a um
    restart nem a réplicas. É um travão, não uma fronteira de segurança — a
    fronteira é o `PAINEL_WIDGET_TOKEN`.
+
+## Verificação em produção (2026-08-31, depois do schema aplicado)
+
+```
+POST /api/agente/sessao  email desconhecido       → 403 Colaborador não reconhecido
+POST /api/agente/sessao  sem widget token         → 401 Widget não autorizado
+POST /api/agente/sessao  widget token errado      → 401 Widget não autorizado
+POST /api/agente/sessao  portalId errado          → 403 Organização não autorizada
+GET  /api/agente/devolucoes  sem token            → 401 Sessão expirada
+GET  /api/agente/devolucoes  token inválido       → 401 Sessão expirada
+GET  /api/healthz                                 → 200
+GET  /api/run/2026-08-28  (sessão de supervisor)  → 200
+GET  /leads                                       → 200
+```
+
+Nenhum caminho feliz do painel foi exercitado: não há nenhum colaborador com
+`zid` preenchido, porque o backfill (tarefa 0.7) ainda não correu. Tudo o que
+está provado acima são as recusas.
 
 ## Estado
 

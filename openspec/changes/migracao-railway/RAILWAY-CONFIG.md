@@ -92,11 +92,16 @@ GET https://supervisor-production-f030.up.railway.app/api/healthz  →  200 {"st
 E, na dashboard do Railway, confirmar que o serviço mostra o healthcheck em
 `/api/healthz` — não basta o endpoint responder.
 
-## Pre-deploy: aplicar o schema (2026-08-31)
+## Como se aplica o schema no Railway (2026-08-31)
 
-O schema da fase 3 (`devolucoes`, `colaboradores.papel`, `colaboradores.crm_user_id`)
-não entrou na base de dados e a app passou a devolver 500 em
-`/api/agente/sessao`, com este erro nos logs do Railway:
+**Conclusão: o `preDeployCommand` do Railway não funciona neste serviço, e o
+`railway.json` está deprecado. O schema é aplicado por um serviço dedicado.**
+
+### O que falhou, e o que se aprendeu
+
+O schema da fase 3 (`devolucoes`, `colaboradores.papel`,
+`colaboradores.crm_user_id`) não entrou, e a app passou a devolver 500 em
+`/api/agente/sessao`:
 
 ```
 Error: Failed query: select "id", "nome", "ringover_user_id", "zid",
@@ -104,25 +109,68 @@ Error: Failed query: select "id", "nome", "ringover_user_id", "zid",
 from "colaboradores" where (lower("colaboradores"."email") = $1 ...)
 ```
 
-O `preDeployCommand` foi definido no serviço, mas o deploy passou do build
-direto para "Starting Container" sem uma única linha de output do
-`drizzle-kit`. Uma leitura posterior da configuração do serviço mostra
-`"preDeployCommand": []` — ou seja, **a definição ao nível do serviço não
-persistiu**, tal como o `startCommand` e o healthcheck não tinham persistido
-na secção 3.
+Três tentativas, e o que cada uma ensinou:
 
-Passa a estar no `railway.json`, que é versionado e que, segundo os docs de
-Config as Code, tem precedência sobre o dashboard:
+1. **`preDeployCommand` na configuração do serviço** — não persiste. Uma
+   leitura posterior devolve `"preDeployCommand": []`. É o mesmo
+   comportamento que já se tinha visto com o `startCommand` e o healthcheck
+   na secção 3.
 
-```json
-"preDeployCommand": ["pnpm --filter @workspace/db run push"]
-```
+2. **`preDeployCommand` no `railway.json`** — a configuração *é lida* (o
+   `propertyFileMapping` do deploy mostra
+   `"deploy.preDeployCommand": "$.deploy.preDeployCommand"`), mas o passo
+   **nunca é criado**. A lista de passos do deploy é:
 
-Nota importante sobre o risco desta escolha: um `drizzle-kit push` que faça
-uma pergunta interativa fica pendurado para sempre — os docs dizem que, por
-omissão, o pre-deploy **não tem limite de tempo**. É por isso que o
-`tablesFilter: ["*", "!user_sessions"]` da `drizzle.config.ts` não é
-opcional: sem ele, o push volta a perguntar se a `runs` é um rename da
-`user_sessions` e o deploy nunca mais termina. Convém definir também um
-**Pre-deploy Timeout** (600s é folgado) na página do serviço, para que um
-bloqueio falhe em voz alta em vez de ficar pendurado.
+   ```
+   SNAPSHOT_CODE → BUILD_IMAGE → PUBLISH_IMAGE → CREATE_CONTAINER
+   → HEALTHCHECK → CONFIGURE_NETWORK → DRAIN_INSTANCES
+   ```
+
+   Não há passo de pre-deploy nenhum. Não é a forma do comando.
+
+3. **Serviço dedicado `db-schema-push`** — funciona. Repo `main`,
+   `startCommand` = `pnpm --filter @workspace/db run push`, política de
+   reinício `NEVER`, `DATABASE_URL` por referência ao Postgres, e
+   `BASE_PATH=/`.
+
+### Duas coisas que estavam mal registadas antes
+
+- **O `railway.json` NÃO é apenas documentação.** É aplicado: o build do
+  `db-schema-push` usou o `buildCommand` do ficheiro
+  (`pnpm install --frozen-lockfile && pnpm run build`) e ignorou o que
+  estava definido no serviço. Só o `preDeployCommand` é inerte — e foi por
+  isso removido do ficheiro, para não dar a impressão falsa de que o schema
+  se aplica sozinho no deploy.
+
+- **O `BASE_PATH` é obrigatório em qualquer serviço que construa este repo**,
+  mesmo um que nunca sirva frontend, porque o `buildCommand` do
+  `railway.json` corre sempre o `pnpm run build` e o `vite.config.ts` do
+  `mockup-sandbox` exige a variável. Foi assim que o primeiro deploy do
+  `db-schema-push` falhou.
+
+### Config as Code está deprecada
+
+Ao tentar apontar um ficheiro de configuração alternativo, a API do Railway
+responde:
+
+> Config as Code (railway.json / railway.toml) is deprecated. Use
+> Infrastructure as Code (.railway/railway.ts) instead.
+
+O `railway.json` continua a ser aplicado hoje, mas está em fim de vida.
+Migrar para `.railway/railway.ts` fica como trabalho futuro; não é urgente
+enquanto a configuração do serviço for a fonte de verdade.
+
+### Aviso sobre o `drizzle-kit push`
+
+O `tablesFilter: ["*", "!user_sessions"]` da `drizzle.config.ts` não é
+opcional. Sem ele, o push pergunta interativamente se a `runs` é um rename
+da `user_sessions`, e num contentor não há ninguém para responder — fica
+pendurado. Pior: responder "rename", ou passar `--force`, destrói a tabela
+de sessões viva.
+
+### Nota operacional
+
+O `db-schema-push` faz deploy a cada push para `main`. Como o push do
+Drizzle é idempotente, isso é aceitável e faz dele o aplicador de schema do
+projeto. Ficam também dois serviços mortos de trabalho abandonado —
+`db-migracao` e `db-migration-oneshot` — que podem ser apagados.
