@@ -147,7 +147,13 @@ export async function generateDailySummary(
   const result = await opts.client.chatCompletion({
     model,
     temperature: opts.temperature ?? 0.3,
-    max_tokens: opts.maxTokens ?? 4000,
+    // 16000, não 4000. Os modelos com *adaptive thinking* (Sonnet 5 e seguintes)
+    // gastam parte do orçamento de tokens a raciocinar, e esse consumo conta para
+    // o max_tokens. Com 4000, o resumo diário — que lê a totalidade das conversas
+    // do dia — saía truncado a meio de uma string e o JSON.parse falhava com
+    // "Unterminated string in JSON". As análises por conversa não davam por isso
+    // porque cada uma é curta.
+    max_tokens: opts.maxTokens ?? 16000,
     response_format: { type: "json_object" },
     messages: [systemMessage, { role: "user", content: userText }],
   });

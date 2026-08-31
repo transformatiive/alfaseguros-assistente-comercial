@@ -144,7 +144,7 @@ export async function generateAgentSummary(
   const result = await opts.client.chatCompletion({
     model,
     temperature: opts.temperature ?? 0.3,
-    max_tokens: opts.maxTokens ?? 2500,
+    max_tokens: opts.maxTokens ?? 12000,
     response_format: { type: "json_object" },
     messages: [systemMessage, { role: "user", content: userText }],
   });
