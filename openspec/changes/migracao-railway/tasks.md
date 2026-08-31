@@ -37,21 +37,21 @@
 
 ## 5. Move the data
 
-- [ ] 5.1 `pg_dump` the Replit database to a local file during a quiet window (evening or weekend)
-- [ ] 5.2 Restore into Railway Postgres
-- [ ] 5.3 Run `pnpm --filter @workspace/db run push` against Railway to confirm the schema matches with no pending drift
-- [ ] 5.4 Spot-check row counts: `conversations`, `tickets`, `cases`, `daily_summaries`, `colaboradores`, `users`
-- [ ] 5.5 Confirm the `user_sessions` table exists (created by `setupSessionStore()` on boot)
+- [~] 5.1 (N/A — decidido comecar do zero) `pg_dump` the Replit database to a local file during a quiet window (evening or weekend)
+- [~] 5.2 (N/A — decidido comecar do zero) Restore into Railway Postgres
+- [x] 5.3 Run `pnpm --filter @workspace/db run push` against Railway to confirm the schema matches with no pending drift
+- [~] 5.4 (N/A — base de dados nova, sem linhas para comparar) Spot-check row counts: `conversations`, `tickets`, `cases`, `daily_summaries`, `colaboradores`, `users`
+- [x] 5.5 Confirm the `user_sessions` table exists (created by `setupSessionStore()` on boot)
 
 ## 6. Verify on Railway before cutover
 
-- [ ] 6.1 Log in with an existing user; confirm the session cookie survives a page reload
+- [x] 6.1 Log in with an existing user; confirm the session cookie survives a page reload
 - [ ] 6.2 Confirm 2FA login works end to end
-- [ ] 6.3 Open a past day and confirm cached analyses render with zero cost
+- [~] 6.3 (N/A — sem historico) Open a past day and confirm cached analyses render with zero cost
 - [ ] 6.4 Trigger `POST /api/run` manually with the cron secret for a past date and confirm a cache hit
 - [ ] 6.5 Call `GET /api/followups/pending` with the Bearer token and diff the response against Replit's
 - [ ] 6.6 Call `GET /api/alertas-dia` and diff against Replit's
-- [ ] 6.7 Confirm `/leads` renders
+- [x] 6.7 Confirm `/leads` renders
 
 ## 7. Cut over
 
