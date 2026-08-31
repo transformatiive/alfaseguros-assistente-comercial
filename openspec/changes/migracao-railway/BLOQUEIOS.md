@@ -107,71 +107,79 @@ diferentes, o comportamento **muda** — o que viola a regra desta migração:
 **Confirmar nos Replit Secrets se algum destes está definido** e, se estiver,
 copiar o valor.
 
-## Bloqueio 2 — a migração dos dados (secção 5) — EM CURSO
+## ~~Bloqueio 2 — migração dos dados~~ — DECIDIDO: começar do zero
 
-O Nuno deu o `DATABASE_URL` do Replit. A base de dados de origem é **Neon**
-(`ep-shy-bonus-al8zijz...eu-central-1.aws.neon.tech`, base `neondb`), não um
-Postgres do próprio Replit.
+**Decisão do Nuno, 2026-08-31:** não se migram dados. *"O supervisor neste
+momento não é utilizado de forma consistente"* — o histórico não justifica o
+risco nem o trabalho.
 
-**Nota:** o endereço colado tinha `eu-central1`; o correto é `eu-central-1`.
-Confirmado por DNS antes de o usar.
+### O que isto perde, verificado contra o modelo de dados
 
-### O ambiente desta sessão não chega ao Neon
+| Tabela | Reconstrói-se? |
+|---|---|
+| `tickets`, `ticket_comments`, `ticket_sync_state` | sim — re-sincroniza do Zoho Desk |
+| `cases` | sim — derivadas de chamadas + tickets |
+| `runs` | sim — histórico de execuções, descartável |
+| `conversations`, `daily_summaries`, `operator_summaries` | sim, mas **paga LLM outra vez** e o Ringover pode já não ter as chamadas antigas |
+| `checklist_categories`, `checklist_items` | sim — `lib/db/src/seed/vida-fase1.ts`, idempotente |
+| `colaboradores` | **parcialmente** — o seed só tem a equipa Vida (11 operadores). Os seis agentes da 360 (`23275673`–`23275679`) **não estão lá** |
+| `users`, `recovery_codes` | não — mas o `seedAdminUser()` recria um admin, e o 2FA volta a configurar-se |
 
-A rede desta sessão encaminha **só HTTPS** através de um proxy. O protocolo do
-Postgres (TCP 5432) não passa: o DNS resolve mas a ligação expira. Confirmado
-contra três endereços IP do Neon.
+### Porque é que a lacuna do `colaboradores` não bloqueia
 
-Portanto **o `pg_dump` não pode correr a partir daqui.**
+Levantei isto como risco e fui verificar. O `colaboradores` só é lido por
+`jobs/vida-checklist.ts`, `routes/alertas.ts`, `routes/stats.ts` e
+`analysis/category-stats.ts` — **tudo o fluxo da checklist Vida**, que é
+exatamente o que o seeder cobre.
 
-### A solução: correr a migração dentro do Railway
+O fluxo principal do supervisor 360 (`/api/run` → conversas → follow-ups →
+resumo por email) identifica agentes pelo **`AGENT_EMAIL_MAP`**, que é variável
+de ambiente e já está posta no Railway. Não depende da tabela.
 
-Foi criado um serviço temporário **`db-migracao`** no próprio projeto Railway,
-com duas variáveis:
+**Conclusão: começar do zero não parte nada que esteja em uso.**
 
-- `SOURCE_DATABASE_URL` — o Neon
-- `TARGET_DATABASE_URL` — `${{Postgres.DATABASE_URL}}`, por referência
+### E é mais seguro do que uma cópia parcial
 
-O Railway resolve as duas do lado dele e tem saída de rede sem restrições. Os
-dados vão do Neon para o Postgres do Railway **diretamente**, sem passar por esta
-sessão nem por disco local.
+O `/api/followups/pending` lê de `conversations`. Com a tabela vazia devolve
+nada, e o n8n não cria tarefas nenhumas no Desk. Uma cópia que trouxesse as
+conversas mas não os `follow_up_acks` faria o n8n **duplicar tarefas** no
+helpdesk para follow-ups já tratados. O zero evita isso por construção.
 
-Isto tem uma segunda vantagem importante: a palavra-passe do Postgres do Railway
-**continua a nunca ser vista por mim**, porque é resolvida como referência dentro
-da plataforma.
+### O que fica por fazer
 
-### Percalços do Railway, para quem vier a seguir
+1. Aplicar o schema ao Postgres do Railway (`drizzle-kit push`), uma vez
+2. ~~Correr o seed da Vida~~ — **não fazer.** O Nuno confirmou que a equipa Vida
+   **ainda não usa o Zoho Desk**, e os workflows de checklist Vida no n8n estão
+   inativos. Semear dados de uma equipa que não está a usar o sistema só cria
+   ruído. Fica disponível em `lib/db/src/seed/vida-fase1.ts` (idempotente) para
+   quando a Vida entrar.
+3. Apagar o serviço `db-migracao` do Railway
+4. **Rodar a password do Neon** — foi partilhada numa conversa
 
-Três tentativas falhadas antes de acertar. Vale a pena registar:
+### A ferramenta de migração foi removida
 
-1. **Imagem `postgres:16`** — o entrypoint da imagem tenta arrancar um servidor
-   Postgres e exige `POSTGRES_PASSWORD`. Não serve para correr comandos.
-   Trocada por `alpine` com o cliente instalado em arranque.
-2. **`redeploy` reutiliza a especificação antiga do contentor.** Depois de mudar
-   o `startCommand`, um `redeploy` continuava a falhar com o erro do comando
-   *original*. Foi preciso **criar um serviço novo**, com o `startCommand`
-   definido **antes** do primeiro deploy.
-3. **O `startCommand` não é interpretado por uma shell** ao nível de topo.
-   A forma que funciona é pôr o script inteiro numa variável e usar
-   `sh -c "$SCRIPT"` como comando de arranque.
+`ops/db-migracao/` (Dockerfile + script de dump/restore) foi escrita e depois
+apagada, porque deixou de ser precisa. As lições sobre o Railway ficam aqui:
 
-### Ordem de execução
+- A imagem `postgres:16` não serve para correr comandos: o entrypoint quer
+  arrancar um servidor e exige `POSTGRES_PASSWORD`.
+- **O `startCommand` não é interpretado por uma shell.** É partido em palavras;
+  `;`, `|`, `&&` e aspas chegam literalmente ao executável. Quatro tentativas
+  falharam por isto, incluindo uma sugerida pelo agente do próprio Railway.
+- **`redeploy` reutiliza a especificação antiga do contentor.** Mudar o
+  `startCommand` e fazer `redeploy` continua a correr o comando anterior.
+- O que funciona: um Dockerfile com `CMD ["/bin/sh", "/run.sh"]`, ou um
+  `startCommand` sem nenhum metacaractere.
 
-Primeiro uma **inspeção só de leitura** — versões, tabelas, contagens de linhas
-dos dois lados — para ter a linha de base da tarefa 5.4 e confirmar as ligações
-**antes** de escrever seja o que for. Só depois o dump e a restauração.
+### Nota de rede, para o futuro
 
-### O proxy TCP
+Esta sessão só tem saída HTTPS através de um proxy. **O protocolo do Postgres
+não passa** — o DNS resolve e a ligação expira. Qualquer trabalho direto de base
+de dados a partir daqui tem de correr do lado do Railway.
 
-Criado e ativo em `sakura.proxy.rlwy.net:50707` → 5432. Deixa de ser necessário
-para esta migração (que corre por dentro), mas fica útil para inspeção manual e
-para a tarefa 5.4.
-
-### ⚠️ Rodar a credencial do Neon depois
-
-O `DATABASE_URL` do Neon foi colado numa conversa e está guardado como variável
-no serviço `db-migracao`. **Depois da migração terminar:** apagar o serviço
-`db-migracao` e **rodar a password no Neon**.
+O proxy TCP do Postgres (`sakura.proxy.rlwy.net:50707`) existe e está ativo, mas
+também não é alcançável daqui pela mesma razão. Serve para acesso a partir de
+uma máquina normal.
 
 ## ~~Bloqueio 3 — o n8n~~ — RESOLVIDO (tarefa 7.1 feita)
 
