@@ -82,3 +82,35 @@ passa a viver embebido no Desk, esse caminho desaparece e o token em memória
 (15 min, re-mintado) passa a ser o único mecanismo. Isso é mais simples e mais
 seguro, mas significa que não há bookmark — o agente entra sempre pelo Desk.
 Confirmar se é aceitável.
+
+---
+
+## Resposta à tarefa 0.5 (2026-08-31)
+
+O Nuno confirmou: **todos os agentes da equipa 360 têm licenças Zoho One com
+acesso ao Zoho Desk.**
+
+Consequências:
+
+1. **A tarefa 0.5 fica fechada.** Não há barreira de licenciamento — nem no
+   Desk, nem no CRM (o Zoho One inclui ambos).
+
+2. **A secção 7B (Zoho CRM Web Tab) deixa de ser necessária.** Ela só existia
+   como contorno à premissa errada de que "o Desk não consegue alojar uma
+   página inteira". Como o `desk.topband` é uma vista de ecrã inteiro, e como
+   é isso que o utilizador pediu explicitamente — *"um menu no topo do desk, e
+   depois o dashboard em baixo, nada de barras laterais"* — o CRM é um desvio
+   sem retorno.
+
+   Recomendação: **cortar a 7B**, e com ela a tarefa 0.6 (`crmUserId`) e o
+   ramo `crm` da resolução de identidade. A coluna e o código já existem e são
+   inofensivos, mas ficam sem utilizador.
+
+   Isto é uma decisão de âmbito, não uma implementação. Fica registada, não
+   executada.
+
+3. **A secção 7C (sessão sem emenda) simplifica-se.** Sem contexto de iframe do
+   CRM, a única via é a de topo, a partir do Desk — o que torna o cookie de 8
+   horas viável sem a ressalva do `window.top !== window.self`. A regra de
+   nunca ler o cookie quando embebido continua a valer como defesa, mas deixa
+   de haver um caso real que a exercite.
