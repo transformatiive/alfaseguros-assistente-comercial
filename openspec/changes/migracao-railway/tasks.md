@@ -28,11 +28,11 @@
 
 ## 4. Move configuration
 
-- [ ] 4.1 Copy every variable listed in `design.md` → "Environment variables to move" into Railway
+- [x] 4.1 Copy every variable listed in `design.md` → "Environment variables to move" into Railway
 - [x] 4.2 Set `DATABASE_URL` as a reference to the Railway Postgres service
 - [x] 4.3 Set `NODE_ENV=production`, `BASE_PATH=/`
 - [x] 4.4 Set `PUBLIC_APP_URL` to the new Railway domain (do not copy the Replit value)
-- [ ] 4.5 Copy `AGENT_EMAIL_MAP` from `.replit` `[userenv.shared]` — it is not in Replit Secrets
+- [x] 4.5 Copy `AGENT_EMAIL_MAP` from `.replit` `[userenv.shared]` — it is not in Replit Secrets
 - [x] 4.6 Confirm `SESSION_SECRET` is a real secret, not the `change-me-in-production` default
 
 ## 5. Move the data

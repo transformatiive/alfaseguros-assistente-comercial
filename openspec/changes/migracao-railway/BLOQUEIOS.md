@@ -48,32 +48,64 @@ https://docs.railway.com/cli/postgres
 `BASE_PATH=/`, `SESSION_SECRET` (gerado com `${{secret(64)}}`),
 `ANALYSIS_CONCURRENCY=4`, `PUBLIC_APP_URL`.
 
-## Bloqueio 1 — segredos que só existem no Replit (tarefas 4.1 e 4.5)
+## ~~Bloqueio 1 — segredos~~ — RESOLVIDO (2026-08-31)
 
-Não tenho acesso aos Replit Secrets. Sem estas, o serviço arranca e serve a UI,
-mas não busca chamadas, não analisa e não fala com o Desk.
+O Nuno pôs as oito variáveis no Railway. Confirmado no serviço:
+`RINGOVER_API_KEY`, `OPENROUTER_API_KEY`, `CRON_WEBHOOK_SECRET`,
+`FOLLOWUP_API_TOKEN`, `ZOHO_DESK_CLIENT_ID`, `ZOHO_DESK_CLIENT_SECRET`,
+`ZOHO_DESK_REFRESH_TOKEN`, `ZOHO_DESK_ORG_ID`. O `AGENT_EMAIL_MAP` já lá estava.
 
-| Variável | Onde está hoje | Consequência de faltar |
+### Verificado a funcionar, não apenas presente
+
+| Credencial | Como foi testada | Resultado |
 |---|---|---|
-| `RINGOVER_API_KEY` | Replit Secrets | sem chamadas, sem análise |
-| `OPENROUTER_API_KEY` | Replit Secrets | sem análise LLM |
-| `CRON_WEBHOOK_SECRET` | Replit Secrets | o cron do n8n não consegue autenticar em `POST /api/run` |
-| `FOLLOWUP_API_TOKEN` | Replit Secrets | `/api/followups/*` inacessível ao n8n |
-| `ZOHO_DESK_CLIENT_ID` | Replit Secrets | sem tickets |
-| `ZOHO_DESK_CLIENT_SECRET` | Replit Secrets | sem tickets |
-| `ZOHO_DESK_REFRESH_TOKEN` | Replit Secrets | sem tickets |
-| `ZOHO_DESK_ORG_ID` | Replit Secrets | sem tickets |
-| `AGENT_EMAIL_MAP` | **`.replit`, secção `[userenv.shared]`** — não nos Secrets | `/api/followups/pending` fica sem o mapa agente→email |
-| `VIDA_AGENT_IDS` | opcional | usa só o conjunto hardcoded |
-| `FOLLOWUP_EXCLUDE_PRODUCTS` | opcional | usa o default `TVDE,Caravela` |
-| `ZOHO_DESK_NAOVIDA_DEPARTMENT_ID` | opcional | usa o default no código |
+| Zoho Desk (as quatro) | `GET /leads` no domínio real | **200**, 38 653 bytes, 51 linhas de dados reais. Antes dava 503 com "Zoho Desk não configurado". A cadeia Railway → OAuth Zoho → Desk API → HTML renderizado funciona ponta a ponta. |
+| `CRON_WEBHOOK_SECRET` | `POST /api/run` com `source:"cron"` e segredo errado | **401 `Invalid X-Cron-Secret`**. A mensagem prova que a variável está lá — se faltasse, o código devolveria 503 `Cron secret not configured on server`. |
+| `FOLLOWUP_API_TOKEN` | `GET /api/followups/pending` sem token e com token errado | **401** em ambos |
+| `RINGOVER_API_KEY` | — | **Não testada.** Só é exercitada por uma análise real, que custa dinheiro e que não deve correr antes da restauração dos dados. |
+| `OPENROUTER_API_KEY` | — | **Não testada**, pela mesma razão. |
 
-O `AGENT_EMAIL_MAP` está commitado no `.replit` deste repositório, portanto esse
-posso ir buscar — mas continua a ser preciso confirmar que o valor está atual.
+### Achado de segurança encontrado durante estes testes
 
-**O que é preciso:** os valores, postos como variáveis do serviço `supervisor` no
-Railway. Preferencialmente pelo Nuno diretamente na dashboard, para os segredos
-não passarem por uma conversa.
+**`POST /api/run` não exige autenticação nenhuma a menos que o corpo traga
+`source: "cron"`.**
+
+Em `routes/runs.ts` a verificação do `X-Cron-Secret` está dentro de
+`if (isCron)`, e `isCron` é `body.source === "cron"`. Um pedido como
+`{"date":"2026-08-01"}`, sem `source`, salta a guarda por completo e segue para
+a análise.
+
+Isto **não foi introduzido pela migração** — é comportamento que já existia no
+Replit, que também está num URL público. Mas a migração torna-o alcançável num
+segundo domínio público, e os dois estão vivos ao mesmo tempo durante o período
+de rollback.
+
+Neste momento é inofensivo por acidente: a base de dados não tem schema, e o
+pedido morre num `select ... from "runs"` antes de chegar ao `analyzeDay`. Foi
+o que aconteceu nos testes — **nenhuma análise arrancou e nada foi gasto**.
+
+**Passa a ser explorável exatamente no momento em que os dados forem
+restaurados.** Qualquer pessoa que saiba o URL pode disparar uma análise
+completa, que chama o Ringover e o OpenRouter e custa dinheiro.
+
+Não foi corrigido: exigir o segredo em todos os caminhos é uma alteração de
+comportamento, e esta change proíbe-as sem decisão do utilizador. **Decidir
+antes da secção 5**, não depois.
+
+### Variáveis opcionais por confirmar contra o Replit
+
+Estas não estão no Railway e têm defaults no código. Se o Replit tiver valores
+diferentes, o comportamento **muda** — o que viola a regra desta migração:
+
+| Variável | Default no código | Risco se o Replit tiver outro valor |
+|---|---|---|
+| `OPENROUTER_MODEL` | `anthropic/claude-sonnet-4-6` | as análises passam a correr noutro modelo, com custo e output diferentes |
+| `ZOHO_DESK_NAOVIDA_DEPARTMENT_ID` | `367662000000006907` | o `/leads` mostra outro departamento |
+| `VIDA_AGENT_IDS` | vazio | agentes da equipa Vida deixam de ser excluídos |
+| `FOLLOWUP_EXCLUDE_PRODUCTS` | `TVDE,Caravela` | os follow-ups passam a incluir produtos que hoje exclui |
+
+**Confirmar nos Replit Secrets se algum destes está definido** e, se estiver,
+copiar o valor.
 
 ## Bloqueio 2 — a migração dos dados (secção 5)
 
@@ -128,9 +160,11 @@ copia-se o valor do Replit em vez do gerado.
 
 ## Ordem sugerida quando os bloqueios caírem
 
-1. Pôr os segredos (bloqueio 1) no serviço `supervisor`
-2. Criar o proxy TCP (bloqueio 2)
-3. `pg_dump` do Replit → restaurar no Railway
+1. ~~Pôr os segredos~~ — feito
+2. ~~Criar o proxy TCP~~ — feito
+3. Decidir o achado de segurança do `POST /api/run` (ver bloqueio 1) e confirmar
+   as quatro variáveis opcionais contra o Replit — **antes** de restaurar
+4. `pg_dump` do Replit → restaurar no Railway
 4. `pnpm --filter @workspace/db run push` contra o Railway, confirmar que não há drift
 5. Verificar as contagens de linhas e a ausência do admin por defeito
 6. Secção 6 inteira — verificação funcional antes do cutover
