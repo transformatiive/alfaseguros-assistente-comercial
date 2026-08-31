@@ -106,6 +106,34 @@ pnpm exec vitest run src/painel src/middleware
 **Falhas pré-existentes, não introduzidas aqui:** `src/analysis/schema.test.ts`,
 5 testes. Falham igualmente sem estas alterações.
 
+## Verificação em produção (2026-08-31)
+
+```
+GET  /api/agente/painel   token inválido      → 401 Sessão expirada
+GET  /api/agente/painel   sem token           → 401 Sessão expirada
+GET  /api/agente/painel   ?data=ontem         → 401 Sessão expirada
+GET  /api/followups/pending  sem token        → 401 Unauthorized
+GET  /api/followups/pending  token errado     → 401 Unauthorized
+POST /api/agente/sessao   email desconhecido  → 403 Colaborador não reconhecido
+GET  /api/healthz                             → 200
+GET  /api/run/2026-08-28  (supervisor)        → 200
+GET  /leads                                   → 200
+```
+
+Nota sobre o terceiro caso: uma `data` inválida devolve 401, não 400, porque o
+`requireAgent` corre antes da validação do parâmetro. É a ordem certa — quem não
+está autenticado não deve sequer saber que o parâmetro existe.
+
+**Nota metodológica, e um erro meu.** A primeira sondagem deste deploy procurava
+o código 401 e deu positivo aos 20 segundos. Era falso: a versão **antiga**
+também devolve 401 nessa rota, porque a guarda de sessão apanha qualquer caminho
+que não conheça. A sondagem passou a procurar o **corpo** da resposta, que
+distingue as versões sem ambiguidade (`Sessão expirada` na nova,
+`Não autenticado` na antiga). Um código de estado sozinho não prova que um
+deploy aterrou.
+
+Continua sem nenhum caminho feliz exercitado: não há colaborador com `zid`.
+
 ## Estado
 
 **READY FOR INDEPENDENT QA**
