@@ -120,18 +120,29 @@ Duas coisas em falta:
 
 Falta portanto **apenas o `DATABASE_URL` do Replit** para esta secção.
 
-## Bloqueio 3 — o n8n (secção 7)
+## ~~Bloqueio 3 — o n8n~~ — RESOLVIDO (tarefa 7.1 feita)
 
-A tarefa 7.1 manda procurar o hostname do Replit em toda a instância n8n e listar
-todos os nós que lhe chamam. **Não há ferramenta de n8n disponível nesta sessão**,
-portanto não consigo nem procurar nem repontar.
+O MCP do n8n não liga, mas a **API REST funciona**
+(`https://trnsf.up.railway.app/api/v1/...`, header `X-N8N-API-KEY`). Varridos os
+**464 workflows** da instância.
 
-Nós conhecidos pelo `design.md`, a confirmar contra a instância real:
+Resultado completo em **`N8N-INVENTARIO.md`**. Resumo:
 
-- cron diário do Supervisor Virtual, workflow `4rx93UXKxdDdmPpY` → `POST /api/run` com `X-Cron-Secret`
-- qualquer workflow que consuma `GET /api/followups/pending` (Bearer)
-- qualquer workflow que consuma `GET /api/alertas-dia`
-- qualquer workflow que consuma `GET /api/email/summary`
+- 48 workflows referem `.replit.`
+- **Só 8 são desta aplicação.** Os outros 40 apontam para aplicações Replit
+  completamente diferentes (Unicenter, AI Travel Find, To Be., Zoho-Moloni,
+  AILE, AuditConsult, CJ Seguros). **Repontá-los partiria outros clientes.**
+- 4 dos 8 estão **ativos**: o cron diário (`4rx93UXKxdDdmPpY`), os follow-ups
+  (`NLE1zb5d0QgkMn4A`), o resumo por equipa (`rcycpfaZf9wRY9EH`) e o email de
+  leads do Rui (`3MXCukLS8jqcXzIy`).
+
+**O `design.md` estava incompleto.** Listava quatro chamadores; a varredura
+encontrou mais quatro endpoints que ninguém tinha registado: `/api/leads` (num
+workflow **ativo**), `/api/resumo-checklist-dia`, `/api/followups/{{id}}` (o ack)
+e `/api/alertas-dia/confirmar`.
+
+A tarefa **7.2 (repontar) não foi executada de propósito** — mandaria tráfego de
+produção para uma base de dados vazia. Vem depois das secções 5 e 6.
 
 ## Bloqueio 4 — decisões que continuam em aberto
 

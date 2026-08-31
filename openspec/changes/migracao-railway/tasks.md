@@ -55,7 +55,7 @@
 
 ## 7. Cut over
 
-- [ ] 7.1 Grep the n8n instance for the Replit hostname; list every node that matches
+- [x] 7.1 Grep the n8n instance for the Replit hostname; list every node that matches
 - [ ] 7.2 Repoint each one to the Railway domain
 - [ ] 7.3 Disable the Replit cron trigger (do not delete the Replit deployment)
 - [ ] 7.4 Run one full real analysis on Railway and compare its output to the previous day's Replit output for shape and cost
