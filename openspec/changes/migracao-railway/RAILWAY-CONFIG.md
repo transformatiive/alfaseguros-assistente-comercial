@@ -111,10 +111,15 @@ from "colaboradores" where (lower("colaboradores"."email") = $1 ...)
 
 Três tentativas, e o que cada uma ensinou:
 
-1. **`preDeployCommand` na configuração do serviço** — não persiste. Uma
-   leitura posterior devolve `"preDeployCommand": []`. É o mesmo
-   comportamento que já se tinha visto com o `startCommand` e o healthcheck
-   na secção 3.
+1. **`preDeployCommand` na configuração do serviço** — a configuração
+   *persiste* (uma leitura posterior mostra
+   `"preDeployCommand": ["pnpm --filter @workspace/db run push"]` e
+   `"preDeployTimeoutSeconds": 600`), mas **o passo nunca corre**.
+
+   > **Correção.** Numa versão anterior deste documento escrevi que a
+   > definição "não persiste", porque uma leitura intermédia devolveu
+   > `"preDeployCommand": []`. Isso era um efeito de temporização da escrita,
+   > não a causa. A causa é a mesma do ponto 2: o passo não é criado.
 
 2. **`preDeployCommand` no `railway.json`** — a configuração *é lida* (o
    `propertyFileMapping` do deploy mostra
@@ -134,6 +139,10 @@ Três tentativas, e o que cada uma ensinou:
    `BASE_PATH=/`.
 
 ### Duas coisas que estavam mal registadas antes
+
+- **A configuração ao nível do serviço persiste.** O que não acontece é o
+  passo de pre-deploy ser criado — em nenhuma das três tentativas, e
+  independentemente de a configuração vir do serviço ou do ficheiro.
 
 - **O `railway.json` NÃO é apenas documentação.** É aplicado: o build do
   `db-schema-push` usou o `buildCommand` do ficheiro
@@ -167,6 +176,19 @@ opcional. Sem ele, o push pergunta interativamente se a `runs` é um rename
 da `user_sessions`, e num contentor não há ninguém para responder — fica
 pendurado. Pior: responder "rename", ou passar `--force`, destrói a tabela
 de sessões viva.
+
+### Estado atual e limpeza pendente
+
+O serviço da app mantém um `preDeployCommand` configurado, com timeout de
+600s. É inofensivo — o push do Drizzle é idempotente, e hoje o passo nem
+sequer corre. Se um dia o Railway passar a criá-lo, duplica o trabalho do
+`db-schema-push` sem consequência.
+
+**Por apagar à mão, no dashboard:** os serviços `db-migracao` e
+`db-migration-oneshot`, mortos e sem referências. A remoção foi pedida por
+API e ficou *staged*, mas o Railway exige verificação em dois passos para a
+aplicar, o que não é possível por token de API/MCP. Ambos guardam o URL do
+Neon em variáveis, o que é mais uma razão para desaparecerem.
 
 ### Nota operacional
 
