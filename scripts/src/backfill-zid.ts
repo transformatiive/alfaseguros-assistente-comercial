@@ -4,6 +4,7 @@
  *
  *   pnpm --filter @workspace/scripts run db:backfill:zid          # dry run
  *   pnpm --filter @workspace/scripts run db:backfill:zid -- --apply
+ *   SEED_APPLY=1 pnpm --filter @workspace/scripts run db:backfill:zid
  *
  * One-off, idempotent, and deliberately conservative: a colaborador whose
  * email does not match exactly one Desk agent is *logged and skipped*, never
@@ -30,7 +31,14 @@ function norm(email: string | null | undefined): string | null {
 }
 
 async function main(): Promise<void> {
-  const apply = process.argv.slice(2).includes("--apply");
+  // Accepts either the flag or SEED_APPLY=1. The env var exists because
+  // Railway's start command is word-split rather than shell-interpreted, and
+  // the `--` separator that forwards args through pnpm is lost in transit —
+  // the script then runs as a dry run while the operator believes it is
+  // writing. An env var cannot be silently dropped that way.
+  const apply =
+    process.argv.slice(2).includes("--apply") ||
+    ["1", "true", "yes"].includes((process.env.SEED_APPLY ?? "").trim().toLowerCase());
 
   const auth = new ZohoAuth({
     clientId: requireEnv("ZOHO_DESK_CLIENT_ID"),
