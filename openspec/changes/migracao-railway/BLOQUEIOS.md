@@ -107,18 +107,71 @@ diferentes, o comportamento **muda** — o que viola a regra desta migração:
 **Confirmar nos Replit Secrets se algum destes está definido** e, se estiver,
 copiar o valor.
 
-## Bloqueio 2 — a migração dos dados (secção 5)
+## Bloqueio 2 — a migração dos dados (secção 5) — EM CURSO
 
-Duas coisas em falta:
+O Nuno deu o `DATABASE_URL` do Replit. A base de dados de origem é **Neon**
+(`ep-shy-bonus-al8zijz...eu-central-1.aws.neon.tech`, base `neondb`), não um
+Postgres do próprio Replit.
 
-1. **O `DATABASE_URL` do Replit**, para o `pg_dump`. Não o tenho. **É o único
-   bloqueio que resta nesta secção.**
-2. ~~Um proxy TCP no serviço `Postgres` do Railway~~ — **feito.** Ativo em
-   `sakura.proxy.rlwy.net:50707` → porta 5432. O `DATABASE_PUBLIC_URL` no serviço
-   `Postgres` resolve agora corretamente, e é por aí que a restauração deve
-   entrar.
+**Nota:** o endereço colado tinha `eu-central1`; o correto é `eu-central-1`.
+Confirmado por DNS antes de o usar.
 
-Falta portanto **apenas o `DATABASE_URL` do Replit** para esta secção.
+### O ambiente desta sessão não chega ao Neon
+
+A rede desta sessão encaminha **só HTTPS** através de um proxy. O protocolo do
+Postgres (TCP 5432) não passa: o DNS resolve mas a ligação expira. Confirmado
+contra três endereços IP do Neon.
+
+Portanto **o `pg_dump` não pode correr a partir daqui.**
+
+### A solução: correr a migração dentro do Railway
+
+Foi criado um serviço temporário **`db-migracao`** no próprio projeto Railway,
+com duas variáveis:
+
+- `SOURCE_DATABASE_URL` — o Neon
+- `TARGET_DATABASE_URL` — `${{Postgres.DATABASE_URL}}`, por referência
+
+O Railway resolve as duas do lado dele e tem saída de rede sem restrições. Os
+dados vão do Neon para o Postgres do Railway **diretamente**, sem passar por esta
+sessão nem por disco local.
+
+Isto tem uma segunda vantagem importante: a palavra-passe do Postgres do Railway
+**continua a nunca ser vista por mim**, porque é resolvida como referência dentro
+da plataforma.
+
+### Percalços do Railway, para quem vier a seguir
+
+Três tentativas falhadas antes de acertar. Vale a pena registar:
+
+1. **Imagem `postgres:16`** — o entrypoint da imagem tenta arrancar um servidor
+   Postgres e exige `POSTGRES_PASSWORD`. Não serve para correr comandos.
+   Trocada por `alpine` com o cliente instalado em arranque.
+2. **`redeploy` reutiliza a especificação antiga do contentor.** Depois de mudar
+   o `startCommand`, um `redeploy` continuava a falhar com o erro do comando
+   *original*. Foi preciso **criar um serviço novo**, com o `startCommand`
+   definido **antes** do primeiro deploy.
+3. **O `startCommand` não é interpretado por uma shell** ao nível de topo.
+   A forma que funciona é pôr o script inteiro numa variável e usar
+   `sh -c "$SCRIPT"` como comando de arranque.
+
+### Ordem de execução
+
+Primeiro uma **inspeção só de leitura** — versões, tabelas, contagens de linhas
+dos dois lados — para ter a linha de base da tarefa 5.4 e confirmar as ligações
+**antes** de escrever seja o que for. Só depois o dump e a restauração.
+
+### O proxy TCP
+
+Criado e ativo em `sakura.proxy.rlwy.net:50707` → 5432. Deixa de ser necessário
+para esta migração (que corre por dentro), mas fica útil para inspeção manual e
+para a tarefa 5.4.
+
+### ⚠️ Rodar a credencial do Neon depois
+
+O `DATABASE_URL` do Neon foi colado numa conversa e está guardado como variável
+no serviço `db-migracao`. **Depois da migração terminar:** apagar o serviço
+`db-migracao` e **rodar a password no Neon**.
 
 ## ~~Bloqueio 3 — o n8n~~ — RESOLVIDO (tarefa 7.1 feita)
 
