@@ -15,11 +15,20 @@ export const colaboradoresTable = pgTable("colaboradores", {
   ringoverUserId: text("ringover_user_id").unique(),
   // Zoho Desk agent id (ZID) — null for Vida, which has no Desk.
   zid: text("zid"),
+  // Zoho CRM user id — the CRM-side identity join for the agent panel.
+  // Nullable: only the 360 team that gets the panel needs one.
+  crmUserId: text("crm_user_id").unique(),
   email: text("email"),
   telefone: text("telefone"),
   equipa: text("equipa", {
     enum: ["360", "vida", "admin", "mkt", "sinistros"],
   }).notNull(),
+  // What this person may see in the agent panel. `agente` sees only their own
+  // work, `supervisor` also sees the team view, `nenhum` has no panel access.
+  // Defaults to `agente` so an existing row is never accidentally promoted.
+  papel: text("papel", {
+    enum: ["agente", "supervisor", "nenhum"],
+  }).notNull().default("agente"),
   ativo: boolean("ativo").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

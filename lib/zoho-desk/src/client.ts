@@ -1,7 +1,9 @@
 import { ZohoAuth } from "./auth.js";
 import {
+  agentsListResponseSchema,
   commentsListResponseSchema,
   ticketsListResponseSchema,
+  type ZohoAgent,
   type ZohoComment,
   type ZohoTicket,
 } from "./types.js";
@@ -230,6 +232,29 @@ export class ZohoDeskClient {
 
     // Step back a bit so we don't miss tickets right at the boundary.
     return Math.max(0, lo - TICKETS_PAGE_SIZE);
+  }
+
+  /**
+   * All agents in the org, paged at 100 (Zoho's max). Used to backfill
+   * `colaboradores.zid` by matching on email — the Desk-side identity the
+   * agent panel resolves against.
+   */
+  async listAgents(): Promise<ZohoAgent[]> {
+    const all: ZohoAgent[] = [];
+    let from = 0;
+    for (let page = 0; page < 50; page++) {
+      const json = await this.request("/agents", {
+        from: String(from),
+        limit: "100",
+      });
+      const parsed = agentsListResponseSchema.parse(json);
+      const batch = parsed.data ?? [];
+      if (batch.length === 0) break;
+      all.push(...batch);
+      if (batch.length < 100) break;
+      from += 100;
+    }
+    return all;
   }
 
   /** All comments for a ticket, paged at 100 per request (Zoho's max). */

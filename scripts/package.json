@@ -8,12 +8,14 @@
     "zoho:probe-tickets": "tsx ./src/zoho-probe-tickets.ts",
     "ringover:probe-users": "tsx ./src/ringover-probe-users.ts",
     "db:seed:vida": "tsx ./src/seed-vida-fase1.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "db:backfill:zid": "tsx ./src/backfill-zid.ts"
   },
   "dependencies": {
     "@workspace/db": "workspace:*",
     "@workspace/ringover": "workspace:*",
-    "@workspace/zoho-desk": "workspace:*"
+    "@workspace/zoho-desk": "workspace:*",
+    "drizzle-orm": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",

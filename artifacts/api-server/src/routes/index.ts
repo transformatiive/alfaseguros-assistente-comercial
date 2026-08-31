@@ -14,6 +14,7 @@ import alertasRouter from "./alertas.js";
 import checklistAdminRouter from "./checklist-admin.js";
 import statsRouter from "./stats.js";
 import leadsRouter from "./leads.js";
+import agenteRouter from "./agente.js";
 import { requireAuth } from "../middleware/require-auth.js";
 
 const router: IRouter = Router();
@@ -32,6 +33,9 @@ router.use(checklistAdminRouter);
 // Public leads dashboard, also reachable at /api/leads (the front-end SPA layer
 // serves the top-level /leads, so this alias guarantees a backend-reachable URL).
 router.use(leadsRouter);
+// Agent panel — its own bearer-token guard (requireAgent), not the session
+// cookie, so it must be mounted before requireAuth.
+router.use(agenteRouter);
 
 // Protected routes — must be authenticated
 router.use(requireAuth);

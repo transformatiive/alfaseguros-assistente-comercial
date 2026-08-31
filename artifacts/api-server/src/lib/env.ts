@@ -23,6 +23,14 @@ const envSchema = z.object({
   VIDA_AGENT_IDS: z.string().optional(),
   /** Comma-separated product names to exclude from pending follow-ups. Default: "TVDE,Caravela" */
   FOLLOWUP_EXCLUDE_PRODUCTS: z.string().optional(),
+  /** HS256 signing secret for the short-lived agent-panel tokens. Optional so the
+   *  supervisor app still boots without it; the panel routes refuse to mint
+   *  without it rather than falling back to a guessable default. */
+  AGENT_TOKEN_SECRET: z.string().optional(),
+  /** Shared secret the Zoho widget presents to /api/agente/sessao. */
+  PAINEL_WIDGET_TOKEN: z.string().optional(),
+  /** Public base URL of the agent panel, used to build the launch link. */
+  AGENTE_APP_URL: z.string().optional(),
 });
 
 let cached: z.infer<typeof envSchema> | null = null;

@@ -7,6 +7,8 @@ export {
   type ZohoDeskClientOptions,
 } from "./client.js";
 export {
+  agentsListResponseSchema,
+  zohoAgentSchema,
   zohoTicketSchema,
   zohoCommentSchema,
   zohoContactSchema,
@@ -14,6 +16,8 @@ export {
   commentsListResponseSchema,
   type CommentsListResponse,
   type TicketsListResponse,
+  type AgentsListResponse,
+  type ZohoAgent,
   type ZohoAssignee,
   type ZohoComment,
   type ZohoContact,

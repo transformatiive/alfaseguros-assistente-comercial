@@ -92,3 +92,25 @@ export const commentsListResponseSchema = z.object({
 });
 
 export type CommentsListResponse = z.infer<typeof commentsListResponseSchema>;
+
+/**
+ * A Zoho Desk agent. Only the fields the identity backfill needs — Desk
+ * returns considerably more, and `passthrough` is deliberate so a schema
+ * change on their side does not break the parse.
+ */
+export const zohoAgentSchema = z
+  .object({
+    id: z.string(),
+    emailId: z.string().nullish(),
+    firstName: z.string().nullish(),
+    lastName: z.string().nullish(),
+    status: z.string().nullish(),
+  })
+  .passthrough();
+
+export const agentsListResponseSchema = z.object({
+  data: z.array(zohoAgentSchema).optional(),
+});
+
+export type ZohoAgent = z.infer<typeof zohoAgentSchema>;
+export type AgentsListResponse = z.infer<typeof agentsListResponseSchema>;
