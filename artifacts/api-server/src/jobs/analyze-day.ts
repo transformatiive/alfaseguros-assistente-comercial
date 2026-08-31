@@ -11,7 +11,7 @@ import {
   ticketsTable,
   ticketCommentsTable,
 } from "@workspace/db";
-import { OpenRouterClient } from "@workspace/openrouter";
+import { OpenRouterClient, OpenRouterError } from "@workspace/openrouter";
 import { RingoverClient, isAnalyzable, concatenateTranscript } from "@workspace/ringover";
 import { ZohoAuth, ZohoDeskClient } from "@workspace/zoho-desk";
 import { phoneFingerprint } from "@workspace/phone";
@@ -681,7 +681,19 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
 
     publishRunEvent({ type: "run:done", date, analyzed: analyzedCount, costUsd: totalCost });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    // An OpenRouter failure carries the provider's own explanation in `body`.
+    // Without it the run row says only "failed (403)", which is not enough to
+    // tell a spending cap from a data-policy rejection from a bad model id —
+    // the difference between three completely different fixes.
+    const detalhe =
+      err instanceof OpenRouterError && err.body ? ` — ${err.body.slice(0, 500)}` : "";
+    const message = (err instanceof Error ? err.message : String(err)) + detalhe;
+    if (err instanceof OpenRouterError) {
+      logger.error(
+        { status: err.status, body: err.body?.slice(0, 2000), date },
+        "analyze-day: OpenRouter recusou o pedido",
+      );
+    }
     await db
       .update(runsTable)
       .set({ status: "failed", errorMessage: message })
