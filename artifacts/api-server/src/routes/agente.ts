@@ -178,20 +178,30 @@ router.post("/agente/devolucoes/:id/concluir", requireAgent, (req, res, next) =>
       return;
     }
 
-    const row = await concluirDevolucao({
+    const resultado = await concluirDevolucao({
       id,
       colaboradorId: Number(claims.sub),
       estado: parsed.data.estado,
     });
 
-    if (!row) {
-      // Deliberately one status for three cases — no such row, someone else's
-      // row, already resolved. An agent must not be able to probe which.
-      res.status(404).json({ error: "Devolução não encontrada ou já resolvida" });
-      return;
+    switch (resultado.estado) {
+      case "de-outro-agente":
+        logger.warn(
+          { devolucaoId: id, colaboradorId: claims.sub },
+          "painel: tentativa de resolver uma devolução de outro colaborador",
+        );
+        res.status(403).json({ error: "Esta devolução pertence a outro colaborador" });
+        return;
+      case "inexistente":
+        res.status(404).json({ error: "Devolução não encontrada" });
+        return;
+      case "ja-resolvida":
+        res.status(409).json({ error: "Devolução já resolvida" });
+        return;
+      case "ok":
+        res.json({ id: resultado.row.id, estado: resultado.row.estado });
+        return;
     }
-
-    res.json({ id: row.id, estado: row.estado });
   })().catch(next);
 });
 

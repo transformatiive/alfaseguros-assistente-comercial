@@ -85,16 +85,25 @@ export async function listDevolucoesPendentes(
 }
 
 /**
- * Close one devolução. Scoped to `colaboradorId` in the WHERE clause, not
- * checked afterwards — an id belonging to another agent simply matches no row
- * and returns null, so there is no path where a stray id mutates someone
- * else's work. An already-resolved row also returns null.
+ * Close one devolução.
+ *
+ * The outcome is distinguished rather than collapsed, because the spec
+ * requires 403 specifically for a cross-agent write — a caller must be told
+ * "not yours", not "not found". The ownership check is still done in SQL, in
+ * the same statement as the update, so there is no window between checking and
+ * writing.
  */
+export type ConcluirResultado =
+  | { estado: "ok"; row: Devolucao }
+  | { estado: "inexistente" }
+  | { estado: "de-outro-agente" }
+  | { estado: "ja-resolvida" };
+
 export async function concluirDevolucao(params: {
   id: number;
   colaboradorId: number;
   estado: "devolvida" | "dispensada";
-}): Promise<Devolucao | null> {
+}): Promise<ConcluirResultado> {
   const [row] = await db
     .update(devolucoesTable)
     .set({
@@ -111,5 +120,18 @@ export async function concluirDevolucao(params: {
       ),
     )
     .returning();
-  return row ?? null;
+
+  if (row) return { estado: "ok", row };
+
+  // Nothing was updated. Read the row back to say why — this path is only
+  // reached on a rejected write, so the extra query costs nothing in practice.
+  const [existente] = await db
+    .select()
+    .from(devolucoesTable)
+    .where(eq(devolucoesTable.id, params.id))
+    .limit(1);
+
+  if (!existente) return { estado: "inexistente" };
+  if (existente.colaboradorId !== params.colaboradorId) return { estado: "de-outro-agente" };
+  return { estado: "ja-resolvida" };
 }
