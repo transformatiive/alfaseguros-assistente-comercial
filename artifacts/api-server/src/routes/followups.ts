@@ -1,13 +1,8 @@
 import { Router, type IRouter, type RequestHandler } from "express";
-import { and, eq, gte, inArray, sql } from "drizzle-orm";
-import {
-  db,
-  conversationsTable,
-  caseCallsTable,
-  caseTicketsTable,
-  followUpAcksTable,
-} from "@workspace/db";
+import { eq } from "drizzle-orm";
+import { db, conversationsTable, followUpAcksTable } from "@workspace/db";
 import { VIDA_AGENT_IDS as VIDA_CONST } from "@workspace/ringover";
+import { loadPendingFollowUps } from "../painel/followups-query.js";
 import { env } from "../lib/env.js";
 import { logger } from "../lib/logger.js";
 
@@ -84,137 +79,40 @@ router.get("/followups/pending", requireToken, async (req, res): Promise<void> =
     if (!isNaN(d.getTime())) sinceDate = d;
   }
 
-  const vidaIds = buildVidaIds();
-  const emailMap = buildEmailMap();
-  const excludedProducts = buildExcludedProducts();
-
-  // 1. Conversations with followUpNecessario = true, optionally filtered by date
-  const conversations = await db
-    .select()
-    .from(conversationsTable)
-    .where(
-      and(
-        sql`${conversationsTable.analysisJson}->>'followUpNecessario' = 'true'`,
-        sinceDate ? gte(conversationsTable.updatedAt, sinceDate) : undefined,
-      ),
-    );
-
-  if (conversations.length === 0) {
-    res.json({ pending: [], count: 0, total: 0, offset, has_more: false });
-    return;
-  }
-
-  const allConvIds = conversations.map((c) => c.id);
-
-  // 2. Already-acked follow-up IDs
-  const acks = await db
-    .select({ followUpId: followUpAcksTable.followUpId })
-    .from(followUpAcksTable)
-    .where(inArray(followUpAcksTable.conversationId, allConvIds));
-  const ackedIds = new Set(acks.map((a) => a.followUpId));
-
-  // 3. Apply JS filters (vida, products, acked) to determine full filtered set
-  type FilteredConv = (typeof conversations)[number] & {
-    _agentNumId: number;
-    _produto: string;
-    _followUpDescricao: string;
-  };
-
-  const filtered: FilteredConv[] = [];
-  for (const conv of conversations) {
-    const followUpId = `conv_${conv.id}`;
-    if (ackedIds.has(followUpId)) continue;
-
-    const agentNumId = conv.agentId != null ? parseInt(conv.agentId, 10) : NaN;
-    if (!isNaN(agentNumId) && vidaIds.has(agentNumId)) continue;
-
-    const a = (conv.analysisJson ?? {}) as Record<string, unknown>;
-    const produto = typeof a.produto === "string" ? a.produto.trim() : "";
-    if (produto && excludedProducts.has(produto.toLowerCase())) continue;
-
-    const followUpDescricao =
-      typeof a.followUpDescricao === "string" && a.followUpDescricao.trim()
-        ? a.followUpDescricao.trim()
-        : "Follow-up necessário — sem descrição registada.";
-
-    filtered.push({ ...conv, _agentNumId: agentNumId, _produto: produto, _followUpDescricao: followUpDescricao });
-  }
-
-  const total = filtered.length;
-  const page = filtered.slice(offset, offset + limit);
-  const hasMore = offset + limit < total;
-
-  // 4. Batch load linked ticket IDs for this page only
-  const pageConvIds = page.map((c) => c.id);
-  const ticketByConvId = new Map<number, string>();
-
-  if (pageConvIds.length > 0) {
-    const caseCallRows = await db
-      .select({ convId: caseCallsTable.conversationId, caseId: caseCallsTable.caseId })
-      .from(caseCallsTable)
-      .where(inArray(caseCallsTable.conversationId, pageConvIds));
-
-    const caseIds = [...new Set(caseCallRows.map((r) => r.caseId))];
-    if (caseIds.length > 0) {
-      const ticketRows = await db
-        .select({ caseId: caseTicketsTable.caseId, ticketId: caseTicketsTable.ticketId })
-        .from(caseTicketsTable)
-        .where(inArray(caseTicketsTable.caseId, caseIds));
-      const ticketByCaseId = new Map<string, string>();
-      for (const row of ticketRows) {
-        if (!ticketByCaseId.has(row.caseId)) ticketByCaseId.set(row.caseId, row.ticketId);
-      }
-      for (const cc of caseCallRows) {
-        if (!ticketByConvId.has(cc.convId)) {
-          const t = ticketByCaseId.get(cc.caseId);
-          if (t) ticketByConvId.set(cc.convId, t);
-        }
-      }
-    }
-  }
-
-  // 5. Build response
-  const pending = page.map((conv) => {
-    const agentEmail =
-      (!isNaN(conv._agentNumId) && emailMap.get(conv._agentNumId)) || null;
-
-    return {
-      id: `conv_${conv.id}`,
-      agent_email: agentEmail,
-      /** Raw Ringover agent ID — always present so n8n can route unmapped agents */
-      agent_ref: conv.agentId ?? null,
-      contact_phone: conv.customerPhone || null,
-      contact_email: null,
-      follow_up_descricao: conv._followUpDescricao,
-      follow_up_sla_hours: 24,
-      linked_ticket_id: ticketByConvId.get(conv.id) ?? null,
-      product: conv._produto || null,
-      detected_at: conv.updatedAt.toISOString(),
-    };
+  // The query itself lives in painel/followups-query.ts so the agent panel can
+  // reuse it with a per-agent filter. No `agentRef` is passed here: this
+  // endpoint returns every agent's follow-ups, as n8n expects.
+  const result = await loadPendingFollowUps({
+    since: sinceDate,
+    limit,
+    offset,
+    vidaIds: buildVidaIds(),
+    excludedProducts: buildExcludedProducts(),
+    emailMap: buildEmailMap(),
   });
 
-  // 6. Log email coverage for observability
-  const withEmail = pending.filter((p) => p.agent_email !== null).length;
-  const withoutEmail = pending.length - withEmail;
+  // Log email coverage for observability
+  const withEmail = result.pending.filter((p) => p.agent_email !== null).length;
+  const withoutEmail = result.pending.length - withEmail;
   if (withoutEmail > 0) {
     req.log.warn(
-      { total, page_size: pending.length, with_email: withEmail, without_email: withoutEmail, sinceDate },
+      {
+        total: result.total,
+        page_size: result.pending.length,
+        with_email: withEmail,
+        without_email: withoutEmail,
+        sinceDate,
+      },
       "followups/pending: some items have no resolved agent_email",
     );
   } else {
     req.log.info(
-      { total, page_size: pending.length, with_email: withEmail, sinceDate },
+      { total: result.total, page_size: result.pending.length, with_email: withEmail, sinceDate },
       "followups/pending: all items have agent_email resolved",
     );
   }
 
-  res.json({
-    pending,
-    count: pending.length,
-    total,
-    offset,
-    has_more: hasMore,
-  });
+  res.json(result);
 });
 
 // ---------------------------------------------------------------------------

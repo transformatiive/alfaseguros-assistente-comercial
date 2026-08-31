@@ -46,3 +46,21 @@ export async function resolveColaborador(params: {
     .limit(1);
   return row ?? null;
 }
+
+/**
+ * Load an active colaborador by id.
+ *
+ * The panel routes call this on every request rather than trusting the token's
+ * claims alone. A token lives 15 minutes; deactivating someone should stop
+ * their panel now, not up to 15 minutes from now. It also gives the panel the
+ * fields the token does not carry, like `ringoverUserId`.
+ */
+export async function loadColaboradorAtivo(id: number): Promise<Colaborador | null> {
+  if (!Number.isInteger(id) || id <= 0) return null;
+  const [row] = await db
+    .select()
+    .from(colaboradoresTable)
+    .where(and(eq(colaboradoresTable.id, id), eq(colaboradoresTable.ativo, true)))
+    .limit(1);
+  return row ?? null;
+}

@@ -15,7 +15,7 @@ The existing supervisor application is not changed. This is an additive layer: n
 **In scope:**
 
 - **Seamless agent identification.** The Zoho JS SDK reads the already-logged-in agent and exchanges that identity for a short-lived token in the background. No login screen, no password, no agent picker — ever.
-- **A full-page dashboard, embedded where a full page is possible.** Zoho CRM Web Tab (external hosting) is the primary home. Zoho Desk cannot host a full page, so it gets a `desk.topband` launcher that opens the dashboard in one click.
+- **A full-page dashboard inside Zoho Desk.** `desk.topband` renders a widget as a full-screen view from the Desk top navigation bar — one menu item, one click, the whole screen. No side panels, and no second surface: the Zoho CRM Web Tab that earlier drafts proposed was cut on 2026-08-31 (see `tasks.md` §7B).
 - **Agent panel** (`/agente`) with four blocks, per the Plan v2.0 §7 prototype:
   - Chamadas por devolver — missed inbound calls assigned to this agent, with the context of the request
   - Tickets em risco — this agent's open tickets past 24 hours
@@ -39,7 +39,7 @@ Three pieces, each independently testable:
 
 1. **A new API surface** `/api/agente/*` and `/api/supervisor/*`, mounted before `requireAuth` with its own guard. Reads from data the system already has — Ringover calls, synced Desk tickets, follow-up detections — filtered to one agent.
 2. **A new frontend artifact** `artifacts/agente`, built with the same stack, served at `/agente`. Separate from `artifacts/supervisor` so that nothing in the existing app is touched.
-3. **Two thin embeds** — a Zoho CRM Web Tab widget that renders the dashboard full page, and a Zoho Desk topband widget that is a one-click launcher. Both do the same thing: read the agent from the SDK, mint a token, open the panel.
+3. **One thin embed** — a Zoho Desk `desk.topband` widget that reads the agent from the Desk SDK, mints a token, and renders the panel full screen.
 
 ## Smallest viable version
 
