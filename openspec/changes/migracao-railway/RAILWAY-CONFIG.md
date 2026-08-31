@@ -36,6 +36,34 @@ Na secção 3 escrevi que o healthcheck estava apontado a `/api/healthz` via
 Railway não estava a sondá-lo, porque não tinha healthcheck configurado de todo.
 Um serviço em mau estado teria continuado a receber tráfego.
 
+## A causa real: o Railpack lê o *repositório*, não o serviço
+
+Definir `startCommand` na configuração do serviço **não resolveu**. O build
+continuou a falhar com a mesma mensagem, agora com
+`"startCommand": "node artifacts/api-server/dist/index.mjs"` visível no
+diagnóstico.
+
+A razão está no comando que o Railway corre:
+
+```
+railpack prepare /app --error-missing-start ...
+```
+
+A fase de *prepare* do Railpack acontece **antes** de a configuração do serviço
+entrar em jogo, e a flag `--error-missing-start` aborta o build se não encontrar
+um comando de arranque **no repositório**. A documentação do próprio Railpack
+diz o que ele procura, por ordem: um script `start` no `package.json`, um campo
+`main`, um `index.js`/`index.ts` na raiz.
+
+**A correção é um script `start` na raiz do `package.json`:**
+
+```json
+"start": "node artifacts/api-server/dist/index.mjs"
+```
+
+É a primeira coisa que o Railpack procura, e é idiomático num monorepo com um
+único serviço deployável.
+
 ## O que passou a ser feito
 
 A configuração passa a estar **no serviço**, não só no ficheiro:
