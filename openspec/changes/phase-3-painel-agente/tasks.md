@@ -42,10 +42,10 @@
 
 ## 4. Supervisor view
 
-- [ ] 4.1 `src/painel/supervisor.ts` — `buildSupervisorPainel(date)`: per-agent counts for each block across `colaboradores` where `equipa = '360'` and `ativo = true`
-- [ ] 4.2 Redistribution suggestion: rule-based, not AI. Compute each agent's load as a weighted count, flag any agent above 1.5x the team median, and suggest moving their oldest pending items to the agent furthest below the median. Return the suggestion with its reasoning as plain text
-- [ ] 4.3 `GET /api/supervisor/painel?data=` behind `requireSupervisor`
-- [ ] 4.4 Unit tests for the redistribution rule, including the degenerate cases: one agent, all agents equal, everyone at zero
+- [x] 4.1 `src/painel/supervisor.ts` — `buildSupervisorPainel(date)`: per-agent counts for each block across `colaboradores` where `equipa = '360'` and `ativo = true`
+- [x] 4.2 Redistribution suggestion: rule-based, not AI. Compute each agent's load as a weighted count, flag any agent above 1.5x the team median, and suggest moving their oldest pending items to the agent furthest below the median. Return the suggestion with its reasoning as plain text
+- [x] 4.3 `GET /api/supervisor/painel?data=` behind `requireSupervisor`
+- [x] 4.4 Unit tests for the redistribution rule, including the degenerate cases: one agent, all agents equal, everyone at zero
 
 ## 5. Scheduled refresh
 
