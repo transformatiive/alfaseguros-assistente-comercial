@@ -1,6 +1,8 @@
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
-import { db, devolucoesTable, colaboradoresTable, type Devolucao } from "@workspace/db";
+import { db, devolucoesTable, colaboradoresTable, ticketsTable, type Devolucao } from "@workspace/db";
+import { gte, lte } from "drizzle-orm";
 import type { DevolucaoCandidate } from "../painel/devolucoes.js";
+import { atribuirPorTicket, type TicketParaAtribuicao } from "../painel/atribuicao.js";
 
 /**
  * Storage for "chamadas por devolver". Per CLAUDE.md this is the only place
@@ -21,6 +23,51 @@ import type { DevolucaoCandidate } from "../painel/devolucoes.js";
 export async function upsertDevolucoes(candidates: readonly DevolucaoCandidate[]): Promise<number> {
   if (candidates.length === 0) return 0;
 
+  // --- Attribution, step 1: the ticket n8n already created for this call ---
+  //
+  // Read the owner rather than deriving one. The "Chamadas Perdidas" workflow
+  // has already decided — contact's own agent, or round-robin — and the panel
+  // must agree with Desk, including when round-robin picked someone no rule on
+  // our side could have predicted.
+  const horas = candidates.map((c) => c.horaChamada.getTime());
+  const janelaDe = new Date(Math.min(...horas));
+  const janelaAte = new Date(Math.max(...horas) + 60 * 60 * 1000);
+
+  const ticketRows = await db
+    .select({
+      id: ticketsTable.id,
+      phoneFingerprint: ticketsTable.phoneFingerprint,
+      createdTime: ticketsTable.createdTime,
+      assigneeId: ticketsTable.assigneeId,
+    })
+    .from(ticketsTable)
+    .where(
+      and(gte(ticketsTable.createdTime, janelaDe), lte(ticketsTable.createdTime, janelaAte)),
+    );
+
+  const atribuicoes = atribuirPorTicket(
+    candidates.map((c) => ({
+      ringoverCallId: c.ringoverCallId,
+      numeroNormalizado: c.numeroNormalizado,
+      horaChamada: c.horaChamada,
+    })),
+    ticketRows as TicketParaAtribuicao[],
+  );
+
+  const zids = [
+    ...new Set(
+      [...atribuicoes.values()].map((a) => a.zid).filter((z): z is string => z !== null),
+    ),
+  ];
+  const colaboradorPorZid = new Map<string, number>();
+  if (zids.length > 0) {
+    const rows = await db
+      .select({ id: colaboradoresTable.id, zid: colaboradoresTable.zid })
+      .from(colaboradoresTable)
+      .where(inArray(colaboradoresTable.zid, zids));
+    for (const r of rows) if (r.zid) colaboradorPorZid.set(r.zid, r.id);
+  }
+
   const ringoverIds = [
     ...new Set(candidates.map((c) => c.ringoverUserId).filter((v): v is string => v !== null)),
   ];
@@ -35,10 +82,20 @@ export async function upsertDevolucoes(candidates: readonly DevolucaoCandidate[]
     }
   }
 
-  const values = candidates.map((c) => ({
+  const values = candidates.map((c) => {
+    const atrib = atribuicoes.get(c.ringoverCallId);
+    // Order of preference: the ticket's owner (what n8n decided), then the
+    // call's own agent, then whoever called the customer back. The last two
+    // only ever fire when no ticket was matched.
+    const porTicket = atrib?.zid ? (colaboradorPorZid.get(atrib.zid) ?? null) : null;
+    const porChamada = c.ringoverUserId
+      ? (colaboradorByRingoverId.get(c.ringoverUserId) ?? null)
+      : null;
+    return {
     ringoverCallId: c.ringoverCallId,
     data: c.data,
-    colaboradorId: c.ringoverUserId ? (colaboradorByRingoverId.get(c.ringoverUserId) ?? null) : null,
+    ticketId: atrib?.ticketId ?? null,
+    colaboradorId: porTicket ?? porChamada,
     numeroCliente: c.numeroCliente,
     numeroNormalizado: c.numeroNormalizado,
     horaChamada: c.horaChamada,
@@ -46,7 +103,8 @@ export async function upsertDevolucoes(candidates: readonly DevolucaoCandidate[]
     resolvidaAt: c.resolvidaAt,
     resolvidaPor: c.resolvidaPor,
     origem: c.origem,
-  }));
+    };
+  });
 
   await db
     .insert(devolucoesTable)
@@ -55,6 +113,7 @@ export async function upsertDevolucoes(candidates: readonly DevolucaoCandidate[]
       target: devolucoesTable.ringoverCallId,
       set: {
         colaboradorId: sql`excluded.colaborador_id`,
+        ticketId: sql`excluded.ticket_id`,
         estado: sql`excluded.estado`,
         resolvidaAt: sql`excluded.resolvida_at`,
         resolvidaPor: sql`excluded.resolvida_por`,
@@ -121,7 +180,7 @@ export async function listDevolucoesNaoAtribuidas(data: string): Promise<Devoluc
  * writing.
  */
 export type ConcluirResultado =
-  | { estado: "ok"; row: Devolucao }
+  | { estado: "ok"; row: Devolucao; tambemResolvidas: number }
   | { estado: "inexistente" }
   | { estado: "de-outro-agente" }
   | { estado: "ja-resolvida" };
@@ -131,7 +190,21 @@ export async function concluirDevolucao(params: {
   colaboradorId: number;
   estado: "devolvida" | "dispensada";
 }): Promise<ConcluirResultado> {
-  const [row] = await db
+  const [alvo] = await db
+    .select()
+    .from(devolucoesTable)
+    .where(eq(devolucoesTable.id, params.id))
+    .limit(1);
+
+  if (!alvo) return { estado: "inexistente" };
+  if (alvo.colaboradorId !== params.colaboradorId) return { estado: "de-outro-agente" };
+  if (alvo.estado !== "pendente") return { estado: "ja-resolvida" };
+
+  // Close every pending attempt from the same number on the same day, not just
+  // the row that was clicked. The panel groups repeat calls into one line, and
+  // one call back settles the debt for all of them — the same rule
+  // `computeDevolucoes` already applies when it auto-resolves.
+  const linhas = await db
     .update(devolucoesTable)
     .set({
       estado: params.estado,
@@ -141,24 +214,15 @@ export async function concluirDevolucao(params: {
     })
     .where(
       and(
-        eq(devolucoesTable.id, params.id),
         eq(devolucoesTable.colaboradorId, params.colaboradorId),
+        eq(devolucoesTable.data, alvo.data),
+        eq(devolucoesTable.numeroNormalizado, alvo.numeroNormalizado),
         eq(devolucoesTable.estado, "pendente"),
       ),
     )
     .returning();
 
-  if (row) return { estado: "ok", row };
-
-  // Nothing was updated. Read the row back to say why — this path is only
-  // reached on a rejected write, so the extra query costs nothing in practice.
-  const [existente] = await db
-    .select()
-    .from(devolucoesTable)
-    .where(eq(devolucoesTable.id, params.id))
-    .limit(1);
-
-  if (!existente) return { estado: "inexistente" };
-  if (existente.colaboradorId !== params.colaboradorId) return { estado: "de-outro-agente" };
-  return { estado: "ja-resolvida" };
+  const principal = linhas.find((l) => l.id === params.id) ?? linhas[0];
+  if (!principal) return { estado: "ja-resolvida" };
+  return { estado: "ok", row: principal, tambemResolvidas: linhas.length - 1 };
 }

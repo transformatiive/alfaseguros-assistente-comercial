@@ -47,6 +47,14 @@ export const devolucoesTable = pgTable(
     origem: text("origem", { enum: ["auto", "manual"] }),
     /** Free text captured by the voice agent, when there is one. */
     contexto: text("contexto"),
+    /**
+     * The Zoho Desk ticket the n8n "Chamadas Perdidas" workflow created for
+     * this call, when one was matched. Two jobs: it lets the panel link
+     * straight to Desk, and it is how the supervisor's load formula avoids
+     * counting the same work twice — once as a devolução and once as a ticket
+     * past 24 hours.
+     */
+    ticketId: text("ticket_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
@@ -58,6 +66,7 @@ export const devolucoesTable = pgTable(
     colaboradorIdx: index("devolucoes_colaborador_id_idx").on(t.colaboradorId),
     estadoIdx: index("devolucoes_estado_idx").on(t.estado),
     numeroIdx: index("devolucoes_numero_normalizado_idx").on(t.numeroNormalizado),
+    ticketIdx: index("devolucoes_ticket_id_idx").on(t.ticketId),
   }),
 );
 
