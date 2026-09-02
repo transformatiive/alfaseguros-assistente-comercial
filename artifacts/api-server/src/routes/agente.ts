@@ -5,13 +5,14 @@ import { logger } from "../lib/logger.js";
 import { todayLisbon } from "../lib/dates.js";
 import { mintAgentToken } from "../painel/token.js";
 import { resolveColaborador, loadColaboradorAtivo } from "../painel/identity.js";
-import { requireAgent, agenteDe } from "../middleware/require-agent.js";
+import { requireAgent, requireSupervisor, agenteDe } from "../middleware/require-agent.js";
 import {
   listDevolucoesPendentes,
   concluirDevolucao,
 } from "../storage/devolucoes-repo.js";
 
 import { buildAgentePainel } from "../painel/agente.js";
+import { buildSupervisorPainel } from "../painel/supervisor.js";
 
 const router: IRouter = Router();
 
@@ -230,6 +231,27 @@ router.get("/agente/painel", requireAgent, resolveData, (req, res, next) => {
       logger.error({ err: erro, colaboradorId: colaborador.id, data }, "painel: bloco falhou");
     }
     res.json(painel);
+  })().catch(next);
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/supervisor/painel — the team view
+// ---------------------------------------------------------------------------
+
+router.get("/supervisor/painel", requireSupervisor, resolveData, (req, res, next) => {
+  void (async () => {
+    const claims = agenteDe(req);
+    const data = typeof req.query.data === "string" ? req.query.data : todayLisbon();
+
+    // Re-read rather than trust the token, exactly as the agent panel does:
+    // demoting a supervisor must take effect now, not in up to 15 minutes.
+    const colaborador = await loadColaboradorAtivo(Number(claims.sub));
+    if (!colaborador || colaborador.papel !== "supervisor") {
+      res.status(403).json({ error: "Acesso reservado ao supervisor" });
+      return;
+    }
+
+    res.json(await buildSupervisorPainel(data));
   })().catch(next);
 });
 
