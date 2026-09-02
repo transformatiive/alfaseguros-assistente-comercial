@@ -49,20 +49,18 @@ export const EQUIPA_360: readonly Membro360[] = [
 ];
 
 /**
- * OPEN QUESTION — Soraia Silva (Ringover 23304348, 351210270878) takes calls
- * but has no Zoho Desk account, so she never appeared in the Desk listing and
- * was never offered as a roster option. She is deliberately NOT seeded until
- * someone says whether she belongs to equipa 360. If she does, add her with
- * `ringoverUserId: "23304348"` and no `zid`: she would see calls and
- * follow-ups, and the tickets block would tell her she has no Desk account.
- */
-
-/**
- * Zoho Desk agents who are NOT equipa 360 and must never be seeded: the CEO,
- * and anyone else with a Desk licence for other reasons. Listed by name so a
- * future reader sees the exclusion was deliberate, not an oversight.
+ * People who are NOT equipa 360 and must never be seeded. Listed by name so a
+ * future reader sees each exclusion was a decision, not an oversight.
  *
- *   Carmen Machado, Cláudia Sanches, Ricardo Barge, Rui Almeida (CEO).
+ *   Soraia Silva (Ringover 23304348, 351210270878) — takes calls but is not
+ *     equipa 360. Confirmed by Nuno, 2026-09-02. She has no Zoho Desk account
+ *     either, so she never appeared in the Desk listing; the absence is not
+ *     what excludes her, the decision is. Her answered calls therefore
+ *     attribute to nobody, which is correct: a panel is for the team it
+ *     belongs to.
  *
- * Soraia has no Desk account at all.
+ *   Carmen Machado, Cláudia Sanches, Ricardo Barge — Desk licences held for
+ *     other reasons.
+ *
+ *   Rui Almeida — CEO, and no Desk account.
  */
