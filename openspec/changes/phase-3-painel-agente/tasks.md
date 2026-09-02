@@ -68,15 +68,23 @@
 
 ## 7A. Zoho Desk launcher
 
-> Desk cannot host a full-page dashboard. This is a launcher, not the panel. Do not try to render the dashboard inside a Desk panel.
+> **Nota corrigida em 2026-09-02.** A frase anterior dizia que o Desk não consegue
+> alojar uma página inteira. É falso, e já era contradito pela própria nota de
+> corte do 7B: `desk.topband` está documentado como *renders full screen*, e isso
+> foi confirmado contra a documentação da Zoho durante a implementação.
+>
+> Continua a ser um lançador, mas por outra razão. Dentro de um iframe o
+> armazenamento do browser é particionado, e a sessão de 8 horas do 7C precisa de
+> um cookie *first-party*, que só existe numa navegação de topo. É o separador
+> novo que torna o 7C possível — não uma limitação do Desk.
 
-- [ ] 7A.1 Scaffold with `zet init` for Zoho Desk; set `plugin-manifest.json` name, version, and the app domain in allowed domains
-- [ ] 7A.2 Single widget at location `desk.topband`. Confirm the key against the current Sigma manifest schema — location keys change between versions, do not copy them from a blog post
-- [ ] 7A.3 Widget: `ZOHODESK.extension.onload()`, then `ZOHODESK.get("user")` and `ZOHODESK.get("portal")`
-- [ ] 7A.4 Render one button, "O meu painel", plus a live count of pending devoluções so the band is useful at a glance without opening anything
-- [ ] 7A.5 On click: POST to `/api/agente/sessao`, then `window.open(AGENTE_APP_URL + "/agente#token=...", "_blank")`
-- [ ] 7A.6 On 403, replace the button with a plain Portuguese message naming the agent's Desk email and asking them to contact Nuno — most 403s will be a missing `zid`
-- [ ] 7A.7 `zet pack`, install privately in the Alfaseguros portal, test with one real agent account
+- [x] 7A.1 Scaffold with `zet init` for Zoho Desk; set `plugin-manifest.json` name, version, and the app domain in allowed domains
+- [x] 7A.2 Single widget at location `desk.topband`. Confirm the key against the current Sigma manifest schema — location keys change between versions, do not copy them from a blog post
+- [x] 7A.3 Widget: `ZOHODESK.extension.onload()`, then `ZOHODESK.get("user")` and `ZOHODESK.get("portal")`
+- [x] 7A.4 Render one button, "O meu painel", plus a live count of pending devoluções so the band is useful at a glance without opening anything
+- [x] 7A.5 On click: POST to `/api/agente/sessao`, then `window.open(AGENTE_APP_URL + "/agente#token=...", "_blank")`
+- [x] 7A.6 On 403, replace the button with a plain Portuguese message naming the agent's Desk email and asking them to contact Nuno — most 403s will be a missing `zid`
+- [~] 7A.7 `zet pack` feito e `zet validate` passa; **instalação no portal e teste com um agente real por fazer** — precisa de acesso ao Sigma e a uma conta do Desk
 
 ## 7B. ~~Zoho CRM Web Tab~~ — CUT
 

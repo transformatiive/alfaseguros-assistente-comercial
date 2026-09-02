@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="pt">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>O meu painel</title>
+    <style>
+      :root {
+        --fg: #0f172a;
+        --muted: #64748b;
+        --linha: #e2e8f0;
+        --accent: #f59e0b;
+        --perigo: #dc2626;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font: 14px/1.45 Inter, -apple-system, "Segoe UI", sans-serif;
+        color: var(--fg);
+        background: #fff;
+      }
+      .barra {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--linha);
+      }
+      button {
+        font: inherit;
+        font-weight: 600;
+        color: #fff;
+        background: var(--fg);
+        border: 0;
+        border-radius: 6px;
+        padding: 7px 14px;
+        cursor: pointer;
+      }
+      button:disabled { opacity: 0.55; cursor: default; }
+      .contagem { color: var(--muted); font-size: 13px; }
+      .contagem strong { color: var(--fg); font-variant-numeric: tabular-nums; }
+      .urgente strong { color: var(--perigo); }
+      .aviso {
+        padding: 12px 16px;
+        font-size: 13px;
+        line-height: 1.6;
+        color: var(--muted);
+        border-bottom: 1px solid var(--linha);
+      }
+      .aviso b { color: var(--fg); }
+      code {
+        font: 12px/1.4 Menlo, monospace;
+        background: #f1f5f9;
+        padding: 1px 4px;
+        border-radius: 3px;
+      }
+      [hidden] { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div class="barra" id="barra" hidden>
+      <button id="abrir" disabled>O meu painel</button>
+      <span class="contagem" id="contagem"></span>
+    </div>
+    <div class="aviso" id="aviso" hidden></div>
+
+    <script src="https://js.zohostatic.com/support/developer_sdk/v1/js/ZohoDeskClientSDK.min.js"></script>
+    <script>
+      /*
+       * The Desk launcher.
+       *
+       * Its whole job is to turn "this browser has a logged-in Desk agent" into
+       * "this browser has a 15-minute panel token", and then to get out of the
+       * way. It renders a button and a count; it never renders the panel.
+       *
+       * Two things here are deliberate and easy to undo by accident:
+       *
+       *  1. **The token is minted fresh on click**, not reused from page load.
+       *     A band sits open all morning; a token minted at 09:00 is long dead
+       *     by 11:00, and handing the panel a dead token produces a blank page
+       *     with no explanation.
+       *
+       *  2. **Every failure says something.** A launcher that silently does
+       *     nothing is indistinguishable from a broken portal, and the agent
+       *     has no way to tell which. Each failure names what to do next.
+       */
+
+      var el = {
+        barra: document.getElementById("barra"),
+        abrir: document.getElementById("abrir"),
+        contagem: document.getElementById("contagem"),
+        aviso: document.getElementById("aviso"),
+      };
+
+      function mostrarAviso(html) {
+        el.aviso.innerHTML = html;
+        el.aviso.hidden = false;
+      }
+
+      /*
+       * Pull an identity out of whatever ZOHODESK.get("user") returns.
+       *
+       * The response envelope is NOT documented in the public extension guide —
+       * different SDK versions have wrapped it as `{user: {...}}`, as
+       * `{user: {value: {...}}}`, and as the bare object. Rather than pick one
+       * and be confidently wrong in production, this accepts any of them and,
+       * when it finds nothing, shows what it actually received so the next
+       * person can fix it in one look instead of guessing.
+       */
+      function extrairUtilizador(resposta) {
+        var candidatos = [
+          resposta,
+          resposta && resposta.user,
+          resposta && resposta.user && resposta.user.value,
+          resposta && resposta.value,
+        ];
+        for (var i = 0; i < candidatos.length; i++) {
+          var c = candidatos[i];
+          if (c && (c.email || c.id || c.emailId)) {
+            return {
+              id: c.id ? String(c.id) : null,
+              email: c.email || c.emailId || null,
+              nome: c.fullName || c.name || null,
+            };
+          }
+        }
+        return null;
+      }
+
+      function extrairPortal(resposta) {
+        var candidatos = [
+          resposta,
+          resposta && resposta.portal,
+          resposta && resposta.portal && resposta.portal.value,
+          resposta && resposta.value,
+        ];
+        for (var i = 0; i < candidatos.length; i++) {
+          var c = candidatos[i];
+          if (c && c.id) return String(c.id);
+        }
+        return null;
+      }
+
+      function extrairConfig(resposta) {
+        var candidatos = [
+          resposta,
+          resposta && resposta["extension.config"],
+          resposta && resposta.config,
+          resposta && resposta.value,
+        ];
+        for (var i = 0; i < candidatos.length; i++) {
+          var c = candidatos[i];
+          if (c && (c.agenteAppUrl || c.widgetToken)) return c;
+        }
+        return null;
+      }
+
+      /** Mint a panel token for this agent. Resolves to the JSON body. */
+      function pedirToken(cfg, utilizador, portalId) {
+        return fetch(cfg.base + "/api/agente/sessao", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Painel-Widget-Token": cfg.token,
+          },
+          body: JSON.stringify({
+            deskUserId: utilizador.id,
+            email: utilizador.email,
+            portalId: portalId,
+            source: "desk",
+          }),
+        }).then(function (res) {
+          if (res.status === 403) {
+            var err = new Error("nao-reconhecido");
+            err.naoReconhecido = true;
+            throw err;
+          }
+          if (!res.ok) throw new Error("O servidor respondeu " + res.status);
+          return res.json();
+        });
+      }
+
+      function contarDevolucoes(cfg, token) {
+        return fetch(cfg.base + "/api/agente/painel", {
+          headers: { Authorization: "Bearer " + token },
+        })
+          .then(function (res) {
+            if (!res.ok) throw new Error(String(res.status));
+            return res.json();
+          })
+          .then(function (painel) {
+            // An unavailable block is an object, not an array. Counting its
+            // length would quietly report 0 — "nothing to do" — when the truth
+            // is "we could not look".
+            if (!Array.isArray(painel.devolucoes)) return null;
+            return painel.devolucoes.length;
+          });
+      }
+
+      function desenharContagem(n) {
+        if (n === null) {
+          el.contagem.textContent = "";
+          return;
+        }
+        if (n === 0) {
+          el.contagem.textContent = "Sem chamadas por devolver.";
+          return;
+        }
+        el.contagem.className = "contagem urgente";
+        el.contagem.innerHTML =
+          "<strong>" + n + "</strong> " +
+          (n === 1 ? "chamada por devolver" : "chamadas por devolver");
+      }
+
+      window.onload = function () {
+        if (typeof ZOHODESK === "undefined") {
+          mostrarAviso(
+            "Não foi possível carregar o SDK do Zoho Desk. Recarrega a página; " +
+              "se continuar, avisa o Nuno."
+          );
+          return;
+        }
+
+        ZOHODESK.extension.onload().then(function () {
+          return Promise.all([
+            ZOHODESK.get("user"),
+            ZOHODESK.get("portal"),
+            ZOHODESK.get("extension.config"),
+          ]).then(function (respostas) {
+            var utilizador = extrairUtilizador(respostas[0]);
+            var portalId = extrairPortal(respostas[1]);
+            var config = extrairConfig(respostas[2]);
+
+            if (!config || !config.agenteAppUrl || !config.widgetToken) {
+              mostrarAviso(
+                "A extensão está instalada mas não está configurada. Um " +
+                  "administrador tem de preencher <b>Endereço do painel</b> e " +
+                  "<b>Token do widget</b> nas definições da extensão."
+              );
+              return;
+            }
+
+            var cfg = {
+              base: String(config.agenteAppUrl).replace(/\/+$/, ""),
+              token: config.widgetToken,
+            };
+
+            if (!utilizador) {
+              mostrarAviso(
+                "Não consegui identificar-te a partir do Zoho Desk. Mostra isto " +
+                  "ao Nuno: <code>" +
+                  JSON.stringify(respostas[0]).slice(0, 300) +
+                  "</code>"
+              );
+              return;
+            }
+
+            el.barra.hidden = false;
+
+            // The count needs a token too, so this doubles as a live check that
+            // minting works. If it fails with 403 the agent learns now, on
+            // arrival, rather than on the click.
+            pedirToken(cfg, utilizador, portalId)
+              .then(function (sessao) {
+                el.abrir.disabled = false;
+                return contarDevolucoes(cfg, sessao.token).then(desenharContagem);
+              })
+              .catch(function (erro) {
+                if (erro && erro.naoReconhecido) {
+                  el.barra.hidden = true;
+                  mostrarAviso(
+                    "A tua conta do Zoho Desk (<b>" +
+                      (utilizador.email || utilizador.id) +
+                      "</b>) ainda não está ligada ao painel. Fala com o Nuno " +
+                      "para ficares ligado — é uma linha de configuração, não " +
+                      "demora."
+                  );
+                  return;
+                }
+                // Anything else may well be transient, so the button stays
+                // usable: a failed count must not block the panel.
+                el.abrir.disabled = false;
+                el.contagem.textContent = "Não consegui ler as chamadas por devolver.";
+              });
+
+            el.abrir.onclick = function () {
+              el.abrir.disabled = true;
+              pedirToken(cfg, utilizador, portalId)
+                .then(function (sessao) {
+                  el.abrir.disabled = false;
+                  // The token travels in the fragment: browsers never send it to
+                  // a server and never write it to an access log. The panel
+                  // reads it once and erases it.
+                  window.open(
+                    cfg.base + "/agente#token=" + encodeURIComponent(sessao.token),
+                    "_blank",
+                    "noopener"
+                  );
+                })
+                .catch(function (erro) {
+                  el.abrir.disabled = false;
+                  mostrarAviso(
+                    erro && erro.naoReconhecido
+                      ? "A tua conta do Zoho Desk ainda não está ligada ao painel. Fala com o Nuno."
+                      : "Não foi possível abrir o painel. Tenta outra vez; se continuar, avisa o Nuno."
+                  );
+                });
+            };
+          });
+        }).catch(function (erro) {
+          mostrarAviso(
+            "A extensão não arrancou. Mostra isto ao Nuno: <code>" +
+              String(erro && erro.message ? erro.message : erro).slice(0, 200) +
+              "</code>"
+          );
+        });
+      };
+    </script>
+  </body>
+</html>
