@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db, devolucoesTable, colaboradoresTable, type Devolucao } from "@workspace/db";
 import type { DevolucaoCandidate } from "../painel/devolucoes.js";
 
@@ -77,6 +77,33 @@ export async function listDevolucoesPendentes(
     .where(
       and(
         eq(devolucoesTable.colaboradorId, colaboradorId),
+        eq(devolucoesTable.data, data),
+        eq(devolucoesTable.estado, "pendente"),
+      ),
+    )
+    .orderBy(asc(devolucoesTable.horaChamada));
+}
+
+/**
+ * Pending devoluções nobody is responsible for, oldest first.
+ *
+ * An unanswered inbound call usually carries no Ringover `user_id` — nobody
+ * picked it up, so there is nobody to attribute it to. `computeDevolucoes`
+ * falls back to whoever called the customer back later, but when nobody did,
+ * the row has a null `colaboradorId`.
+ *
+ * Without this query those rows are invisible to everyone: the per-agent list
+ * filters on `colaboradorId`, and the team totals are the sum of the per-agent
+ * counts. A customer nobody called back is precisely the case the panel exists
+ * to surface, so it goes to the supervisor rather than nowhere.
+ */
+export async function listDevolucoesNaoAtribuidas(data: string): Promise<Devolucao[]> {
+  return db
+    .select()
+    .from(devolucoesTable)
+    .where(
+      and(
+        isNull(devolucoesTable.colaboradorId),
         eq(devolucoesTable.data, data),
         eq(devolucoesTable.estado, "pendente"),
       ),
