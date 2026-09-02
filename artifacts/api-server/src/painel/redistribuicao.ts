@@ -14,6 +14,14 @@ export interface CargaAgente {
   devolucoes: number;
   ticketsEmRisco: number;
   followUps: number;
+  /**
+   * Load already computed by the caller, which may differ from the raw counts.
+   * The supervisor view discounts devoluções whose Desk ticket is already in
+   * the tickets block, so the same work is not weighed twice — and the
+   * suggestion has to be decided on that corrected number, not recomputed from
+   * the raw counts.
+   */
+  cargaPonderada?: number;
 }
 
 /**
@@ -35,6 +43,7 @@ export interface Sugestao {
 }
 
 export function cargaPonderada(c: CargaAgente): number {
+  if (typeof c.cargaPonderada === "number") return c.cargaPonderada;
   return (
     c.devolucoes * PESOS.devolucoes +
     c.ticketsEmRisco * PESOS.ticketsEmRisco +
