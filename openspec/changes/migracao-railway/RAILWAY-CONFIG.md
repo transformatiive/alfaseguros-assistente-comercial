@@ -177,6 +177,21 @@ da `user_sessions`, e num contentor não há ninguém para responder — fica
 pendurado. Pior: responder "rename", ou passar `--force`, destrói a tabela
 de sessões viva.
 
+### O `redeploy` reutiliza a configuração antiga
+
+Mudar o *start command* de um serviço e depois chamar `redeploy` **não**
+corre o comando novo: o redeploy repete o deployment anterior, com a
+configuração que ele tinha. O comando novo só entra num deployment novo —
+que nasce de um push para `main` ou de uma alteração de variáveis.
+
+Custou-me dois ciclos a perceber, das duas vezes porque os logs mostravam o
+comando antigo a correr enquanto a configuração lida por API já mostrava o
+novo. Não é a configuração que está errada, é o deployment que é velho.
+
+Para forçar um deployment novo sem mexer no código: alterar uma variável de
+ambiente qualquer do serviço. Evitar o `create-deployment` da MCP para este
+efeito — ele **cria um serviço novo** em vez de fazer deploy no existente.
+
 ### Estado atual e limpeza pendente
 
 O serviço da app mantém um `preDeployCommand` configurado, com timeout de
@@ -184,8 +199,10 @@ O serviço da app mantém um `preDeployCommand` configurado, com timeout de
 sequer corre. Se um dia o Railway passar a criá-lo, duplica o trabalho do
 `db-schema-push` sem consequência.
 
-**Por apagar à mão, no dashboard:** os serviços `db-migracao` e
-`db-migration-oneshot`, mortos e sem referências. A remoção foi pedida por
+**Por apagar à mão, no dashboard:** os serviços `db-migracao`,
+`db-migration-oneshot` e `alfaseguros-assistente-comercial`, mortos e sem
+referências. O último nasceu de um `create-deployment` meu que criou um
+serviço em vez de fazer deploy no existente; nunca serviu nada. A remoção foi pedida por
 API e ficou *staged*, mas o Railway exige verificação em dois passos para a
 aplicar, o que não é possível por token de API/MCP. Ambos guardam o URL do
 Neon em variáveis, o que é mais uma razão para desaparecerem.
