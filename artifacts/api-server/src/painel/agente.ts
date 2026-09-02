@@ -14,10 +14,62 @@ import { loadPendingFollowUps, type FollowUpItem } from "./followups-query.js";
  */
 
 export interface DevolucaoPainel {
-  id: number;
+  /** Ids of every missed call from this number, on this day, still pending. */
+  ids: number[];
   numeroCliente: string;
-  horaChamada: string;
+  /** How many times this customer called and nobody answered. */
+  tentativas: number;
+  /** First and last attempt, so urgency is visible without counting rows. */
+  primeiraChamada: string;
+  ultimaChamada: string;
   contexto: string | null;
+  /** The Desk ticket n8n opened for this call, when one was matched. */
+  ticketId: string | null;
+}
+
+/**
+ * Collapse repeat calls from the same customer into one row.
+ *
+ * On a real day one customer rang five times in thirteen minutes without an
+ * answer. Five rows say less than one row saying "5 tentativas" — and they bury
+ * the urgency rather than showing it. The individual rows stay in the database;
+ * idempotency depends on `ringover_call_id`.
+ */
+export function agruparDevolucoes(
+  linhas: readonly {
+    id: number;
+    numeroCliente: string;
+    numeroNormalizado: string;
+    horaChamada: Date;
+    contexto: string | null;
+    ticketId: string | null;
+  }[],
+): DevolucaoPainel[] {
+  const grupos = new Map<string, typeof linhas[number][]>();
+  for (const l of linhas) {
+    grupos.set(l.numeroNormalizado, [...(grupos.get(l.numeroNormalizado) ?? []), l]);
+  }
+
+  const out = [...grupos.values()].map((g) => {
+    const ord = [...g].sort((a, b) => a.horaChamada.getTime() - b.horaChamada.getTime());
+    return {
+      ids: ord.map((l) => l.id),
+      numeroCliente: ord[0].numeroCliente,
+      tentativas: ord.length,
+      primeiraChamada: ord[0].horaChamada.toISOString(),
+      ultimaChamada: ord[ord.length - 1].horaChamada.toISOString(),
+      // First non-empty context in the group; several attempts rarely each
+      // carry one, and an empty string would read as "no context captured".
+      contexto: ord.find((l) => l.contexto)?.contexto ?? null,
+      // Any ticket linked to any attempt: for load accounting, one linked
+      // attempt means this work is already represented in the tickets block.
+      ticketId: ord.find((l) => l.ticketId)?.ticketId ?? null,
+    };
+  });
+
+  // Oldest first — the customer waiting longest is at the top.
+  out.sort((a, b) => new Date(a.primeiraChamada).getTime() - new Date(b.primeiraChamada).getTime());
+  return out;
 }
 
 /**
@@ -115,12 +167,7 @@ export async function buildAgentePainel(
 
   const devolucoes: DevolucaoPainel[] | BlocoIndisponivel =
     devolucoesR.status === "fulfilled"
-      ? devolucoesR.value.map((d) => ({
-          id: d.id,
-          numeroCliente: d.numeroCliente,
-          horaChamada: d.horaChamada.toISOString(),
-          contexto: d.contexto,
-        }))
+      ? agruparDevolucoes(devolucoesR.value)
       : indisponivel("Não foi possível carregar as chamadas por devolver.");
 
   let ticketsEmRisco: TicketEmRisco[] | BlocoIndisponivel;

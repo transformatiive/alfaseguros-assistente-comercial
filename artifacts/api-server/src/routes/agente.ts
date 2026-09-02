@@ -202,7 +202,12 @@ router.post("/agente/devolucoes/:id/concluir", requireAgent, (req, res, next) =>
         res.status(409).json({ error: "Devolução já resolvida" });
         return;
       case "ok":
-        res.json({ id: resultado.row.id, estado: resultado.row.estado });
+        res.json({
+          id: resultado.row.id,
+          estado: resultado.row.estado,
+          // Other attempts from the same number, closed by the same click.
+          tambemResolvidas: resultado.tambemResolvidas,
+        });
         return;
     }
   })().catch(next);

@@ -1,7 +1,12 @@
 import { and, eq } from "drizzle-orm";
 import { db, colaboradoresTable, type Colaborador } from "@workspace/db";
 import { logger } from "../lib/logger.js";
-import { buildAgentePainel, type BlocoIndisponivel, type DevolucaoPainel } from "./agente.js";
+import {
+  buildAgentePainel,
+  agruparDevolucoes,
+  type BlocoIndisponivel,
+  type DevolucaoPainel,
+} from "./agente.js";
 import { listDevolucoesNaoAtribuidas } from "../storage/devolucoes-repo.js";
 import { sugerirRedistribuicao, cargaPonderada, PESOS, LIMIAR_SOBRECARGA, type Sugestao } from "./redistribuicao.js";
 
@@ -17,6 +22,12 @@ export interface LinhaAgente {
   ticketsEmRisco: number;
   followUps: number;
   cargaPonderada: number;
+  /**
+   * Devoluções whose Desk ticket is already in this agent's tickets block.
+   * Shown so the supervisor can see why the load is lower than the raw counts
+   * suggest, rather than suspecting an arithmetic bug.
+   */
+  jaContadasComoTicket: number;
   /** Blocks that could not be built for this agent, by name. */
   indisponiveis: string[];
 }
@@ -71,6 +82,18 @@ export async function buildSupervisorPainel(data: string): Promise<SupervisorPai
       const d = contar(painel.devolucoes);
       const t = contar(painel.ticketsEmRisco);
       const f = contar(painel.followUps);
+
+      // Stop counting the same work twice. Every missed call also becomes a
+      // Desk ticket, so a call missed three days ago shows up BOTH as a
+      // devolução and as a ticket past 24 hours. Left alone, the load formula
+      // adds both and inflates the agent — and the redistribution suggestion
+      // is decided on inflated numbers.
+      const idsEmRisco = new Set(
+        Array.isArray(painel.ticketsEmRisco) ? painel.ticketsEmRisco.map((x) => x.id) : [],
+      );
+      const devolucoesJaContadas = Array.isArray(painel.devolucoes)
+        ? painel.devolucoes.filter((x) => x.ticketId !== null && idsEmRisco.has(x.ticketId)).length
+        : 0;
       const indisponiveis = [
         ...(d.ok ? [] : ["devolucoes"]),
         ...(t.ok ? [] : ["ticketsEmRisco"]),
@@ -84,7 +107,11 @@ export async function buildSupervisorPainel(data: string): Promise<SupervisorPai
         ticketsEmRisco: t.n,
         followUps: f.n,
       };
-      return { ...base, cargaPonderada: cargaPonderada(base), indisponiveis };
+      // The counts shown stay honest — the agent really does have `d.n`
+      // devoluções. Only the LOAD drops the overlap, because load is meant to
+      // measure how much work there is, not how many places it appears in.
+      const carga = cargaPonderada({ ...base, devolucoes: d.n - devolucoesJaContadas });
+      return { ...base, cargaPonderada: carga, jaContadasComoTicket: devolucoesJaContadas, indisponiveis };
     }),
   );
 
@@ -93,12 +120,7 @@ export async function buildSupervisorPainel(data: string): Promise<SupervisorPai
 
   let naoAtribuidas: DevolucaoPainel[] | BlocoIndisponivel;
   try {
-    naoAtribuidas = (await listDevolucoesNaoAtribuidas(data)).map((d) => ({
-      id: d.id,
-      numeroCliente: d.numeroCliente,
-      horaChamada: d.horaChamada.toISOString(),
-      contexto: d.contexto,
-    }));
+    naoAtribuidas = agruparDevolucoes(await listDevolucoesNaoAtribuidas(data));
   } catch (erro) {
     logger.error({ err: erro, data }, "painel supervisor: bloco não atribuídas falhou");
     naoAtribuidas = { disponivel: false, motivo: "Não foi possível carregar as chamadas sem agente." };

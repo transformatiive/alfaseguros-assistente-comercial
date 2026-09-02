@@ -211,3 +211,72 @@ describe("computeDevolucoes", () => {
     expect(a).toEqual(b);
   });
 });
+
+// ---------------------------------------------------------------------------
+
+import { agruparDevolucoes } from "./agente.js";
+
+function linha(over: Partial<Parameters<typeof agruparDevolucoes>[0][number]> & { id: number }) {
+  return {
+    numeroCliente: "351911051149",
+    numeroNormalizado: "911051149",
+    horaChamada: new Date("2026-08-28T10:30:00Z"),
+    contexto: null,
+    ticketId: null,
+    ...over,
+  };
+}
+
+describe("agruparDevolucoes", () => {
+  it("collapses repeat calls from one customer into a single row", () => {
+    const g = agruparDevolucoes([
+      linha({ id: 1, horaChamada: new Date("2026-08-28T10:30:06Z") }),
+      linha({ id: 2, horaChamada: new Date("2026-08-28T10:34:09Z") }),
+      linha({ id: 3, horaChamada: new Date("2026-08-28T10:37:47Z") }),
+      linha({ id: 4, horaChamada: new Date("2026-08-28T10:41:28Z") }),
+    ]);
+    expect(g).toHaveLength(1);
+    expect(g[0].tentativas).toBe(4);
+    expect(g[0].ids).toEqual([1, 2, 3, 4]);
+    expect(g[0].primeiraChamada).toBe("2026-08-28T10:30:06.000Z");
+    expect(g[0].ultimaChamada).toBe("2026-08-28T10:41:28.000Z");
+  });
+
+  it("keeps different customers apart", () => {
+    const g = agruparDevolucoes([
+      linha({ id: 1, numeroNormalizado: "911051149" }),
+      linha({ id: 2, numeroNormalizado: "936127727", numeroCliente: "351936127727" }),
+    ]);
+    expect(g).toHaveLength(2);
+  });
+
+  it("puts the customer waiting longest first", () => {
+    const g = agruparDevolucoes([
+      linha({ id: 1, numeroNormalizado: "aaa", horaChamada: new Date("2026-08-28T14:00:00Z") }),
+      linha({ id: 2, numeroNormalizado: "bbb", horaChamada: new Date("2026-08-28T09:00:00Z") }),
+    ]);
+    expect(g[0].ids).toEqual([2]);
+  });
+
+  it("takes the first non-empty context in the group", () => {
+    const g = agruparDevolucoes([
+      linha({ id: 1, contexto: null }),
+      linha({ id: 2, contexto: "quer cotação auto" }),
+    ]);
+    expect(g[0].contexto).toBe("quer cotação auto");
+  });
+
+  it("surfaces a ticket linked to any attempt, not only the first", () => {
+    // The load formula depends on this: one linked attempt means the work is
+    // already represented in the tickets block.
+    const g = agruparDevolucoes([
+      linha({ id: 1, ticketId: null }),
+      linha({ id: 2, ticketId: "367662000126075740" }),
+    ]);
+    expect(g[0].ticketId).toBe("367662000126075740");
+  });
+
+  it("returns an empty list for no input", () => {
+    expect(agruparDevolucoes([])).toEqual([]);
+  });
+});
