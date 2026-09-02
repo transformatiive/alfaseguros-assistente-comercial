@@ -15,6 +15,7 @@ import checklistAdminRouter from "./checklist-admin.js";
 import statsRouter from "./stats.js";
 import leadsRouter from "./leads.js";
 import agenteRouter from "./agente.js";
+import painelRefreshRouter from "./painel-refresh.js";
 import { requireAuth } from "../middleware/require-auth.js";
 
 const router: IRouter = Router();
@@ -36,6 +37,9 @@ router.use(leadsRouter);
 // Agent panel — its own bearer-token guard (requireAgent), not the session
 // cookie, so it must be mounted before requireAuth.
 router.use(agenteRouter);
+// Panel refresh — cron-secret guarded like /api/run, so it must sit before
+// requireAuth. Never calls the LLM.
+router.use(painelRefreshRouter);
 
 // Protected routes — must be authenticated
 router.use(requireAuth);

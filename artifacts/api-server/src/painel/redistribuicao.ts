@@ -51,7 +51,9 @@ export function mediana(valores: readonly number[]): number {
 }
 
 function n(valor: number): string {
-  // Weights produce halves; show them only when they exist.
+  // Weights produce halves; show them only when they exist. Portuguese uses a
+  // decimal comma — including for the threshold itself, which read "1.5×"
+  // against "92,5 pontos" in the same sentence.
   return Number.isInteger(valor) ? String(valor) : valor.toFixed(1).replace(".", ",");
 }
 
@@ -109,7 +111,7 @@ export function sugerirRedistribuicao(cargas: readonly CargaAgente[]): Sugestao 
     return semSugestao(
       `A equipa está equilibrada. A carga mais alta é a de ${maisCarregado.nome}, ` +
         `com ${n(maisCarregado.carga)} pontos, abaixo de ${n(med * LIMIAR_SOBRECARGA)} — ` +
-        `${LIMIAR_SOBRECARGA}× a mediana de ${n(med)}.`,
+        `${n(LIMIAR_SOBRECARGA)}× a mediana de ${n(med)}.`,
     );
   }
 
@@ -123,7 +125,7 @@ export function sugerirRedistribuicao(cargas: readonly CargaAgente[]): Sugestao 
     razao:
       `${maisCarregado.nome} tem ${n(maisCarregado.carga)} pontos de carga ` +
       `(${maisCarregado.devolucoes} por devolver, ${maisCarregado.ticketsEmRisco} tickets em risco, ` +
-      `${maisCarregado.followUps} follow-ups), mais de ${LIMIAR_SOBRECARGA}× a mediana da equipa, ` +
+      `${maisCarregado.followUps} follow-ups), mais de ${n(LIMIAR_SOBRECARGA)}× a mediana da equipa, ` +
       `que é ${n(med)}. ${menosCarregado.nome} tem ${n(menosCarregado.carga)}. ` +
       `Sugestão: passar os itens mais antigos de ${maisCarregado.nome} para ${menosCarregado.nome}.`,
   };
