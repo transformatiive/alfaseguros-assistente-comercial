@@ -90,6 +90,15 @@ app.use("/api", router);
  * Resolved from `import.meta.url` rather than the source tree, because esbuild
  * bundles this module into `dist/index.mjs` and the path must be correct there.
  */
+/**
+ * Static-asset paths, for the agent panel's SPA fallback. Same intent as
+ * `ASSET_EXTENSIONS` further down: a request for a missing asset must 404 as an
+ * asset, because HTML served with a 200 in its place fails as
+ * "Unexpected token '<'", which is a confusing way to learn a build is broken.
+ */
+const AGENTE_ASSET_RE =
+  /\.(css|js|mjs|map|json|svg|png|jpe?g|gif|webp|avif|ico|woff2?|ttf|otf|eot|txt|xml|webmanifest)$/i;
+
 function resolveClientDir(): string | null {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const candidates = [
@@ -99,7 +108,46 @@ function resolveClientDir(): string | null {
   return candidates.find((dir) => existsSync(path.join(dir, "index.html"))) ?? null;
 }
 
+/**
+ * Locate the built agent panel, the same two-candidate way as the supervisor
+ * client. It is a separate Vite build with its own base path (`/agente/`), so
+ * it is a separate directory and a separate mount.
+ */
+function resolveAgenteDir(): string | null {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.resolve(here, "agente"),
+    path.resolve(here, "../../agente/dist/public"),
+  ];
+  return candidates.find((dir) => existsSync(path.join(dir, "index.html"))) ?? null;
+}
+
 const clientDir = resolveClientDir();
+const agenteDir = resolveAgenteDir();
+
+// --- Agent panel, mounted at /agente ----------------------------------------
+//
+// Mounted BEFORE the supervisor client so its SPA fallback wins for /agente/*;
+// the supervisor fallback is a catch-all and would otherwise answer with the
+// wrong index.html. Nothing else changes meaning: /api, /leads and every
+// existing supervisor route are untouched.
+if (agenteDir === null) {
+  logger.warn("Painel do agente não encontrado; a API continua a servir /api normalmente.");
+} else {
+  logger.info({ agenteDir }, "A servir o painel do agente em /agente");
+
+  app.use("/agente", express.static(agenteDir, { index: false, maxAge: "1h" }));
+
+  const agenteIndex = path.join(agenteDir, "index.html");
+  app.use("/agente", (req, res, next) => {
+    if (req.method !== "GET" && req.method !== "HEAD") return next();
+    // A missing asset must 404 as an asset, not as HTML — same reasoning as the
+    // supervisor fallback below.
+    if (AGENTE_ASSET_RE.test(req.path)) return next();
+    if (!req.accepts("html")) return next();
+    res.sendFile(agenteIndex);
+  });
+}
 
 if (clientDir === null) {
   // The API is still fully functional without the client — /api and /leads are

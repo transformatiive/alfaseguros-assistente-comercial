@@ -57,14 +57,14 @@
 
 ## 6. Frontend
 
-- [ ] 6.1 Scaffold `artifacts/agente` — Vite + React + Tailwind + TanStack Query + Wouter, `BASE_PATH=/agente/`, added to `pnpm-workspace.yaml`
-- [ ] 6.2 Copy only the shadcn primitives actually used (card, badge, button, tabs, skeleton, separator, tooltip) from the supervisor artifact; do not import across artifacts and do not move the originals
-- [ ] 6.3 Boot sequence: read `location.hash` for the token, store it in memory, clear the hash with `history.replaceState`, then fetch the panel
-- [ ] 6.4 On 401, post a message to the parent frame so the widget re-mints and reloads the iframe
-- [ ] 6.5 Agent panel page: the four blocks, dense, light background, mobile-narrow by default since the Desk left panel is narrow
-- [ ] 6.6 Supervisor panel page at `/agente/equipa`, rendered only when the token carries `papel = supervisor`
-- [ ] 6.7 Explicit empty states per block, and a visibly different placeholder for agendamentos
-- [ ] 6.8 Serve the build from Express under `/agente` (extends the static serving added in `migracao-railway`)
+- [x] 6.1 Scaffold `artifacts/agente` — Vite + React + Tailwind + TanStack Query + Wouter, `BASE_PATH=/agente/`, added to `pnpm-workspace.yaml`
+- [x] 6.2 Copy only the shadcn primitives actually used (card, badge, button, tabs, skeleton, separator, tooltip) from the supervisor artifact; do not import across artifacts and do not move the originals
+- [x] 6.3 Boot sequence: read `location.hash` for the token, store it in memory, clear the hash with `history.replaceState`, then fetch the panel
+- [x] 6.4 On 401, post a message to the parent frame so the widget re-mints and reloads the iframe
+- [x] 6.5 Agent panel page: the four blocks, dense, light background, mobile-narrow by default since the Desk left panel is narrow
+- [x] 6.6 Supervisor panel page at `/agente/equipa`, rendered only when the token carries `papel = supervisor`
+- [x] 6.7 Explicit empty states per block, and a visibly different placeholder for agendamentos
+- [x] 6.8 Serve the build from Express under `/agente` (extends the static serving added in `migracao-railway`)
 
 ## 7A. Zoho Desk launcher
 
