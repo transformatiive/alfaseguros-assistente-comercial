@@ -49,9 +49,9 @@
 
 ## 5. Scheduled refresh
 
-- [ ] 5.1 `src/routes/painel-refresh.ts` — `POST /api/painel/refresh`, guarded by `X-Cron-Secret` exactly like `/api/run`
-- [ ] 5.2 It runs `computeDevolucoes(today)` and `syncTickets(today - 2d, today)`. It MUST NOT call the LLM
-- [ ] 5.3 Assert in a test that no OpenRouter call is issued during a refresh
+- [x] 5.1 `src/routes/painel-refresh.ts` — `POST /api/painel/refresh`, guarded by `X-Cron-Secret` exactly like `/api/run`
+- [x] 5.2 It runs `computeDevolucoes(today)` and `syncTickets(today - 2d, today)`. It MUST NOT call the LLM
+- [x] 5.3 Assert in a test that no OpenRouter call is issued during a refresh
 - [ ] 5.4 Create two n8n schedules: 08:00 and 16:30 Lisbon, Monday to Friday, both hitting `/api/painel/refresh`
 - [ ] 5.5 Leave the existing 06:00 cron and the daily email running untouched
 

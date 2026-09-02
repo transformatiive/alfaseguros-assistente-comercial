@@ -175,6 +175,16 @@ describe("sugerirRedistribuicao — the rule", () => {
     if (s.de && s.para) expect(s.de.colaboradorId).not.toBe(s.para.colaboradorId);
   });
 
+  it("writes the threshold with a decimal comma, like every other number", () => {
+    const s = sugerirRedistribuicao([
+      agente({ colaboradorId: 1, nome: "Vânia", devolucoes: 20 }),
+      agente({ colaboradorId: 2, nome: "Tiago", devolucoes: 2 }),
+      agente({ colaboradorId: 3, nome: "Ana", devolucoes: 1 }),
+    ]);
+    expect(s.razao).toContain("1,5×");
+    expect(s.razao).not.toContain("1.5");
+  });
+
   it("exposes its constants so the UI can explain the same rule", () => {
     expect(LIMIAR_SOBRECARGA).toBe(1.5);
     expect(PESOS).toEqual({ devolucoes: 1, ticketsEmRisco: 2, followUps: 1.5 });
