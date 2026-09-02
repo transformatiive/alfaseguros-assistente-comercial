@@ -1,7 +1,8 @@
 import { and, eq } from "drizzle-orm";
 import { db, colaboradoresTable, type Colaborador } from "@workspace/db";
 import { logger } from "../lib/logger.js";
-import { buildAgentePainel, type BlocoIndisponivel } from "./agente.js";
+import { buildAgentePainel, type BlocoIndisponivel, type DevolucaoPainel } from "./agente.js";
+import { listDevolucoesNaoAtribuidas } from "../storage/devolucoes-repo.js";
 import { sugerirRedistribuicao, cargaPonderada, PESOS, LIMIAR_SOBRECARGA, type Sugestao } from "./redistribuicao.js";
 
 /**
@@ -24,6 +25,12 @@ export interface SupervisorPainel {
   data: string;
   totais: { devolucoes: number; ticketsEmRisco: number; followUps: number };
   agentes: LinhaAgente[];
+  /**
+   * Missed calls with no agent attached — nobody answered and nobody called
+   * back. Kept OUT of `totais`, which is the sum of the per-agent rows and must
+   * keep reconciling with them; this is a separate pile the supervisor assigns.
+   */
+  naoAtribuidas: DevolucaoPainel[] | BlocoIndisponivel;
   sugestao: Sugestao;
   /** Published so the UI can explain the same rule the server applied. */
   regra: { pesos: typeof PESOS; limiarSobrecarga: number };
@@ -84,6 +91,19 @@ export async function buildSupervisorPainel(data: string): Promise<SupervisorPai
   // Heaviest first: the supervisor's eye should land on the problem.
   linhas.sort((a, b) => b.cargaPonderada - a.cargaPonderada || a.colaboradorId - b.colaboradorId);
 
+  let naoAtribuidas: DevolucaoPainel[] | BlocoIndisponivel;
+  try {
+    naoAtribuidas = (await listDevolucoesNaoAtribuidas(data)).map((d) => ({
+      id: d.id,
+      numeroCliente: d.numeroCliente,
+      horaChamada: d.horaChamada.toISOString(),
+      contexto: d.contexto,
+    }));
+  } catch (erro) {
+    logger.error({ err: erro, data }, "painel supervisor: bloco não atribuídas falhou");
+    naoAtribuidas = { disponivel: false, motivo: "Não foi possível carregar as chamadas sem agente." };
+  }
+
   return {
     data,
     totais: {
@@ -92,6 +112,7 @@ export async function buildSupervisorPainel(data: string): Promise<SupervisorPai
       followUps: linhas.reduce((s, l) => s + l.followUps, 0),
     },
     agentes: linhas,
+    naoAtribuidas,
     sugestao: sugerirRedistribuicao(linhas),
     regra: { pesos: PESOS, limiarSobrecarga: LIMIAR_SOBRECARGA },
     atualizadoEm: new Date().toISOString(),
