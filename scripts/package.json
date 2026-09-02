@@ -10,7 +10,8 @@
     "db:seed:vida": "tsx ./src/seed-vida-fase1.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:backfill:zid": "tsx ./src/backfill-zid.ts",
-    "db:seed:360": "tsx ./src/seed-360.ts"
+    "db:seed:360": "tsx ./src/seed-360.ts",
+    "painel:refresh": "tsx ./src/painel-refresh.ts"
   },
   "dependencies": {
     "@workspace/db": "workspace:*",
