@@ -1,0 +1,50 @@
+{
+  "locale": [
+    "en"
+  ],
+  "service": "DESK",
+  "storage": false,
+  "type": "personal",
+  "whiteListedDomains": [
+    "https://supervisor-production-f030.up.railway.app"
+  ],
+  "modules": {
+    "widgets": [
+      {
+        "location": "desk.topband",
+        "url": "/app/widget.html",
+        "name": "O meu painel"
+      }
+    ]
+  },
+  "cspDomains": {
+    "connect-src": [
+      "https://supervisor-production-f030.up.railway.app"
+    ]
+  },
+  "zohoAuthorisation": {},
+  "connectors": [],
+  "config": [
+    {
+      "displayName": "Endereço do painel",
+      "name": "agenteAppUrl",
+      "type": "text",
+      "description": "Base do painel, sem barra final. Ex.: https://supervisor-production-f030.up.railway.app",
+      "mandatory": true,
+      "userdefined": true,
+      "secure": false,
+      "authType": "org"
+    },
+    {
+      "displayName": "Token do widget",
+      "name": "widgetToken",
+      "type": "text",
+      "description": "O mesmo valor de PAINEL_WIDGET_TOKEN no servidor. Introduzido na instalacao para nao viver no repositorio, e para poder ser rodado sem reempacotar a extensao.",
+      "mandatory": true,
+      "userdefined": true,
+      "secure": false,
+      "authType": "org"
+    }
+  ],
+  "moduleSupport": false
+}

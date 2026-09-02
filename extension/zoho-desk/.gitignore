@@ -1,0 +1,5 @@
+# Build output of `zet pack`. Rebuildable from source in one command, and a
+# binary in git makes every diff a lie about what changed.
+dist/
+node_modules/
+ZET-debug.log
