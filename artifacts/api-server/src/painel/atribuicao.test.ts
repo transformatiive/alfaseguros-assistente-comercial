@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
+  atribuirPorHistorico,
   atribuirPorTicket,
+  propagarNoGrupo,
   JANELA_TICKET_MS,
   type ChamadaParaAtribuir,
   type TicketParaAtribuicao,
@@ -11,6 +13,7 @@ const T0 = new Date("2026-08-28T10:00:00Z");
 function chamada(over: Partial<ChamadaParaAtribuir> = {}): ChamadaParaAtribuir {
   return {
     ringoverCallId: "c1",
+    data: "2026-08-28",
     numeroNormalizado: "911051149",
     horaChamada: T0,
     ...over,
@@ -127,5 +130,62 @@ describe("atribuirPorTicket", () => {
 
   it("returns nothing when there are no tickets at all", () => {
     expect(atribuirPorTicket([chamada()], []).size).toBe(0);
+  });
+});
+
+describe("propagarNoGrupo", () => {
+  const t = ticket();
+
+  it("dá o dono do ticket às reinsistências do mesmo número no mesmo dia", () => {
+    const c1 = chamada({ ringoverCallId: "c1" });
+    const c2 = chamada({ ringoverCallId: "c2", horaChamada: new Date(T0.getTime() + 600_000) });
+    const c3 = chamada({ ringoverCallId: "c3", horaChamada: new Date(T0.getTime() + 900_000) });
+
+    const atrib = atribuirPorTicket([c1, c2, c3], [t]);
+    expect(atrib.size).toBe(1);
+
+    const grupo = propagarNoGrupo([c1, c2, c3], atrib);
+    expect([...grupo.keys()].sort()).toEqual(["c2", "c3"]);
+    expect(grupo.get("c2")).toBe(t.assigneeId);
+  });
+
+  it("não propaga entre números diferentes", () => {
+    const c1 = chamada({ ringoverCallId: "c1" });
+    const outro = chamada({ ringoverCallId: "c9", numeroNormalizado: "966293662" });
+    const grupo = propagarNoGrupo([c1, outro], atribuirPorTicket([c1, outro], [t]));
+    expect(grupo.has("c9")).toBe(false);
+  });
+
+  it("não propaga entre dias diferentes", () => {
+    const c1 = chamada({ ringoverCallId: "c1" });
+    const ontem = chamada({ ringoverCallId: "c0", data: "2026-08-27" });
+    const grupo = propagarNoGrupo([c1, ontem], atribuirPorTicket([c1], [t]));
+    expect(grupo.has("c0")).toBe(false);
+  });
+
+  it("nunca sobrepõe uma atribuição já feita por ticket próprio", () => {
+    const c1 = chamada({ ringoverCallId: "c1" });
+    const grupo = propagarNoGrupo([c1], atribuirPorTicket([c1], [t]));
+    expect(grupo.has("c1")).toBe(false);
+  });
+});
+
+describe("atribuirPorHistorico", () => {
+  it("usa o dono do último ticket do cliente", () => {
+    const c = chamada({ ringoverCallId: "c1" });
+    const out = atribuirPorHistorico([c], new Set(), new Map([["911051149", "zidX"]]));
+    expect(out.get("c1")).toBe("zidX");
+  });
+
+  it("deixa em branco um cliente sem histórico nenhum", () => {
+    const c = chamada({ ringoverCallId: "c1", numeroNormalizado: "999999999" });
+    const out = atribuirPorHistorico([c], new Set(), new Map([["911051149", "zidX"]]));
+    expect(out.size).toBe(0);
+  });
+
+  it("não mexe em chamadas já atribuídas por camadas mais fortes", () => {
+    const c = chamada({ ringoverCallId: "c1" });
+    const out = atribuirPorHistorico([c], new Set(["c1"]), new Map([["911051149", "zidX"]]));
+    expect(out.size).toBe(0);
   });
 });

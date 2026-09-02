@@ -1,8 +1,15 @@
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { db, devolucoesTable, colaboradoresTable, ticketsTable, type Devolucao } from "@workspace/db";
 import { gte, lte } from "drizzle-orm";
 import type { DevolucaoCandidate } from "../painel/devolucoes.js";
-import { atribuirPorTicket, type TicketParaAtribuicao } from "../painel/atribuicao.js";
+import {
+  atribuirPorHistorico,
+  atribuirPorTicket,
+  propagarNoGrupo,
+  type ChamadaParaAtribuir,
+  type OrigemAtribuicao,
+  type TicketParaAtribuicao,
+} from "../painel/atribuicao.js";
 
 /**
  * Storage for "chamadas por devolver". Per CLAUDE.md this is the only place
@@ -45,19 +52,68 @@ export async function upsertDevolucoes(candidates: readonly DevolucaoCandidate[]
       and(gte(ticketsTable.createdTime, janelaDe), lte(ticketsTable.createdTime, janelaAte)),
     );
 
-  const atribuicoes = atribuirPorTicket(
-    candidates.map((c) => ({
-      ringoverCallId: c.ringoverCallId,
-      numeroNormalizado: c.numeroNormalizado,
-      horaChamada: c.horaChamada,
-    })),
-    ticketRows as TicketParaAtribuicao[],
+  const chamadas: ChamadaParaAtribuir[] = candidates.map((c) => ({
+    ringoverCallId: c.ringoverCallId,
+    data: c.data,
+    numeroNormalizado: c.numeroNormalizado,
+    horaChamada: c.horaChamada,
+  }));
+
+  const atribuicoes = atribuirPorTicket(chamadas, ticketRows as TicketParaAtribuicao[]);
+
+  // --- Step 2: spread a group's owner to the repeat calls in it ---
+  //
+  // Measured on 2026-08-28: of 45 calls that matched no ticket, most were
+  // second and third attempts by customers whose ticket had already been
+  // claimed by their first attempt. The panel draws those as one line, so the
+  // owner has to cover the whole line.
+  const porGrupo = propagarNoGrupo(chamadas, atribuicoes);
+
+  // --- Step 3: the owner of this customer's most recent previous ticket ---
+  //
+  // Only for calls still ownerless after steps 1 and 2, and only when the
+  // customer has any ticket history at all. A number Desk has never seen is a
+  // first-time caller: they go to the shared bucket, not to a guess.
+  const semDono = new Set(
+    chamadas
+      .filter((c) => !atribuicoes.has(c.ringoverCallId) && !porGrupo.has(c.ringoverCallId))
+      .map((c) => c.numeroNormalizado),
+  );
+  const ultimoTicketPorFingerprint = new Map<string, string>();
+  if (semDono.size > 0) {
+    const historicos = await db
+      .select({
+        phoneFingerprint: ticketsTable.phoneFingerprint,
+        assigneeId: ticketsTable.assigneeId,
+      })
+      .from(ticketsTable)
+      .where(
+        and(
+          inArray(ticketsTable.phoneFingerprint, [...semDono]),
+          isNotNull(ticketsTable.assigneeId),
+        ),
+      )
+      .orderBy(desc(ticketsTable.createdTime));
+    for (const h of historicos) {
+      // Ordered newest first, so the first row per number is the latest ticket.
+      if (!h.phoneFingerprint || !h.assigneeId) continue;
+      if (!ultimoTicketPorFingerprint.has(h.phoneFingerprint)) {
+        ultimoTicketPorFingerprint.set(h.phoneFingerprint, h.assigneeId);
+      }
+    }
+  }
+  const porHistorico = atribuirPorHistorico(
+    chamadas,
+    new Set([...atribuicoes.keys(), ...porGrupo.keys()]),
+    ultimoTicketPorFingerprint,
   );
 
   const zids = [
-    ...new Set(
-      [...atribuicoes.values()].map((a) => a.zid).filter((z): z is string => z !== null),
-    ),
+    ...new Set([
+      ...[...atribuicoes.values()].map((a) => a.zid).filter((z): z is string => z !== null),
+      ...porGrupo.values(),
+      ...porHistorico.values(),
+    ]),
   ];
   const colaboradorPorZid = new Map<string, number>();
   if (zids.length > 0) {
@@ -84,18 +140,40 @@ export async function upsertDevolucoes(candidates: readonly DevolucaoCandidate[]
 
   const values = candidates.map((c) => {
     const atrib = atribuicoes.get(c.ringoverCallId);
-    // Order of preference: the ticket's owner (what n8n decided), then the
-    // call's own agent, then whoever called the customer back. The last two
-    // only ever fire when no ticket was matched.
-    const porTicket = atrib?.zid ? (colaboradorPorZid.get(atrib.zid) ?? null) : null;
-    const porChamada = c.ringoverUserId
-      ? (colaboradorByRingoverId.get(c.ringoverUserId) ?? null)
-      : null;
+
+    // Strongest evidence first: the ticket for this exact call, then the ticket
+    // for another call in the same group, then the call's own Ringover agent
+    // (a fact, when present), and only then the inference from the customer's
+    // ticket history. Each step resolves a zid to a colaborador and falls
+    // through when that person is not on equipa 360 — attribution to somebody
+    // with no panel would be the same as no attribution, only harder to see.
+    const candidatos: Array<[OrigemAtribuicao, number | null]> = [
+      ["ticket", atrib?.zid ? (colaboradorPorZid.get(atrib.zid) ?? null) : null],
+      [
+        "grupo",
+        porGrupo.has(c.ringoverCallId)
+          ? (colaboradorPorZid.get(porGrupo.get(c.ringoverCallId) as string) ?? null)
+          : null,
+      ],
+      [
+        "chamada",
+        c.ringoverUserId ? (colaboradorByRingoverId.get(c.ringoverUserId) ?? null) : null,
+      ],
+      [
+        "historico",
+        porHistorico.has(c.ringoverCallId)
+          ? (colaboradorPorZid.get(porHistorico.get(c.ringoverCallId) as string) ?? null)
+          : null,
+      ],
+    ];
+    const escolhido = candidatos.find(([, id]) => id !== null);
+
     return {
     ringoverCallId: c.ringoverCallId,
     data: c.data,
     ticketId: atrib?.ticketId ?? null,
-    colaboradorId: porTicket ?? porChamada,
+    colaboradorId: escolhido?.[1] ?? null,
+    atribuicaoOrigem: escolhido?.[0] ?? null,
     numeroCliente: c.numeroCliente,
     numeroNormalizado: c.numeroNormalizado,
     horaChamada: c.horaChamada,
@@ -113,6 +191,7 @@ export async function upsertDevolucoes(candidates: readonly DevolucaoCandidate[]
       target: devolucoesTable.ringoverCallId,
       set: {
         colaboradorId: sql`excluded.colaborador_id`,
+        atribuicaoOrigem: sql`excluded.atribuicao_origem`,
         ticketId: sql`excluded.ticket_id`,
         estado: sql`excluded.estado`,
         resolvidaAt: sql`excluded.resolvida_at`,

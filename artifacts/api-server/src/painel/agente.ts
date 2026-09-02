@@ -25,6 +25,13 @@ export interface DevolucaoPainel {
   contexto: string | null;
   /** The Desk ticket n8n opened for this call, when one was matched. */
   ticketId: string | null;
+  /**
+   * Why this row landed on this agent's list. `ticket` and `chamada` are facts;
+   * `grupo` follows from another attempt by the same customer; `historico` is
+   * an inference from who owns their most recent previous ticket. The UI can
+   * mark the weaker ones so an agent knows when to double-check.
+   */
+  atribuicaoOrigem: "ticket" | "grupo" | "historico" | "chamada" | null;
 }
 
 /**
@@ -43,6 +50,7 @@ export function agruparDevolucoes(
     horaChamada: Date;
     contexto: string | null;
     ticketId: string | null;
+    atribuicaoOrigem?: "ticket" | "grupo" | "historico" | "chamada" | null;
   }[],
 ): DevolucaoPainel[] {
   const grupos = new Map<string, typeof linhas[number][]>();
@@ -64,6 +72,12 @@ export function agruparDevolucoes(
       // Any ticket linked to any attempt: for load accounting, one linked
       // attempt means this work is already represented in the tickets block.
       ticketId: ord.find((l) => l.ticketId)?.ticketId ?? null,
+      // Strongest evidence in the group, in the same order the repo applies:
+      // one attempt matched by ticket makes the whole line a `ticket` row.
+      atribuicaoOrigem:
+        (["ticket", "chamada", "grupo", "historico"] as const).find((o) =>
+          ord.some((l) => l.atribuicaoOrigem === o),
+        ) ?? null,
     };
   });
 

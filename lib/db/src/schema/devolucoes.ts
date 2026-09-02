@@ -55,6 +55,24 @@ export const devolucoesTable = pgTable(
      * past 24 hours.
      */
     ticketId: text("ticket_id"),
+    /**
+     * Why this row has the owner it has.
+     *
+     *   `ticket`    — the ticket n8n created for THIS call. A fact.
+     *   `grupo`     — another call from the same number on the same day matched
+     *                 a ticket, and the panel shows them as one line.
+     *   `historico` — the owner of this customer's most recent previous ticket,
+     *                 the same rule Smart Routing routes live calls by. An
+     *                 inference, and the weakest one we act on.
+     *   `chamada`   — the Ringover user_id on the call itself.
+     *
+     * Null means nobody owns it: a first-time caller, who belongs in the shared
+     * bucket rather than guessed at. Stored because an agent deciding whether
+     * to trust a row deserves to know which of these they are looking at.
+     */
+    atribuicaoOrigem: text("atribuicao_origem", {
+      enum: ["ticket", "grupo", "historico", "chamada"],
+    }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
