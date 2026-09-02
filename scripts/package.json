@@ -12,7 +12,8 @@
     "db:backfill:zid": "tsx ./src/backfill-zid.ts",
     "db:seed:360": "tsx ./src/seed-360.ts",
     "painel:refresh": "tsx ./src/painel-refresh.ts",
-    "diag:perdidas": "tsx ./src/diagnostico-chamadas-perdidas.ts"
+    "diag:perdidas": "tsx ./src/diagnostico-chamadas-perdidas.ts",
+    "diag:tickets": "tsx ./src/diagnostico-tickets-cliente.ts"
   },
   "dependencies": {
     "@workspace/db": "workspace:*",
