@@ -11,13 +11,15 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:backfill:zid": "tsx ./src/backfill-zid.ts",
     "db:seed:360": "tsx ./src/seed-360.ts",
-    "painel:refresh": "tsx ./src/painel-refresh.ts"
+    "painel:refresh": "tsx ./src/painel-refresh.ts",
+    "diag:perdidas": "tsx ./src/diagnostico-chamadas-perdidas.ts"
   },
   "dependencies": {
     "@workspace/db": "workspace:*",
     "@workspace/ringover": "workspace:*",
     "@workspace/zoho-desk": "workspace:*",
-    "drizzle-orm": "catalog:"
+    "drizzle-orm": "catalog:",
+    "@workspace/phone": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:",
