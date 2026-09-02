@@ -32,6 +32,31 @@ describe("cargaPonderada", () => {
   });
 });
 
+describe("cargaPonderada — carga já calculada pelo chamador", () => {
+  it("uses the caller's value instead of recomputing from the raw counts", () => {
+    // The supervisor discounts devoluções already counted as tickets. If this
+    // recomputed from the counts, the suggestion would be decided on inflated
+    // numbers while the table showed the corrected ones — which is exactly the
+    // discrepancy this test was written for.
+    expect(
+      cargaPonderada(
+        agente({ colaboradorId: 1, devolucoes: 3, ticketsEmRisco: 53, followUps: 7, cargaPonderada: 117.5 }),
+      ),
+    ).toBe(117.5);
+  });
+
+  it("decides the suggestion on the corrected load, not the raw counts", () => {
+    const s = sugerirRedistribuicao([
+      agente({ colaboradorId: 1, nome: "Tiago", devolucoes: 3, ticketsEmRisco: 53, followUps: 7, cargaPonderada: 117.5 }),
+      agente({ colaboradorId: 2, nome: "Ana", devolucoes: 1, ticketsEmRisco: 5, followUps: 1, cargaPonderada: 11.5 }),
+      agente({ colaboradorId: 3, nome: "Rui", devolucoes: 0, ticketsEmRisco: 16, followUps: 0, cargaPonderada: 32 }),
+    ]);
+    expect(s.razao).toContain("117,5");
+    expect(s.razao).not.toContain("119,5");
+    expect(s.razao).toContain("11,5");
+  });
+});
+
 describe("mediana", () => {
   it("is the middle value for an odd-length list", () => {
     expect(mediana([1, 5, 3])).toBe(3);
