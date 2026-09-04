@@ -16,6 +16,7 @@ import statsRouter from "./stats.js";
 import leadsRouter from "./leads.js";
 import agenteRouter from "./agente.js";
 import painelRefreshRouter from "./painel-refresh.js";
+import preVisualizacaoRouter from "./pre-visualizacao.js";
 import { requireAuth } from "../middleware/require-auth.js";
 
 const router: IRouter = Router();
@@ -40,6 +41,10 @@ router.use(agenteRouter);
 // Panel refresh — cron-secret guarded like /api/run, so it must sit before
 // requireAuth. Never calls the LLM.
 router.use(painelRefreshRouter);
+// Panel preview — read-only, no token, and 404s unless PAINEL_PREVIEW_ENABLED
+// is exactly "1". Mounted before requireAuth because the whole point is to be
+// reachable without a session; the env flag is what keeps it shut.
+router.use(preVisualizacaoRouter);
 
 // Protected routes — must be authenticated
 router.use(requireAuth);

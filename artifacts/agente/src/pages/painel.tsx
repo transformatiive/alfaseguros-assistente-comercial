@@ -1,11 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { useQuery } from "@tanstack/react-query";
 import { Bloco, Indisponivel } from "@/components/Bloco";
-import { enviar, obter } from "@/lib/api";
-import { hora, idade, porqueMe, telefone } from "@/lib/formatos";
+import { obter } from "@/lib/api";
+import { hora } from "@/lib/formatos";
 import { comDia, diaPedido } from "@/lib/dia";
+import { Agendamentos, BlocoDevolucoes, BlocoFollowUps, BlocoTickets } from "@/pages/blocos";
 import type { AgentePainel, Devolucao, FollowUp, TicketEmRisco } from "@/lib/tipos";
 
 /**
@@ -18,6 +16,9 @@ import type { AgentePainel, Devolucao, FollowUp, TicketEmRisco } from "@/lib/tip
  * Laid out narrow by default. It is rendered inside the Zoho Desk left panel,
  * which is roughly a phone's width; designing wide and letting it squash is how
  * you get a panel nobody uses.
+ *
+ * The rows live in `blocos.tsx`, shared with the preview page, so the screen
+ * being reviewed is the screen that ships.
  */
 export function PainelDoAgente() {
   const { data, isLoading, error } = useQuery<AgentePainel>({
@@ -46,7 +47,7 @@ export function PainelDoAgente() {
         aCarregar={isLoading}
         vazio="Nenhuma chamada por devolver hoje."
       >
-        {(itens) => itens.map((d) => <LinhaDevolucao key={d.ids.join("-")} d={d} />)}
+        {(itens) => <BlocoDevolucoes itens={itens} />}
       </Bloco>
 
       <Bloco<TicketEmRisco>
@@ -55,7 +56,7 @@ export function PainelDoAgente() {
         aCarregar={isLoading}
         vazio="Nenhum pedido teu passou das 24 horas."
       >
-        {(itens) => itens.map((t) => <LinhaTicket key={t.id} t={t} />)}
+        {(itens) => <BlocoTickets itens={itens} />}
       </Bloco>
 
       <Bloco<FollowUp>
@@ -64,20 +65,10 @@ export function PainelDoAgente() {
         aCarregar={isLoading}
         vazio="Nenhum seguimento por fazer."
       >
-        {(itens) => itens.map((f) => <LinhaFollowUp key={f.id} f={f} />)}
+        {(itens) => <BlocoFollowUps itens={itens} />}
       </Bloco>
 
-      <section className="space-y-2">
-        <h2 className="px-1 text-sm font-semibold tracking-tight">Agendamentos</h2>
-        {/* Deliberately a different shape from the other blocks' empty state:
-            "we cannot see this yet" must never be mistaken for "you have none". */}
-        <Card className="border-dashed bg-muted/30 p-3">
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            {data?.agendamentos.motivo ??
-              "Os agendamentos ainda não estão disponíveis — vivem no CRM, que ainda não está ligado a este painel."}
-          </p>
-        </Card>
-      </section>
+      <Agendamentos motivo={data?.agendamentos.motivo} />
 
       {data && (
         <p className="px-1 text-[11px] text-muted-foreground">
@@ -92,113 +83,12 @@ function Cabecalho({ painel }: { painel: AgentePainel | undefined }) {
   return (
     <header className="px-1">
       <h1 className="font-serif text-xl leading-tight">O meu dia</h1>
-      <p className="text-xs text-muted-foreground">
-        {painel ? painel.colaborador.nome : " "}
-      </p>
-      {/* Only when it is NOT today: a panel showing another day must say so,
-          or an empty Saturday reads as a quiet Monday. */}
+      <p className="text-xs text-muted-foreground">{painel ? painel.colaborador.nome : " "}</p>
+      {/* Only when it is NOT today: a panel showing another day must say so, or
+          an empty Saturday reads as a quiet Monday. */}
       {painel && diaPedido() && (
         <p className="mt-0.5 text-xs font-medium">A mostrar {painel.data}, não hoje.</p>
       )}
     </header>
-  );
-}
-
-function LinhaDevolucao({ d }: { d: Devolucao }) {
-  const qc = useQueryClient();
-  const concluir = useMutation({
-    mutationFn: (estado: "devolvida" | "dispensada") =>
-      // Any id in the group closes the whole group server-side — the same rule
-      // the auto-resolution applies. Sending the first is enough.
-      enviar(`/api/agente/devolucoes/${d.ids[0]}/concluir`, { estado }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["painel"] }),
-  });
-
-  const razao = porqueMe(d.atribuicaoOrigem);
-
-  return (
-    <Card className="p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="font-medium tabular-nums">{telefone(d.numeroCliente)}</p>
-          <p className="text-xs text-muted-foreground">
-            {hora(d.primeiraChamada)}
-            {d.tentativas > 1 && (
-              <> · até às {hora(d.ultimaChamada)}</>
-            )}
-          </p>
-        </div>
-        {d.tentativas > 1 && (
-          <Badge variant="destructive" className="shrink-0">
-            {d.tentativas} tentativas
-          </Badge>
-        )}
-      </div>
-
-      {d.contexto && (
-        <p className="mt-2 font-serif text-xs leading-relaxed text-foreground/80">{d.contexto}</p>
-      )}
-
-      {razao && <p className="mt-1.5 text-[11px] text-muted-foreground">{razao}</p>}
-
-      <div className="mt-2.5 flex gap-1.5">
-        <Button
-          size="sm"
-          className="h-7 text-xs"
-          disabled={concluir.isPending}
-          onClick={() => concluir.mutate("devolvida")}
-        >
-          Devolvida
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-7 text-xs"
-          disabled={concluir.isPending}
-          onClick={() => concluir.mutate("dispensada")}
-        >
-          Dispensar
-        </Button>
-      </div>
-
-      {concluir.isError && (
-        <p className="mt-1.5 text-[11px] text-destructive">
-          Não foi possível fechar esta chamada. Tenta outra vez.
-        </p>
-      )}
-    </Card>
-  );
-}
-
-function LinhaTicket({ t }: { t: TicketEmRisco }) {
-  return (
-    <Card className="p-3">
-      <a href={t.deskUrl} target="_blank" rel="noreferrer" className="block hover:underline">
-        <div className="flex items-start justify-between gap-2">
-          <p className="min-w-0 truncate font-medium">
-            {t.subject ?? "Pedido sem assunto"}
-          </p>
-          <Badge variant={t.idadeHoras >= 72 ? "destructive" : "secondary"} className="shrink-0">
-            {idade(t.idadeHoras)}
-          </Badge>
-        </div>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {t.ticketNumber ? `#${t.ticketNumber}` : t.id}
-          {t.status && <> · {t.status}</>}
-        </p>
-      </a>
-    </Card>
-  );
-}
-
-function LinhaFollowUp({ f }: { f: FollowUp }) {
-  return (
-    <Card className="p-3">
-      <p className="font-serif text-xs leading-relaxed">{f.follow_up_descricao}</p>
-      <p className="mt-1 text-xs text-muted-foreground">
-        {f.contact_phone ? telefone(f.contact_phone) : "sem número"}
-        {f.product && <> · {f.product}</>}
-      </p>
-    </Card>
   );
 }

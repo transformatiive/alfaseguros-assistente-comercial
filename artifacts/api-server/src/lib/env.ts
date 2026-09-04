@@ -31,6 +31,16 @@ const envSchema = z.object({
   PAINEL_WIDGET_TOKEN: z.string().optional(),
   /** Public base URL of the agent panel, used to build the launch link. */
   AGENTE_APP_URL: z.string().optional(),
+  /**
+   * Opens `/agente/pre-visualizacao` — the panel for any agent, with NO token.
+   *
+   * Exists so the layout and the content can be judged before the Zoho
+   * extension is installed; a 15-minute token expires halfway through that
+   * conversation. Off unless it is exactly "1", and it must be switched off
+   * once the extension works: while on, anyone with the URL reads customer
+   * phone numbers and ticket subjects.
+   */
+  PAINEL_PREVIEW_ENABLED: z.string().optional(),
 });
 
 let cached: z.infer<typeof envSchema> | null = null;

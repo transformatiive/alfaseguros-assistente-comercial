@@ -6,6 +6,7 @@ import { estaSolto } from "@/lib/sessao";
 import { comDia, diaPedido } from "@/lib/dia";
 import { PainelDoAgente } from "@/pages/painel";
 import { VistaDaEquipa } from "@/pages/equipa";
+import { PreVisualizacao } from "@/pages/pre-visualizacao";
 import type { AgentePainel } from "@/lib/tipos";
 
 /**
@@ -22,6 +23,16 @@ import type { AgentePainel } from "@/lib/tipos";
  * on screen.
  */
 export function App() {
+  // The preview short-circuits everything below it. It has no token, so the
+  // role query would fail, the tabs would never appear, and the "opened outside
+  // Desk" note would be technically true and completely unhelpful.
+  if (window.location.pathname.replace(/\/+$/, "").endsWith("/pre-visualizacao")) {
+    return <PreVisualizacao />;
+  }
+  return <PainelComSessao />;
+}
+
+function PainelComSessao() {
   const { data } = useQuery<AgentePainel>({
     // Same key and same URL as the panel page: two different keys would fetch
     // the panel twice and could disagree about the role.
@@ -39,7 +50,10 @@ export function App() {
       <div className="min-h-screen bg-background text-foreground">
         {eSupervisor && <Abas />}
         <Switch>
-          <Route path="/equipa" component={VistaDaEquipa} />
+          {/* Wrapped rather than passed as `component`: VistaDaEquipa takes
+              optional props of its own, which is not the shape wouter expects
+              of a route component. */}
+          <Route path="/equipa">{() => <VistaDaEquipa />}</Route>
           <Route component={PainelDoAgente} />
         </Switch>
         {estaSolto() && <NotaDeJanelaSolta />}
