@@ -35,7 +35,12 @@ export type AgentSummarizeOutcome =
     }
   | { ok: false; error: string; rawText: string; cost: CostBreakdown };
 
-const DEFAULT_MODEL = "anthropic/claude-sonnet-4";
+/**
+ * Only used by a direct caller — `analyze-day` always passes the configured
+ * model. Kept in step with the env default so a direct call does not quietly
+ * run two generations behind.
+ */
+const DEFAULT_MODEL = "anthropic/claude-sonnet-5";
 
 const SYSTEM = `És um supervisor sénior de uma corretora de seguros portuguesa (Alfaseguros), equipa Não Vida (360).
 

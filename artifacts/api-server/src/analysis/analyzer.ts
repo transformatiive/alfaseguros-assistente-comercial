@@ -42,7 +42,12 @@ export type AnalysisOutcome =
   | { ok: true; analysis: ConversationAnalysis; cost: CostBreakdown; rawText: string }
   | { ok: false; error: string; rawText: string; cost: CostBreakdown };
 
-const DEFAULT_MODEL = "anthropic/claude-sonnet-4";
+/**
+ * Only used by a direct caller — `analyze-day` always passes the configured
+ * model. Kept in step with the env default so a direct call does not quietly
+ * run two generations behind.
+ */
+const DEFAULT_MODEL = "anthropic/claude-sonnet-5";
 
 /**
  * Analyze a single grouped conversation. Output is validated against

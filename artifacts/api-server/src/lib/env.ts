@@ -5,7 +5,15 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().default("change-me-in-production"),
   RINGOVER_API_KEY: z.string().optional(),
   OPENROUTER_API_KEY: z.string().optional(),
-  OPENROUTER_MODEL: z.string().default("anthropic/claude-sonnet-4-6"),
+  /**
+   * OpenRouter model id for every analysis call.
+   *
+   * The default is a real id, checked against OpenRouter's catalogue: the
+   * previous one (`claude-sonnet-4-6`, hyphenated) does not exist there — they
+   * use a dot — so if the platform variable had ever been missing, every
+   * analysis would have failed on a 400 that named a model nobody could find.
+   */
+  OPENROUTER_MODEL: z.string().default("anthropic/claude-sonnet-5"),
   CRON_WEBHOOK_SECRET: z.string().optional(),
   PUBLIC_APP_URL: z.string().optional(),
   ANALYSIS_CONCURRENCY: z.coerce.number().int().positive().default(4),
