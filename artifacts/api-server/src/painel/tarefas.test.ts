@@ -6,6 +6,7 @@ import {
   ehTarefaDoDesk,
   impressaoDigital,
   pedeSimulacao,
+  prometeSimulacao,
   resumirPromessa,
   type EntradaTarefas,
 } from "./tarefas.js";
@@ -57,6 +58,35 @@ describe("pedeSimulacao", () => {
   });
 });
 
+describe("prometeSimulacao", () => {
+  it("exige o verbo além do substantivo — uma promessa é uma frase sobre um acto", () => {
+    // O falso positivo real que isto veio corrigir: a promessa é de LIGAR.
+    expect(
+      prometeSimulacao(
+        "Contactar a cliente até segunda-feira com uma atualização concreta sobre a decisão da seguradora relativa à proposta de Multirriscos.",
+      ),
+    ).toBe(false);
+  });
+
+  it("dispara quando a simulação é mesmo aquilo que vai ser produzido ou enviado", () => {
+    for (const t of [
+      "Enviar a simulação de multirriscos até amanhã",
+      "Preparar a cotação para o cliente",
+      "Elaborar a proposta de responsabilidade civil",
+      "Remeter o orçamento por email",
+    ]) {
+      expect(prometeSimulacao(t), t).toBe(true);
+    }
+  });
+
+  it("não confunde com o assunto de um ticket, onde o substantivo basta", () => {
+    // O mesmo texto classifica de maneira diferente conforme a origem, e isso
+    // é deliberado: um assunto do Desk *é* o pedido; uma promessa não.
+    expect(pedeSimulacao("VCVIDA - Simulação Seguro Multirriscos - Pedro Marques")).toBe(true);
+    expect(prometeSimulacao("VCVIDA - Simulação Seguro Multirriscos - Pedro Marques")).toBe(false);
+  });
+});
+
 describe("resumirPromessa", () => {
   it("tira o preâmbulo de bookkeeping — o painel já é a tarefa", () => {
     const r = resumirPromessa(
@@ -80,6 +110,15 @@ describe("resumirPromessa", () => {
     const mantido = r.slice(0, -1);
     expect(longa.toLowerCase().startsWith(mantido.toLowerCase())).toBe(true);
     expect(longa[mantido.length]).toBe(" ");
+  });
+
+  it("não deixa o título pendurado numa preposição", () => {
+    const r = resumirPromessa(
+      "Tentar apurar a data de renovação do seguro de Saúde do cliente na Lusitânia hoje",
+      68,
+    );
+    expect(r).not.toMatch(/\b(de|da|do|na|no|em|para|com|a|o|e)…$/i);
+    expect(r.endsWith("…")).toBe(true);
   });
 
   it("nunca devolve vazio", () => {
