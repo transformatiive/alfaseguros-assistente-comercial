@@ -113,6 +113,17 @@ export function BlocoTickets({ itens }: { itens: TicketEmRisco[] }) {
   );
 }
 
+/**
+ * How many rows a group shows before it asks. Six is about a thumb's scroll on
+ * the Desk panel: enough to see the shape of the group, few enough that the
+ * next heading stays on screen.
+ *
+ * Without this the biggest group — 49 `Novo` on a real day — buries every other
+ * heading below it, and grouping buys nothing: the agent is back to scrolling a
+ * wall, only now the wall has a title.
+ */
+const VISIVEIS = 6;
+
 function GrupoDeTickets({
   estado,
   tickets,
@@ -123,6 +134,10 @@ function GrupoDeTickets({
   // closed. The counts stay visible either way, so nothing is hidden — only
   // deferred.
   const [aberto, setAberto] = useState(agir);
+  const [tudo, setTudo] = useState(false);
+
+  const mostrados = tudo ? tickets : tickets.slice(0, VISIVEIS);
+  const escondidos = tickets.length - mostrados.length;
 
   return (
     <div>
@@ -142,10 +157,20 @@ function GrupoDeTickets({
       </button>
 
       {aberto && (
-        <div className="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
-          {tickets.map((t) => (
-            <LinhaTicket key={t.id} t={t} />
-          ))}
+        <div className="overflow-hidden rounded-lg border border-stone-200 bg-white">
+          <div className="divide-y divide-stone-200">
+            {mostrados.map((t) => (
+              <LinhaTicket key={t.id} t={t} />
+            ))}
+          </div>
+          {escondidos > 0 && (
+            <button
+              className="w-full border-t border-stone-200 bg-stone-50 py-1.5 text-[11px] text-stone-500 hover:text-stone-900"
+              onClick={() => setTudo(true)}
+            >
+              mostrar mais {escondidos}
+            </button>
+          )}
         </div>
       )}
     </div>
