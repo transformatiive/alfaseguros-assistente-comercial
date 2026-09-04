@@ -28,7 +28,9 @@ export interface AnalyzeChecklistOptions {
  * model. Kept in step with the env default so a direct call does not quietly
  * run two generations behind.
  */
-const DEFAULT_MODEL = "anthropic/claude-sonnet-5";
+// Haiku, for the same reason the env default is Haiku: this analyser checks a
+// fixed list at temperature 0.1 and reports coverage. Extraction, not judgement.
+const DEFAULT_MODEL = "anthropic/claude-haiku-4.5";
 const MAX_TOKENS_RETRY = 6000;
 
 export type ChecklistOutcome =

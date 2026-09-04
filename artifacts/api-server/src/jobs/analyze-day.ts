@@ -393,7 +393,9 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
         groups,
         rowIdByPhone,
         client: openrouter,
-        model,
+        // Not `model`: the checklist is extraction against a fixed list, not
+        // the judgement the rest of the run makes. See OPENROUTER_MODEL_CHECKLIST.
+        model: cfg.OPENROUTER_MODEL_CHECKLIST,
         concurrency: cfg.ANALYSIS_CONCURRENCY,
         force,
       });
