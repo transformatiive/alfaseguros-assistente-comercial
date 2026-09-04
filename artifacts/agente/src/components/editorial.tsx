@@ -4,18 +4,16 @@ import { cn } from "@/lib/utils";
 /**
  * The prototype's visual signature, as components rather than as discipline.
  *
- * HANDOVER.md §3 is explicit about this and asks for it not to be simplified:
- * warm stone neutrals, Georgia for anything that carries a number or a
- * narrative, 10px uppercase letter-spaced labels. It is an editorial dashboard,
- * not an admin panel, and the difference is almost entirely in these three
- * decisions.
+ * HANDOVER.md §3 asks for this look not to be simplified: warm stone
+ * neutrals, dense information design, 10px uppercase letter-spaced labels. It
+ * is an editorial dashboard, not an admin panel.
  *
- * Georgia is set inline rather than by class because it is load-bearing: a
- * Tailwind purge or a token rename would silently drop it, and the panel would
- * quietly become the generic thing it is trying not to be.
+ * The one thing that *has* gone is Georgia. §3 named it as the signature, but
+ * on a screen of cards it put two typefaces on every card — a serif number
+ * over a sans label, a serif sentence under a sans heading — and read as
+ * inconsistency rather than as character. Everything else in §3 stays, and
+ * it is the palette and the density that were carrying the look anyway.
  */
-
-const SERIF = { fontFamily: "Georgia, 'Times New Roman', serif" } as const;
 
 /**
  * How loud a number is allowed to be.
@@ -115,9 +113,7 @@ export function Cabecalho({
 export function Faixa({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-full flex-col justify-center rounded-xl bg-stone-900 p-5 text-stone-50">
-      <p className="t-narrativa italic">
-        {children}
-      </p>
+      <p className="t-narrativa">{children}</p>
     </div>
   );
 }
@@ -130,5 +126,3 @@ export function Narrativa({ children, className }: { children: ReactNode; classN
     </p>
   );
 }
-
-export { SERIF };
