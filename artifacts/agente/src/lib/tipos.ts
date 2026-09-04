@@ -54,12 +54,50 @@ export interface FollowUp {
   detected_at: string;
 }
 
+export type TipoAcao =
+  | "follow_up_pendente"
+  | "risco_perda_lead"
+  | "desvio_procedimento"
+  | "qualidade_critica"
+  | "oportunidade_cross_sell"
+  | "cotacao_sem_seguimento"
+  | "lead_quente_sem_fecho";
+
+export interface Acao {
+  id: string;
+  tipo: TipoAcao;
+  prioridade: "alta" | "media" | "baixa";
+  titulo: string;
+  /** The call's own sentence — the summary, where it is needed. */
+  descricao: string;
+  conversationId: number;
+  customerPhone: string;
+  contactName: string | null;
+  runDate: string;
+}
+
+export interface Coaching {
+  paragraphOverview: string;
+  strengths: string[];
+  blindSpots: string[];
+  closingRateObservations: string;
+  coachingRecommendations: string[];
+}
+
+export function coachingDisponivel(
+  c: Coaching | BlocoIndisponivel | undefined,
+): c is Coaching {
+  return !!c && !("disponivel" in c);
+}
+
 export interface AgentePainel {
   colaborador: { id: number; nome: string; papel: string; equipa: string };
   data: string;
   devolucoes: Bloco<Devolucao>;
   ticketsEmRisco: Bloco<TicketEmRisco>;
   followUps: Bloco<FollowUp>;
+  acoes: Bloco<Acao>;
+  coaching: Coaching | BlocoIndisponivel;
   /** Always unavailable today — scheduling lives in the CRM, which is not connected. */
   agendamentos: BlocoIndisponivel;
   atualizadoEm: string;

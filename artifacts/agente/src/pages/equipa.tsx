@@ -52,12 +52,12 @@ export function VistaDaEquipa({
   const maxCarga = data ? Math.max(1, ...data.agentes.map((a) => a.cargaPonderada)) : 1;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5 p-3 pb-10">
+    <div className="mx-auto max-w-5xl space-y-4 p-3 pb-10 sm:p-4">
       <header className="px-0.5">
-        <h1 className="text-lg leading-tight text-stone-900" style={{ fontFamily: "Georgia, serif" }}>
+        <h1 className="t-display text-stone-900">
           A equipa
         </h1>
-        <p className="text-[11px] uppercase tracking-wide text-stone-400">
+        <p className="t-micro text-stone-400">
           {data ? diaPorExtenso(data.data) : " "}
         </p>
       </header>
@@ -71,7 +71,7 @@ export function VistaDaEquipa({
       {data && <Sugestao painel={data} />}
 
       <section className="space-y-1.5">
-        <h2 className="px-0.5 text-xs font-semibold uppercase tracking-wide text-stone-500">
+        <h2 className="px-0.5 t-micro text-stone-500">
           Carga por consultor
         </h2>
         {isLoading || !data ? (
@@ -84,7 +84,7 @@ export function VistaDaEquipa({
           </div>
         )}
         {data && (
-          <p className="px-0.5 text-[11px] leading-relaxed text-stone-400">
+          <p className="px-0.5 t-meta text-stone-400">
             Carga = chamadas ×{data.regra.pesos.devolucoes} + pedidos ×
             {data.regra.pesos.ticketsEmRisco} + seguimentos ×{data.regra.pesos.followUps}. Uma
             chamada que já virou pedido conta uma vez, não duas.
@@ -107,7 +107,7 @@ export function VistaDaEquipa({
       </Bloco>
 
       {data && (
-        <p className="px-0.5 text-[10px] uppercase tracking-wide text-stone-400">
+        <p className="px-0.5 t-micro text-stone-400">
           Atualizado às {hora(data.atualizadoEm)}
         </p>
       )}
@@ -134,7 +134,7 @@ function Sugestao({ painel }: { painel: SupervisorPainel }) {
   // card the coordinator has to interpret.
   return (
     <div className="rounded-lg border border-stone-200 bg-white p-3">
-      <p className="text-[11px] leading-relaxed text-stone-500">{razao}</p>
+      <p className="t-meta text-stone-500">{razao}</p>
     </div>
   );
 }
@@ -143,10 +143,9 @@ function LinhaCarga({ a, max }: { a: LinhaAgente; max: number }) {
   return (
     <div className="p-3">
       <div className="flex items-baseline justify-between gap-2">
-        <p className="min-w-0 truncate text-[13px] text-stone-900">{a.nome}</p>
+        <p className="min-w-0 truncate t-body text-stone-900">{a.nome}</p>
         <p
-          className="shrink-0 text-lg leading-none tabular-nums text-stone-900"
-          style={{ fontFamily: "Georgia, serif" }}
+          className="t-metric-sm shrink-0 text-stone-900"
         >
           {a.cargaPonderada.toFixed(1)}
         </p>
@@ -159,7 +158,7 @@ function LinhaCarga({ a, max }: { a: LinhaAgente; max: number }) {
         />
       </div>
 
-      <p className="mt-1.5 text-[11px] tabular-nums text-stone-400">
+      <p className="mt-1.5 t-meta tabular-nums text-stone-400">
         {a.devolucoes} chamadas · {a.ticketsEmRisco} pedidos · {a.followUps} seguimentos
         {a.jaContadasComoTicket > 0 && (
           <>
@@ -171,7 +170,7 @@ function LinhaCarga({ a, max }: { a: LinhaAgente; max: number }) {
       </p>
 
       {a.indisponiveis.length > 0 && (
-        <p className="mt-1 text-[11px] text-amber-700">
+        <p className="mt-1 t-meta text-amber-700">
           Sem dados: {a.indisponiveis.join(", ")}. A carga dele está subestimada.
         </p>
       )}
@@ -185,18 +184,18 @@ function LinhaSemDono({ d }: { d: Devolucao }) {
     <div className={d.tentativas > 1 ? "border-l-[3px] border-l-red-600 p-3" : "p-3"}>
       <div className="flex items-baseline justify-between gap-3">
         <p className="font-medium tabular-nums text-stone-900">{telefone(d.numeroCliente)}</p>
-        <p className="shrink-0 text-xs tabular-nums text-stone-400">
+        <p className="shrink-0 t-body tabular-nums text-stone-400">
           {hora(d.primeiraChamada)}
           {d.tentativas > 1 && <> – {hora(d.ultimaChamada)}</>}
         </p>
       </div>
       {d.tentativas > 1 && (
-        <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-red-700">
+        <p className="mt-0.5 t-micro text-red-700">
           {d.tentativas} tentativas
         </p>
       )}
       {d.contexto && <Narrativa className="mt-1.5">{d.contexto}</Narrativa>}
-      <p className="mt-1 text-[11px] text-stone-400">
+      <p className="mt-1 t-meta text-stone-400">
         {razao ?? "Cliente sem pedidos anteriores — ninguém tem histórico com ele."}
       </p>
     </div>

@@ -61,7 +61,7 @@ export function PreVisualizacao() {
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900">
-      <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
+      <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 t-meta text-amber-900">
         <b>Pré-visualização.</b> Sem autenticação, só leitura, com dados reais de
         clientes. Serve para validar formato e conteúdo — deve ser desligada
         assim que a extensão do Desk funcionar.
@@ -69,7 +69,7 @@ export function PreVisualizacao() {
 
       <div className="flex flex-wrap items-center gap-2 border-b border-stone-200 bg-white px-3 py-2">
         <select
-          className="rounded-md border border-stone-200 bg-white px-2 py-1 text-xs text-stone-700"
+          className="rounded-md border border-stone-200 bg-white px-2 py-1 t-body text-stone-700"
           value={escolhido === null ? "" : String(escolhido)}
           onChange={(e) =>
             setQuem(e.target.value === "equipa" ? "equipa" : Number(e.target.value))
@@ -86,13 +86,13 @@ export function PreVisualizacao() {
 
         <input
           type="date"
-          className="rounded-md border border-stone-200 bg-white px-2 py-1 text-xs text-stone-700"
+          className="rounded-md border border-stone-200 bg-white px-2 py-1 t-body text-stone-700"
           value={data}
           onChange={(e) => setData(e.target.value)}
         />
 
         {equipaQ.error && (
-          <span className="text-[11px] text-red-600">{(equipaQ.error as Error).message}</span>
+          <span className="t-meta text-red-600">{(equipaQ.error as Error).message}</span>
         )}
       </div>
 
@@ -128,12 +128,12 @@ function PainelDeUm({ id, data }: { id: number; data: string }) {
   }
 
   return (
-    <div className="mx-auto max-w-xl space-y-4 p-3 pb-10">
+    <div className="mx-auto max-w-6xl space-y-4 p-3 pb-10 sm:p-4">
       <header className="px-0.5">
-        <h1 className="text-lg leading-tight text-stone-900" style={{ fontFamily: "Georgia, serif" }}>
+        <h1 className="t-display text-stone-900">
           O meu dia
         </h1>
-        <p className="text-[11px] uppercase tracking-wide text-stone-400">
+        <p className="t-micro text-stone-400">
           {painel ? painel.colaborador.nome : " "} · {diaPorExtenso(data)}
         </p>
       </header>

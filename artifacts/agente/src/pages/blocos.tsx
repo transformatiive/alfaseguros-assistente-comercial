@@ -56,33 +56,33 @@ function LinhaDevolucao({ d, somenteLeitura }: { d: Devolucao; somenteLeitura?: 
     <div className={cn("p-3", insistente && "border-l-[3px] border-l-red-600")}>
       <div className="flex items-baseline justify-between gap-3">
         <p className="font-medium tabular-nums text-stone-900">{telefone(d.numeroCliente)}</p>
-        <p className="shrink-0 text-xs tabular-nums text-stone-400">
+        <p className="shrink-0 t-body tabular-nums text-stone-400">
           {hora(d.primeiraChamada)}
           {insistente && <> – {hora(d.ultimaChamada)}</>}
         </p>
       </div>
 
       {insistente && (
-        <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-red-700">
+        <p className="mt-0.5 t-micro text-red-700">
           {d.tentativas} tentativas
         </p>
       )}
 
       {d.contexto && <Narrativa className="mt-1.5">{d.contexto}</Narrativa>}
-      {razao && <p className="mt-1 text-[11px] text-stone-400">{razao}</p>}
+      {razao && <p className="mt-1 t-meta text-stone-400">{razao}</p>}
 
       {!somenteLeitura && (
         <>
           <div className="mt-2.5 flex gap-1.5">
             <button
-              className="rounded-md bg-stone-900 px-3 py-1.5 text-xs font-medium text-stone-50 disabled:opacity-50"
+              className="rounded-md bg-stone-900 px-3 py-1.5 t-body font-medium text-stone-50 disabled:opacity-50"
               disabled={concluir.isPending}
               onClick={() => concluir.mutate("devolvida")}
             >
               Devolvida
             </button>
             <button
-              className="rounded-md border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-600 disabled:opacity-50"
+              className="rounded-md border border-stone-200 px-3 py-1.5 t-body font-medium text-stone-600 disabled:opacity-50"
               disabled={concluir.isPending}
               onClick={() => concluir.mutate("dispensada")}
             >
@@ -90,7 +90,7 @@ function LinhaDevolucao({ d, somenteLeitura }: { d: Devolucao; somenteLeitura?: 
             </button>
           </div>
           {concluir.isError && (
-            <p className="mt-1.5 text-[11px] text-red-600">
+            <p className="mt-1.5 t-meta text-red-600">
               Não foi possível fechar esta chamada. Tenta outra vez.
             </p>
           )}
@@ -150,10 +150,10 @@ function GrupoDeTickets({
         ) : (
           <ChevronRight className="mt-0.5 h-3 w-3 shrink-0 text-stone-400" />
         )}
-        <span className={cn("text-[11px] font-semibold uppercase tracking-wide", cor)}>
+        <span className={cn("t-micro", cor)}>
           {estado}
         </span>
-        <span className="tabular-nums text-[11px] text-stone-400">{tickets.length}</span>
+        <span className="tabular-nums t-meta text-stone-400">{tickets.length}</span>
       </button>
 
       {aberto && (
@@ -165,7 +165,7 @@ function GrupoDeTickets({
           </div>
           {escondidos > 0 && (
             <button
-              className="w-full border-t border-stone-200 bg-stone-50 py-1.5 text-[11px] text-stone-500 hover:text-stone-900"
+              className="w-full border-t border-stone-200 bg-stone-50 py-1.5 t-meta text-stone-500 hover:text-stone-900"
               onClick={() => setTudo(true)}
             >
               mostrar mais {escondidos}
@@ -187,17 +187,17 @@ function LinhaTicket({ t }: { t: TicketEmRisco }) {
       className="group flex items-baseline justify-between gap-3 p-2.5 hover:bg-stone-50"
     >
       <div className="min-w-0">
-        <p className="truncate text-[13px] text-stone-900">
+        <p className="truncate t-body text-stone-900">
           {t.subject ?? "Pedido sem assunto"}
           <ExternalLink className="ml-1 inline h-3 w-3 -translate-y-px text-stone-300 group-hover:text-stone-500" />
         </p>
-        <p className="mt-0.5 text-[11px] tabular-nums text-stone-400">
+        <p className="mt-0.5 t-meta tabular-nums text-stone-400">
           {t.ticketNumber ? `#${t.ticketNumber}` : t.id}
         </p>
       </div>
       <span
         className={cn(
-          "shrink-0 text-[11px] tabular-nums",
+          "shrink-0 t-meta tabular-nums",
           velho ? "font-semibold text-red-600" : "text-stone-400",
         )}
       >
@@ -215,7 +215,7 @@ export function BlocoFollowUps({ itens }: { itens: FollowUp[] }) {
       {itens.map((f) => (
         <div key={f.id} className="p-3">
           <Narrativa>{f.follow_up_descricao}</Narrativa>
-          <p className="mt-1 text-[11px] tabular-nums text-stone-400">
+          <p className="mt-1 t-meta tabular-nums text-stone-400">
             {f.contact_phone ? telefone(f.contact_phone) : "sem número"}
             {f.product && <> · {f.product}</>}
           </p>
@@ -236,7 +236,7 @@ export function Agendamentos({ motivo }: { motivo?: string }) {
     <section className="space-y-1.5">
       <Cabecalho titulo="Agendamentos" />
       <div className="rounded-lg border border-dashed border-stone-300 bg-stone-100/60 p-3">
-        <p className="text-[11px] leading-relaxed text-stone-500">
+        <p className="t-meta text-stone-500">
           {motivo ??
             "Os agendamentos ainda não estão disponíveis — vivem no CRM, que ainda não está ligado a este painel."}
         </p>

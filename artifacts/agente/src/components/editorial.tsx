@@ -31,12 +31,11 @@ export function Kpi({
   return (
     <div className="rounded-lg border border-stone-200 bg-white px-3 py-2.5">
       <div
-        className={cn("text-2xl leading-none", alerta ? "text-red-600" : "text-stone-900")}
-        style={SERIF}
+        className={cn("t-metric", alerta ? "text-red-600" : "text-stone-900")}
       >
         {valor}
       </div>
-      <div className="mt-1.5 text-[10px] uppercase tracking-wide text-stone-400">{rotulo}</div>
+      <div className="mt-1.5 t-micro text-stone-400">{rotulo}</div>
     </div>
   );
 }
@@ -63,7 +62,7 @@ export function Cabecalho({
 }) {
   return (
     <div className="flex items-baseline justify-between gap-2 px-0.5">
-      <h2 className={cn("text-xs font-semibold uppercase tracking-wide", cor)}>
+      <h2 className={cn("t-micro", cor)}>
         {titulo}
         {contagem != null && contagem > 0 && (
           <span className="ml-1.5 tabular-nums text-stone-400">{contagem}</span>
@@ -78,7 +77,7 @@ export function Cabecalho({
 export function Faixa({ children }: { children: ReactNode }) {
   return (
     <div className="rounded-lg bg-stone-900 p-4 text-stone-50">
-      <p className="text-sm italic leading-relaxed" style={SERIF}>
+      <p className="t-narrativa italic">
         {children}
       </p>
     </div>
@@ -88,7 +87,7 @@ export function Faixa({ children }: { children: ReactNode }) {
 /** Narrative text — a call's context, a follow-up's description. */
 export function Narrativa({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <p className={cn("text-xs leading-relaxed text-stone-700", className)} style={SERIF}>
+    <p className={cn("t-narrativa text-stone-700", className)}>
       {children}
     </p>
   );

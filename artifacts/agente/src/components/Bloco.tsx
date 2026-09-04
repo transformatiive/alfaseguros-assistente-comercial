@@ -51,7 +51,7 @@ export function Bloco<T>({
       ) : !estaDisponivel(dados) ? (
         <Indisponivel motivo={dados.motivo} />
       ) : dados.length === 0 ? (
-        <p className="px-0.5 py-2 text-xs text-stone-400">{vazio}</p>
+        <p className="px-0.5 py-2 t-body text-stone-400">{vazio}</p>
       ) : (
         children(dados)
       )}
@@ -66,7 +66,7 @@ export function Bloco<T>({
  */
 export function Indisponivel({ motivo }: { motivo: string }) {
   return (
-    <div className="rounded-lg border border-dashed border-stone-300 bg-stone-100/60 p-3 text-[11px] leading-relaxed text-stone-500">
+    <div className="rounded-lg border border-dashed border-stone-300 bg-stone-100/60 p-3 t-meta text-stone-500">
       {motivo}
     </div>
   );
