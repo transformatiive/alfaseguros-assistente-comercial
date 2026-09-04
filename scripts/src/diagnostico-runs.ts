@@ -14,6 +14,11 @@ import { desc, sql } from "drizzle-orm";
 async function main(): Promise<void> {
   const limite = Number(process.env.DIAG_LIMITE ?? "20");
 
+  // The model is set as a Railway variable, and the Railway API returns
+  // variable *names* to a connected app, never values — so the only honest way
+  // to answer "which model is analysing" is to print it from inside.
+  console.log(`\nModelo em uso: ${process.env.OPENROUTER_MODEL ?? "(não definido — usa o default do código)"}`);
+
   const runs = await db
     .select()
     .from(runsTable)
