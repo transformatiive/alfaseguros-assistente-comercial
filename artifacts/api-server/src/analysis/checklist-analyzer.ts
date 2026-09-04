@@ -23,7 +23,12 @@ export interface AnalyzeChecklistOptions {
   maxTokens?: number;
 }
 
-const DEFAULT_MODEL = "anthropic/claude-sonnet-4";
+/**
+ * Only used by a direct caller — `analyze-day` always passes the configured
+ * model. Kept in step with the env default so a direct call does not quietly
+ * run two generations behind.
+ */
+const DEFAULT_MODEL = "anthropic/claude-sonnet-5";
 const MAX_TOKENS_RETRY = 6000;
 
 export type ChecklistOutcome =
