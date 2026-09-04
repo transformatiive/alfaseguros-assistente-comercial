@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { AlertTriangle, Flame, PhoneOff, ShieldAlert, Sparkles, Star, TrendingDown } from "lucide-react";
 import { Cabecalho } from "@/components/editorial";
 import { cn } from "@/lib/utils";
@@ -29,12 +30,70 @@ const ASPETO: Record<TipoAcao, { rotulo: string; icone: typeof Flame; cor: strin
   oportunidade_cross_sell: { rotulo: "Oportunidade", icone: Sparkles, cor: "text-blue-700" },
 };
 
+/**
+ * Grouped by what the row asks of the agent, and capped.
+ *
+ * Ungrouped, a real day produced 31 rows in one list and buried every heading
+ * under it — the same disease the ticket block had. And the three priorities
+ * are not three shades of the same thing: "a customer may be about to leave"
+ * and "there was a cross-sell you did not take" belong to different halves of
+ * a morning.
+ */
+const GRUPOS = [
+  { prioridade: "alta", titulo: "Agir hoje", cor: "text-red-700" },
+  { prioridade: "media", titulo: "Rever", cor: "text-amber-700" },
+  { prioridade: "baixa", titulo: "Oportunidades", cor: "text-blue-700" },
+] as const;
+
+/** Same six as the ticket groups, for the same reason: a thumb's scroll. */
+const VISIVEIS = 6;
+
 export function BlocoAcoes({ itens }: { itens: Acao[] }) {
   return (
-    <div className="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
-      {itens.map((a) => (
-        <LinhaAcao key={a.id} a={a} />
-      ))}
+    <div className="space-y-3">
+      {GRUPOS.map((g) => {
+        const doGrupo = itens.filter((a) => a.prioridade === g.prioridade);
+        if (doGrupo.length === 0) return null;
+        return <GrupoDeAcoes key={g.prioridade} {...g} itens={doGrupo} />;
+      })}
+    </div>
+  );
+}
+
+function GrupoDeAcoes({
+  titulo,
+  cor,
+  itens,
+}: {
+  titulo: string;
+  cor: string;
+  itens: Acao[];
+}) {
+  const [tudo, setTudo] = useState(false);
+  const mostrados = tudo ? itens : itens.slice(0, VISIVEIS);
+  const escondidos = itens.length - mostrados.length;
+
+  return (
+    <div>
+      <div className="flex items-baseline gap-1.5 px-0.5 py-1">
+        <span className={cn("t-micro", cor)}>{titulo}</span>
+        <span className="t-meta tabular-nums text-stone-400">{itens.length}</span>
+      </div>
+      <div className="overflow-hidden rounded-lg border border-stone-200 bg-white">
+        <div className="divide-y divide-stone-200">
+          {mostrados.map((a) => (
+            <LinhaAcao key={a.id} a={a} />
+          ))}
+        </div>
+        {escondidos > 0 && (
+          <button
+            className="t-meta w-full border-t border-stone-200 bg-stone-50 py-1.5 text-stone-500 hover:text-stone-900"
+            onClick={() => setTudo(true)}
+          >
+            mostrar mais {escondidos}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

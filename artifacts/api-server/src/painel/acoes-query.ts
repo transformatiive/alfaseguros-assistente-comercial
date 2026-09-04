@@ -54,10 +54,20 @@ export async function listAcoesDoAgente(params: {
     for (const r of rows) if (r.fp && r.nome) nomePorFp.set(r.fp, r.nome);
   }
 
-  return derivarAcoes(conversas, (telefone) => {
+  const todas = derivarAcoes(conversas, (telefone) => {
     const fp = phoneFingerprint(telefone);
     return (fp && nomePorFp.get(fp)) || null;
   });
+
+  // `follow_up_pendente` is dropped here, and only here: the panel already has
+  // a Seguimentos block that exists for exactly that, and on a real day the two
+  // overlapped eleven rows to seven. The same promise listed twice, in two
+  // places, with two different wordings is worse than listing it once — the
+  // agent has to work out whether they are looking at one commitment or two.
+  //
+  // The supervisor's own "Ações do Dia" keeps them: that view has no
+  // Seguimentos block, so there they are the only place the promise appears.
+  return todas.filter((a) => a.tipo !== "follow_up_pendente");
 }
 
 export interface Coaching {
