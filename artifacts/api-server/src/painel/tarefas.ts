@@ -160,12 +160,39 @@ export function ehTarefaDoDesk(subject: string | null): boolean {
   return ASSUNTOS_DE_TAREFA.some((r) => r.test(s));
 }
 
-/** Words that mean "a quote was asked for", in ticket subjects and promises. */
+/** Words that mean "a quote", in ticket subjects and in promises. */
 const PALAVRAS_DE_SIMULACAO =
   /simula(c|ç)(a|ã)o|simular|cota(c|ç)(a|ã)o|or(c|ç)amento|proposta|pedido de pre(c|ç)o/i;
 
+/**
+ * A ticket that is a request for a quote.
+ *
+ * The noun alone is enough here, because a Desk subject *is* the request:
+ * "VCVIDA - Simulação Seguro Multirriscos - Pedro Marques" needs no verb to
+ * mean what it obviously means. Against real data this classified fifteen of
+ * fifteen correctly.
+ */
 export function pedeSimulacao(texto: string | null | undefined): boolean {
   return PALAVRAS_DE_SIMULACAO.test(texto ?? "");
+}
+
+/** Verbs that mean the quote itself is the thing being produced or sent. */
+const VERBOS_DE_ENVIO =
+  /envi|manda|remet|prepar|elabor|fazer (a |uma )?(simula|cota|proposta)|simular|cotar|apresentar|entregar|submeter/i;
+
+/**
+ * A *promise* to send a quote — which needs the verb as well as the noun.
+ *
+ * A promise is a whole sentence about an act, so the noun on its own
+ * over-fires: *"Contactar a cliente com uma atualização sobre a decisão da
+ * seguradora relativa à proposta de Multirriscos"* is a promise to **call**,
+ * not to send anything, and on real data it was the one row this got wrong.
+ * Requiring a producing or sending verb alongside the noun fixes it without
+ * touching the ticket side, where the noun is the whole point.
+ */
+export function prometeSimulacao(descricao: string | null | undefined): boolean {
+  const t = descricao ?? "";
+  return PALAVRAS_DE_SIMULACAO.test(t) && VERBOS_DE_ENVIO.test(t);
 }
 
 /** The last nine digits — the only form Ringover and Desk agree on. */
@@ -210,7 +237,12 @@ export function resumirPromessa(descricao: string, maximo = 72): string {
 
   if (t.length > maximo) {
     const corte = t.lastIndexOf(" ", maximo);
-    t = t.slice(0, corte > maximo * 0.6 ? corte : maximo).trim() + "…";
+    t = t.slice(0, corte > maximo * 0.6 ? corte : maximo).trim();
+    // "…do seguro de Saúde do cliente na…" is a worse cut than one word
+    // earlier: a title left dangling on a preposition or an article reads as
+    // broken rather than as abbreviated.
+    t = t.replace(/\s+(de|da|do|das|dos|a|o|as|os|na|no|nas|nos|em|para|com|e|à|ao)$/i, "");
+    t += "…";
   }
   if (!t) return "Cumprir o que foi combinado";
   return t.charAt(0).toUpperCase() + t.slice(1);
@@ -287,7 +319,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
   for (const f of entrada.followUps) {
     const detectado = new Date(f.detected_at);
     const prazo = new Date(detectado.getTime() + f.follow_up_sla_hours * 3_600_000);
-    const simulacao = pedeSimulacao(f.follow_up_descricao) || pedeSimulacao(f.product);
+    const simulacao = prometeSimulacao(f.follow_up_descricao);
     const contacto = contactoDe(f.contact_phone, entrada);
     if (f.contact_email) contacto.email = f.contact_email;
 

@@ -7,6 +7,7 @@ import { loadPendingFollowUps, type FollowUpItem } from "./followups-query.js";
 import { listAcoesDoAgente, loadCoaching, type Coaching } from "./acoes-query.js";
 import type { Acao } from "./acoes.js";
 import { derivarTarefas, impressaoDigital, type Tarefa } from "./tarefas.js";
+import { carregarContactos } from "./contactos.js";
 
 /**
  * The agent panel payload: what must I do today, in four blocks.
@@ -173,31 +174,52 @@ function buildExcludedProducts(): Set<string> {
  * Desk has seen before therefore arrives with a name on it; one from a genuinely
  * new caller shows the number, which is all anybody knows about them yet.
  */
-function montarTarefas(b: {
+async function montarTarefas(b: {
   devolucoes: DevolucaoPainel[] | BlocoIndisponivel;
   ticketsEmRisco: TicketEmRisco[] | BlocoIndisponivel;
   followUps: FollowUpItem[] | BlocoIndisponivel;
   acoes: Acao[] | BlocoIndisponivel;
-}): Tarefa[] {
+}): Promise<Tarefa[]> {
   const lista = <T,>(x: T[] | BlocoIndisponivel): T[] => (Array.isArray(x) ? x : []);
+  const devolucoes = lista(b.devolucoes);
+  const followUps = lista(b.followUps);
+  const acoes = lista(b.acoes);
   const tickets = lista(b.ticketsEmRisco);
 
-  const nomePorFingerprint = new Map<string, string>();
-  const emailPorFingerprint = new Map<string, string>();
+  // Every number on the panel that arrived without a name attached. The
+  // tickets already carry their own contact, so only the phone-shaped rows
+  // need looking up.
+  const porIdentificar = [
+    ...devolucoes.map((d) => d.numeroCliente),
+    ...followUps.map((f) => f.contact_phone),
+    ...acoes.map((a) => a.customerPhone),
+  ]
+    .map(impressaoDigital)
+    .filter((f): f is string => !!f);
+
+  // A Desk outage must not cost the agent their call list: without the names
+  // the rows still say the number, which is what they said before.
+  const contactos = await carregarContactos(porIdentificar).catch(() => ({
+    nomes: new Map<string, string>(),
+    emails: new Map<string, string>(),
+  }));
+
+  // The loaded tickets contribute too — they are the freshest thing we have
+  // for the numbers that do appear in both places.
   for (const t of tickets) {
     const fp = impressaoDigital(t.contactPhone);
     if (!fp) continue;
-    if (t.contactName) nomePorFingerprint.set(fp, t.contactName);
-    if (t.contactEmail) emailPorFingerprint.set(fp, t.contactEmail);
+    if (t.contactName) contactos.nomes.set(fp, t.contactName);
+    if (t.contactEmail) contactos.emails.set(fp, t.contactEmail);
   }
 
   return derivarTarefas({
-    devolucoes: lista(b.devolucoes),
-    followUps: lista(b.followUps),
+    devolucoes,
+    followUps,
     tickets,
-    acoes: lista(b.acoes),
-    nomePorFingerprint,
-    emailPorFingerprint,
+    acoes,
+    nomePorFingerprint: contactos.nomes,
+    emailPorFingerprint: contactos.emails,
     now: new Date(),
   });
 }
@@ -296,6 +318,11 @@ export async function buildAgentePainel(
     coaching = coachingR.value;
   }
 
+  // Built after the blocks settle, because it reshapes what they produced —
+  // and looked up here rather than inside `derivarTarefas` so that function
+  // stays pure and testable with a literal.
+  const tarefas = await montarTarefas({ devolucoes, ticketsEmRisco, followUps, acoes });
+
   return {
     painel: {
       colaborador: {
@@ -309,7 +336,7 @@ export async function buildAgentePainel(
       ticketsEmRisco,
       followUps,
       acoes,
-      tarefas: montarTarefas({ devolucoes, ticketsEmRisco, followUps, acoes }),
+      tarefas,
       coaching,
       agendamentos: indisponivel(
         "Os agendamentos ainda não estão disponíveis — vivem no CRM, que ainda não está ligado a este painel.",
