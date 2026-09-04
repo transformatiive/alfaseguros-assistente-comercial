@@ -1,6 +1,7 @@
 import { inArray } from "drizzle-orm";
 import { db, ticketsTable } from "@workspace/db";
 import { emailDoTicket } from "./tickets-risco.js";
+import { nomeUtil } from "./tarefas.js";
 
 /**
  * Who a phone number belongs to, according to Desk.
@@ -45,7 +46,10 @@ export async function carregarContactos(
 
   for (const r of rows) {
     if (!r.fp) continue;
-    if (r.nome) nomes.set(r.fp, r.nome);
+    // A number-shaped "name" never enters the map, so a later ticket with a
+    // real name is not overwritten by an earlier auto-created one.
+    const nome = nomeUtil(r.nome);
+    if (nome) nomes.set(r.fp, nome);
     const email = emailDoTicket(r.raw);
     if (email) emails.set(r.fp, email);
   }

@@ -5,6 +5,7 @@ import {
   ehAcaoDeConversa,
   ehTarefaDoDesk,
   impressaoDigital,
+  nomeUtil,
   pedeSimulacao,
   prometeSimulacao,
   resumirPromessa,
@@ -125,6 +126,19 @@ describe("resumirPromessa", () => {
     expect(resumirPromessa("Registar no Desk uma tarefa para ")).toBe(
       "Cumprir o que foi combinado",
     );
+  });
+});
+
+describe("nomeUtil", () => {
+  it("rejeita o número como nome — o n8n põe lá o próprio número", () => {
+    expect(nomeUtil("351911051149")).toBeNull();
+    expect(nomeUtil("+351 911 051 149")).toBeNull();
+    expect(nomeUtil("  ")).toBeNull();
+  });
+
+  it("aceita um nome a sério, mesmo quando traz dígitos", () => {
+    expect(nomeUtil("Marco Pacheco")).toBe("Marco Pacheco");
+    expect(nomeUtil("luiscvasousa99")).toBe("luiscvasousa99");
   });
 });
 
