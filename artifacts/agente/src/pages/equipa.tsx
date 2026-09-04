@@ -17,10 +17,28 @@ import type { Devolucao, LinhaAgente, SupervisorPainel } from "@/lib/tipos";
  * with the rule that produced it, because a ranking whose arithmetic is hidden
  * gets argued with instead of acted on.
  */
-export function VistaDaEquipa() {
+export function VistaDaEquipa({
+  origem,
+  chave,
+}: {
+  /**
+   * Where to read from. Defaults to the token-guarded endpoint; the preview
+   * page passes its own, which needs no token. The rendering is identical
+   * either way — the point of a preview is to show the real screen.
+   */
+  origem?: string;
+  chave?: unknown[];
+} = {}) {
+  const semToken = origem !== undefined;
+
   const { data, isLoading, error } = useQuery<SupervisorPainel>({
-    queryKey: ["equipa", diaPedido()],
-    queryFn: () => obter<SupervisorPainel>(comDia("/api/supervisor/painel")),
+    queryKey: chave ?? ["equipa", diaPedido()],
+    queryFn: async () => {
+      if (!semToken) return obter<SupervisorPainel>(comDia("/api/supervisor/painel"));
+      const res = await fetch(origem);
+      if (!res.ok) throw new Error(`O servidor respondeu ${res.status}`);
+      return (await res.json()) as SupervisorPainel;
+    },
     staleTime: 60_000,
   });
 
