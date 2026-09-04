@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Link, Route, Router, Switch, useLocation } from "wouter";
 import { obter } from "@/lib/api";
 import { estaSolto } from "@/lib/sessao";
+import { comDia, diaPedido } from "@/lib/dia";
 import { PainelDoAgente } from "@/pages/painel";
 import { VistaDaEquipa } from "@/pages/equipa";
 import type { AgentePainel } from "@/lib/tipos";
@@ -22,8 +23,10 @@ import type { AgentePainel } from "@/lib/tipos";
  */
 export function App() {
   const { data } = useQuery<AgentePainel>({
-    queryKey: ["painel"],
-    queryFn: () => obter<AgentePainel>("/api/agente/painel"),
+    // Same key and same URL as the panel page: two different keys would fetch
+    // the panel twice and could disagree about the role.
+    queryKey: ["painel", diaPedido()],
+    queryFn: () => obter<AgentePainel>(comDia("/api/agente/painel")),
     staleTime: 60_000,
   });
 

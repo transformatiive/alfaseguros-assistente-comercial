@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Bloco, Indisponivel } from "@/components/Bloco";
 import { enviar, obter } from "@/lib/api";
 import { hora, idade, porqueMe, telefone } from "@/lib/formatos";
+import { comDia, diaPedido } from "@/lib/dia";
 import type { AgentePainel, Devolucao, FollowUp, TicketEmRisco } from "@/lib/tipos";
 
 /**
@@ -20,8 +21,8 @@ import type { AgentePainel, Devolucao, FollowUp, TicketEmRisco } from "@/lib/tip
  */
 export function PainelDoAgente() {
   const { data, isLoading, error } = useQuery<AgentePainel>({
-    queryKey: ["painel"],
-    queryFn: () => obter<AgentePainel>("/api/agente/painel"),
+    queryKey: ["painel", diaPedido()],
+    queryFn: () => obter<AgentePainel>(comDia("/api/agente/painel")),
     // Twice-daily server refresh; polling harder would cost requests and change
     // nothing. A stale minute here is invisible to the agent.
     staleTime: 60_000,
@@ -94,6 +95,11 @@ function Cabecalho({ painel }: { painel: AgentePainel | undefined }) {
       <p className="text-xs text-muted-foreground">
         {painel ? painel.colaborador.nome : " "}
       </p>
+      {/* Only when it is NOT today: a panel showing another day must say so,
+          or an empty Saturday reads as a quiet Monday. */}
+      {painel && diaPedido() && (
+        <p className="mt-0.5 text-xs font-medium">A mostrar {painel.data}, não hoje.</p>
+      )}
     </header>
   );
 }
