@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Bloco, Indisponivel } from "@/components/Bloco";
 import { obter } from "@/lib/api";
 import { hora, porqueMe, telefone } from "@/lib/formatos";
+import { comDia, diaPedido } from "@/lib/dia";
 import type { Devolucao, LinhaAgente, SupervisorPainel } from "@/lib/tipos";
 
 /**
@@ -18,8 +19,8 @@ import type { Devolucao, LinhaAgente, SupervisorPainel } from "@/lib/tipos";
  */
 export function VistaDaEquipa() {
   const { data, isLoading, error } = useQuery<SupervisorPainel>({
-    queryKey: ["equipa"],
-    queryFn: () => obter<SupervisorPainel>("/api/supervisor/painel"),
+    queryKey: ["equipa", diaPedido()],
+    queryFn: () => obter<SupervisorPainel>(comDia("/api/supervisor/painel")),
     staleTime: 60_000,
   });
 
@@ -41,6 +42,11 @@ export function VistaDaEquipa() {
           <p className="text-xs text-muted-foreground tabular-nums">
             {data.totais.devolucoes} chamadas · {data.totais.ticketsEmRisco} pedidos ·{" "}
             {data.totais.followUps} seguimentos
+          </p>
+        )}
+        {data && diaPedido() && (
+          <p className="mt-0.5 text-xs font-medium">
+            A mostrar {data.data}, não hoje.
           </p>
         )}
       </header>
