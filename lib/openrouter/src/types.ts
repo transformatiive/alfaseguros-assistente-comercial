@@ -69,8 +69,15 @@ export interface ModelPricing {
 }
 
 /**
- * Pricing snapshot for the models we touch. As of late 2025; verify against
- * https://openrouter.ai/models if costs look off.
+ * Pricing for the models we touch, verified against OpenRouter's live
+ * `/api/v1/models` on 2026-09-04.
+ *
+ * **A model missing from this table costs zero.** `estimateCost` returns a
+ * breakdown with `costUsd: 0` for anything it does not recognise — which is
+ * the right default for an unknown model but a trap when switching one: point
+ * `OPENROUTER_MODEL` at an id that is not here and every run reports as free,
+ * the budget guardrail stops guarding, and nothing complains. Add the row
+ * before changing the model, not after.
  */
 export const MODEL_PRICING: Record<string, ModelPricing> = {
   "anthropic/claude-sonnet-4": {
@@ -90,6 +97,36 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     outputUsdPerMillion: 10,
     cacheWriteUsdPerMillion: 2.5,
     cacheReadUsdPerMillion: 0.2,
+  },
+  "anthropic/claude-haiku-4.5": {
+    inputUsdPerMillion: 1,
+    outputUsdPerMillion: 5,
+    cacheWriteUsdPerMillion: 1.25,
+    cacheReadUsdPerMillion: 0.1,
+  },
+  // Batch variants are the same models at half price. Listed because the daily
+  // run is exactly the workload they exist for: it fires at 06:00 with nobody
+  // waiting on the result.
+  "anthropic/claude-sonnet-5:batch": {
+    inputUsdPerMillion: 1,
+    outputUsdPerMillion: 5,
+    cacheWriteUsdPerMillion: 1.25,
+    cacheReadUsdPerMillion: 0.1,
+  },
+  "anthropic/claude-haiku-4.5:batch": {
+    inputUsdPerMillion: 0.5,
+    outputUsdPerMillion: 2.5,
+    cacheWriteUsdPerMillion: 0.62,
+    cacheReadUsdPerMillion: 0.05,
+  },
+  // Input costs the same as Sonnet 5 and output is cheaper, but cache reads
+  // cost 2.5x more — and this pipeline caches a large system prompt on every
+  // one of ~128 daily calls, so the cache read is where its money goes.
+  "x-ai/grok-4.6": {
+    inputUsdPerMillion: 2,
+    outputUsdPerMillion: 6,
+    cacheWriteUsdPerMillion: 2,
+    cacheReadUsdPerMillion: 0.5,
   },
   "anthropic/claude-3.5-haiku": {
     inputUsdPerMillion: 0.8,
