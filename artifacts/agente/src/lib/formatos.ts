@@ -37,6 +37,25 @@ export function idade(horas: number): string {
   return `${Math.floor(horas / 24)} dias`;
 }
 
+const DIA_EXTENSO = new Intl.DateTimeFormat("pt-PT", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  timeZone: "UTC",
+});
+
+/**
+ * `sexta-feira, 28 de agosto` — the prototype writes the day name out, and it
+ * is not decoration: an agent glancing at a panel needs to know at once whether
+ * they are looking at today or at something older.
+ *
+ * Parsed as UTC because the input is a plain calendar date, not an instant; a
+ * local parse shifts it a day either side of midnight.
+ */
+export function diaPorExtenso(data: string): string {
+  return DIA_EXTENSO.format(new Date(`${data}T12:00:00Z`));
+}
+
 /**
  * Why this call is on your list — shown only when the answer is an inference.
  *

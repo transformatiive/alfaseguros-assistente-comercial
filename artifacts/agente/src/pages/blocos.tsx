@@ -1,13 +1,15 @@
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
 import { enviar } from "@/lib/api";
 import { hora, idade, porqueMe, telefone } from "@/lib/formatos";
+import { agruparPorEstado } from "@/lib/estados";
+import { Cabecalho, Narrativa } from "@/components/editorial";
+import { cn } from "@/lib/utils";
 import type { Devolucao, FollowUp, TicketEmRisco } from "@/lib/tipos";
 
 /**
- * The rows themselves, shared by the real panel and the preview.
+ * The rows, shared by the real panel and the preview.
  *
  * Extracted for one reason: a preview that draws its own markup validates a
  * screen nobody will ever see. If these ever diverge, the review stops being
@@ -19,6 +21,8 @@ import type { Devolucao, FollowUp, TicketEmRisco } from "@/lib/tipos";
  * worse answer than not showing them.
  */
 
+/* ── Chamadas por devolver ─────────────────────────────────────────────── */
+
 export function BlocoDevolucoes({
   itens,
   somenteLeitura,
@@ -27,21 +31,15 @@ export function BlocoDevolucoes({
   somenteLeitura?: boolean;
 }) {
   return (
-    <>
+    <div className="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
       {itens.map((d) => (
         <LinhaDevolucao key={d.ids.join("-")} d={d} somenteLeitura={somenteLeitura} />
       ))}
-    </>
+    </div>
   );
 }
 
-function LinhaDevolucao({
-  d,
-  somenteLeitura,
-}: {
-  d: Devolucao;
-  somenteLeitura?: boolean;
-}) {
+function LinhaDevolucao({ d, somenteLeitura }: { d: Devolucao; somenteLeitura?: boolean }) {
   const qc = useQueryClient();
   const concluir = useMutation({
     mutationFn: (estado: "devolvida" | "dispensada") =>
@@ -52,119 +50,172 @@ function LinhaDevolucao({
   });
 
   const razao = porqueMe(d.atribuicaoOrigem);
+  const insistente = d.tentativas > 1;
 
   return (
-    <Card className="p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="font-medium tabular-nums">{telefone(d.numeroCliente)}</p>
-          <p className="text-xs text-muted-foreground">
-            {hora(d.primeiraChamada)}
-            {d.tentativas > 1 && <> · até às {hora(d.ultimaChamada)}</>}
-          </p>
-        </div>
-        {d.tentativas > 1 && (
-          <Badge variant="destructive" className="shrink-0">
-            {d.tentativas} tentativas
-          </Badge>
-        )}
+    <div className={cn("p-3", insistente && "border-l-[3px] border-l-red-600")}>
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="font-medium tabular-nums text-stone-900">{telefone(d.numeroCliente)}</p>
+        <p className="shrink-0 text-xs tabular-nums text-stone-400">
+          {hora(d.primeiraChamada)}
+          {insistente && <> – {hora(d.ultimaChamada)}</>}
+        </p>
       </div>
 
-      {d.contexto && (
-        <p className="mt-2 font-serif text-xs leading-relaxed text-foreground/80">{d.contexto}</p>
+      {insistente && (
+        <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-red-700">
+          {d.tentativas} tentativas
+        </p>
       )}
 
-      {razao && <p className="mt-1.5 text-[11px] text-muted-foreground">{razao}</p>}
+      {d.contexto && <Narrativa className="mt-1.5">{d.contexto}</Narrativa>}
+      {razao && <p className="mt-1 text-[11px] text-stone-400">{razao}</p>}
 
       {!somenteLeitura && (
         <>
           <div className="mt-2.5 flex gap-1.5">
-            <Button
-              size="sm"
-              className="h-7 text-xs"
+            <button
+              className="rounded-md bg-stone-900 px-3 py-1.5 text-xs font-medium text-stone-50 disabled:opacity-50"
               disabled={concluir.isPending}
               onClick={() => concluir.mutate("devolvida")}
             >
               Devolvida
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs"
+            </button>
+            <button
+              className="rounded-md border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-600 disabled:opacity-50"
               disabled={concluir.isPending}
               onClick={() => concluir.mutate("dispensada")}
             >
               Dispensar
-            </Button>
+            </button>
           </div>
-
           {concluir.isError && (
-            <p className="mt-1.5 text-[11px] text-destructive">
+            <p className="mt-1.5 text-[11px] text-red-600">
               Não foi possível fechar esta chamada. Tenta outra vez.
             </p>
           )}
         </>
       )}
-    </Card>
+    </div>
   );
 }
 
+/* ── Pedidos do Desk, agrupados por estado ─────────────────────────────── */
+
 export function BlocoTickets({ itens }: { itens: TicketEmRisco[] }) {
+  const grupos = agruparPorEstado(itens);
   return (
-    <>
-      {itens.map((t) => (
-        <Card key={t.id} className="p-3">
-          <a href={t.deskUrl} target="_blank" rel="noreferrer" className="block hover:underline">
-            <div className="flex items-start justify-between gap-2">
-              <p className="min-w-0 truncate font-medium">{t.subject ?? "Pedido sem assunto"}</p>
-              <Badge
-                variant={t.idadeHoras >= 72 ? "destructive" : "secondary"}
-                className="shrink-0"
-              >
-                {idade(t.idadeHoras)}
-              </Badge>
-            </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {t.ticketNumber ? `#${t.ticketNumber}` : t.id}
-              {t.status && <> · {t.status}</>}
-            </p>
-          </a>
-        </Card>
+    <div className="space-y-3">
+      {grupos.map((g) => (
+        <GrupoDeTickets key={g.estado} {...g} />
       ))}
-    </>
+    </div>
   );
 }
+
+function GrupoDeTickets({
+  estado,
+  tickets,
+  agir,
+  cor,
+}: ReturnType<typeof agruparPorEstado>[number]) {
+  // Groups the agent can act on open; groups parked on somebody else start
+  // closed. The counts stay visible either way, so nothing is hidden — only
+  // deferred.
+  const [aberto, setAberto] = useState(agir);
+
+  return (
+    <div>
+      <button
+        className="flex w-full items-baseline gap-1.5 px-0.5 py-1 text-left"
+        onClick={() => setAberto((v) => !v)}
+      >
+        {aberto ? (
+          <ChevronDown className="mt-0.5 h-3 w-3 shrink-0 text-stone-400" />
+        ) : (
+          <ChevronRight className="mt-0.5 h-3 w-3 shrink-0 text-stone-400" />
+        )}
+        <span className={cn("text-[11px] font-semibold uppercase tracking-wide", cor)}>
+          {estado}
+        </span>
+        <span className="tabular-nums text-[11px] text-stone-400">{tickets.length}</span>
+      </button>
+
+      {aberto && (
+        <div className="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
+          {tickets.map((t) => (
+            <LinhaTicket key={t.id} t={t} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LinhaTicket({ t }: { t: TicketEmRisco }) {
+  const velho = t.idadeHoras >= 72;
+  return (
+    <a
+      href={t.deskUrl}
+      target="_blank"
+      rel="noreferrer"
+      className="group flex items-baseline justify-between gap-3 p-2.5 hover:bg-stone-50"
+    >
+      <div className="min-w-0">
+        <p className="truncate text-[13px] text-stone-900">
+          {t.subject ?? "Pedido sem assunto"}
+          <ExternalLink className="ml-1 inline h-3 w-3 -translate-y-px text-stone-300 group-hover:text-stone-500" />
+        </p>
+        <p className="mt-0.5 text-[11px] tabular-nums text-stone-400">
+          {t.ticketNumber ? `#${t.ticketNumber}` : t.id}
+        </p>
+      </div>
+      <span
+        className={cn(
+          "shrink-0 text-[11px] tabular-nums",
+          velho ? "font-semibold text-red-600" : "text-stone-400",
+        )}
+      >
+        {idade(t.idadeHoras)}
+      </span>
+    </a>
+  );
+}
+
+/* ── Seguimentos ───────────────────────────────────────────────────────── */
 
 export function BlocoFollowUps({ itens }: { itens: FollowUp[] }) {
   return (
-    <>
+    <div className="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
       {itens.map((f) => (
-        <Card key={f.id} className="p-3">
-          <p className="font-serif text-xs leading-relaxed">{f.follow_up_descricao}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
+        <div key={f.id} className="p-3">
+          <Narrativa>{f.follow_up_descricao}</Narrativa>
+          <p className="mt-1 text-[11px] tabular-nums text-stone-400">
             {f.contact_phone ? telefone(f.contact_phone) : "sem número"}
             {f.product && <> · {f.product}</>}
           </p>
-        </Card>
+        </div>
       ))}
-    </>
+    </div>
   );
 }
 
+/* ── Agendamentos ──────────────────────────────────────────────────────── */
+
 /**
- * Scheduling: always unavailable, and deliberately shaped unlike every other
- * empty state. "We cannot see this yet" must never read as "you have none".
+ * Always unavailable, and deliberately shaped unlike every other empty state.
+ * "We cannot see this yet" must never read as "you have none".
  */
 export function Agendamentos({ motivo }: { motivo?: string }) {
   return (
-    <section className="space-y-2">
-      <h2 className="px-1 text-sm font-semibold tracking-tight">Agendamentos</h2>
-      <Card className="border-dashed bg-muted/30 p-3">
-        <p className="text-xs leading-relaxed text-muted-foreground">
+    <section className="space-y-1.5">
+      <Cabecalho titulo="Agendamentos" />
+      <div className="rounded-lg border border-dashed border-stone-300 bg-stone-100/60 p-3">
+        <p className="text-[11px] leading-relaxed text-stone-500">
           {motivo ??
             "Os agendamentos ainda não estão disponíveis — vivem no CRM, que ainda não está ligado a este painel."}
         </p>
-      </Card>
+      </div>
     </section>
   );
 }

@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Card } from "@/components/ui/card";
-import { Bloco, Indisponivel } from "@/components/Bloco";
-import { hora } from "@/lib/formatos";
-import { BlocoDevolucoes, BlocoFollowUps, BlocoTickets, Agendamentos } from "@/pages/blocos";
+import { Indisponivel } from "@/components/Bloco";
+import { diaPorExtenso } from "@/lib/formatos";
+import { CorpoDoPainel } from "@/pages/painel-corpo";
 import { VistaDaEquipa } from "@/pages/equipa";
-import type { AgentePainel, Devolucao, FollowUp, TicketEmRisco } from "@/lib/tipos";
+import type { AgentePainel } from "@/lib/tipos";
 
 /**
  * The panel, for anyone, with no token — a review surface, not a product.
@@ -14,7 +13,7 @@ import type { AgentePainel, Devolucao, FollowUp, TicketEmRisco } from "@/lib/tip
  * is not installed yet. Judging a layout takes longer than fifteen minutes, and
  * re-minting mid-sentence is administration, not review.
  *
- * It renders the SAME block components as the real panel. A preview built from
+ * It renders the SAME body component as the real panel. A preview built from
  * its own markup would validate a screen nobody will ever see, which is worse
  * than no preview at all.
  *
@@ -33,9 +32,7 @@ interface Colaborador {
 async function ler<T>(caminho: string): Promise<T> {
   const res = await fetch(caminho);
   if (res.status === 404) {
-    throw new Error(
-      "A pré-visualização está desligada no servidor (PAINEL_PREVIEW_ENABLED).",
-    );
+    throw new Error("A pré-visualização está desligada no servidor (PAINEL_PREVIEW_ENABLED).");
   }
   if (!res.ok) throw new Error(`O servidor respondeu ${res.status}`);
   return (await res.json()) as T;
@@ -63,16 +60,16 @@ export function PreVisualizacao() {
   const escolhido = quem ?? (colaboradores.length > 0 ? colaboradores[0].id : null);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="border-b bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
+    <div className="min-h-screen bg-stone-50 text-stone-900">
+      <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
         <b>Pré-visualização.</b> Sem autenticação, só leitura, com dados reais de
         clientes. Serve para validar formato e conteúdo — deve ser desligada
         assim que a extensão do Desk funcionar.
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-stone-200 bg-white px-3 py-2">
         <select
-          className="rounded-md border bg-background px-2 py-1 text-xs"
+          className="rounded-md border border-stone-200 bg-white px-2 py-1 text-xs text-stone-700"
           value={escolhido === null ? "" : String(escolhido)}
           onChange={(e) =>
             setQuem(e.target.value === "equipa" ? "equipa" : Number(e.target.value))
@@ -89,15 +86,13 @@ export function PreVisualizacao() {
 
         <input
           type="date"
-          className="rounded-md border bg-background px-2 py-1 text-xs"
+          className="rounded-md border border-stone-200 bg-white px-2 py-1 text-xs text-stone-700"
           value={data}
           onChange={(e) => setData(e.target.value)}
         />
 
         {equipaQ.error && (
-          <span className="text-[11px] text-destructive">
-            {(equipaQ.error as Error).message}
-          </span>
+          <span className="text-[11px] text-red-600">{(equipaQ.error as Error).message}</span>
         )}
       </div>
 
@@ -133,49 +128,17 @@ function PainelDeUm({ id, data }: { id: number; data: string }) {
   }
 
   return (
-    <div className="mx-auto max-w-xl space-y-5 p-3 pb-10">
-      <header className="px-1">
-        <h1 className="font-serif text-xl leading-tight">O meu dia</h1>
-        <p className="text-xs text-muted-foreground">
-          {painel ? painel.colaborador.nome : " "}
+    <div className="mx-auto max-w-xl space-y-4 p-3 pb-10">
+      <header className="px-0.5">
+        <h1 className="text-lg leading-tight text-stone-900" style={{ fontFamily: "Georgia, serif" }}>
+          O meu dia
+        </h1>
+        <p className="text-[11px] uppercase tracking-wide text-stone-400">
+          {painel ? painel.colaborador.nome : " "} · {diaPorExtenso(data)}
         </p>
-        <p className="mt-0.5 text-xs font-medium">A mostrar {data}.</p>
       </header>
 
-      <Bloco<Devolucao>
-        titulo="Chamadas por devolver"
-        dados={painel?.devolucoes}
-        aCarregar={isLoading}
-        vazio="Nenhuma chamada por devolver neste dia."
-      >
-        {(itens) => <BlocoDevolucoes itens={itens} somenteLeitura />}
-      </Bloco>
-
-      <Bloco<TicketEmRisco>
-        titulo="Pedidos há mais de 24 h"
-        dados={painel?.ticketsEmRisco}
-        aCarregar={isLoading}
-        vazio="Nenhum pedido passou das 24 horas."
-      >
-        {(itens) => <BlocoTickets itens={itens} />}
-      </Bloco>
-
-      <Bloco<FollowUp>
-        titulo="Seguimentos"
-        dados={painel?.followUps}
-        aCarregar={isLoading}
-        vazio="Nenhum seguimento por fazer."
-      >
-        {(itens) => <BlocoFollowUps itens={itens} />}
-      </Bloco>
-
-      <Agendamentos motivo={painel?.agendamentos.motivo} />
-
-      {painel && (
-        <Card className="p-3 text-[11px] text-muted-foreground">
-          Atualizado às {hora(painel.atualizadoEm)}.
-        </Card>
-      )}
+      <CorpoDoPainel painel={painel} aCarregar={isLoading} somenteLeitura />
     </div>
   );
 }
