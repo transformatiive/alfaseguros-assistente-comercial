@@ -129,8 +129,8 @@ function PainelDeUm({ id, data }: { id: number; data: string }) {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 pb-10 sm:p-4">
-      <header className="px-0.5">
-        <h1 className="t-display text-stone-900">
+      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 px-0.5">
+        <h1 className="t-pagina text-stone-900">
           O meu dia
         </h1>
         <p className="t-micro text-stone-400">

@@ -1,8 +1,8 @@
 import { Bloco, Indisponivel } from "@/components/Bloco";
-import { Kpi } from "@/components/editorial";
+import { Kpi, TiraDeIndicadores } from "@/components/editorial";
 import { hora } from "@/lib/formatos";
 import { Agendamentos, BlocoDevolucoes, BlocoFollowUps, BlocoTickets } from "@/pages/blocos";
-import { BlocoAcoes, BlocoCoaching } from "@/pages/blocos-acoes";
+import { BlocoAcoes, BlocoCoaching, FaixaDoDia } from "@/pages/blocos-acoes";
 import {
   coachingDisponivel,
   estaDisponivel,
@@ -26,6 +26,10 @@ import {
  * with a customer waiting at the other end, read top to bottom and worked
  * through. The right column is context: what the day looked like, what the
  * model noticed. Mixing them makes both harder to scan.
+ *
+ * Above both sits the masthead — the four counts and the day's one sentence,
+ * side by side. That sentence used to sit at the bottom of the right column,
+ * under sixty ticket rows, which is a summary nobody reads as a summary.
  */
 export function CorpoDoPainel({
   painel,
@@ -44,21 +48,57 @@ export function CorpoDoPainel({
   const pedidos = conta(painel?.ticketsEmRisco);
   const seguimentos = conta(painel?.followUps);
 
+  // Narrowed here rather than inline so the masthead can both *lay out* for the
+  // banner and *render* it without repeating the guard — and so the band takes
+  // the whole width, instead of sitting next to an empty box, when there is no
+  // analysis for this day.
+  const bloco = painel?.coaching;
+  const coaching = bloco && coachingDisponivel(bloco) ? bloco : null;
+  const semCoaching = bloco && !coachingDisponivel(bloco) ? bloco : null;
+  const leitura = coaching?.paragraphOverview ? coaching : null;
+
   return (
     <div className="space-y-4">
-      {/* Four numbers answer "how big is today" before any scrolling. Two
-          columns on a phone, four once there is room — never a squashed row of
-          four on 380px. */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Kpi valor={porDevolver} rotulo="Por devolver" alerta={porDevolver !== "—" && porDevolver > 0} />
-        <Kpi valor={acoes} rotulo="Ações do dia" alerta={acoes !== "—" && acoes > 0} />
-        <Kpi valor={pedidos} rotulo="Pedidos +24h" alerta={pedidos !== "—" && pedidos > 0} />
-        <Kpi valor={seguimentos} rotulo="Seguimentos" />
+      {/* The masthead: how big today is, and what it was like — read together,
+          before any scrolling.
+
+          The narrative used to live at the bottom of the right column, under
+          sixty ticket rows. A summary read after the detail is not a summary,
+          so it comes up here beside the numbers. The two share a row on a wide
+          screen and stack on a phone; the paragraph gets the wider half
+          because a line of prose at 640px is unreadable. */}
+      <div
+        className={
+          leitura
+            ? "grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] lg:items-stretch"
+            : ""
+        }
+      >
+        <TiraDeIndicadores largo={!leitura}>
+          {/* Only a count that means somebody is waiting right now is red.
+              Thirty-one actions is a morning's work, not an emergency, and
+              painting it the same red as an unreturned call teaches the agent
+              to ignore both. */}
+          <Kpi
+            valor={porDevolver}
+            rotulo="Por devolver"
+            tom={porDevolver !== "—" && porDevolver > 0 ? "alerta" : "normal"}
+          />
+          <Kpi
+            valor={pedidos}
+            rotulo="Pedidos +24h"
+            tom={pedidos !== "—" && pedidos > 0 ? "aviso" : "normal"}
+          />
+          <Kpi valor={acoes} rotulo="Ações do dia" />
+          <Kpi valor={seguimentos} rotulo="Seguimentos" />
+        </TiraDeIndicadores>
+
+        {leitura && <FaixaDoDia c={leitura} />}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
         {/* ── A fila: alguém está à espera ─────────────────────────── */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <Bloco<Devolucao>
             titulo="Chamadas por devolver"
             cor="text-red-700"
@@ -91,7 +131,7 @@ export function CorpoDoPainel({
         </div>
 
         {/* ── O contexto: como foi o dia ───────────────────────────── */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <Bloco<TicketEmRisco>
             titulo="Pedidos há mais de 24 h"
             cor="text-amber-700"
@@ -102,18 +142,25 @@ export function CorpoDoPainel({
             {(itens) => <BlocoTickets itens={itens} />}
           </Bloco>
 
-          {coachingDisponivel(painel?.coaching) ? (
-            <BlocoCoaching c={painel.coaching} />
-          ) : painel?.coaching ? (
-            <section className="space-y-2">
-              <h2 className="t-micro px-0.5 text-stone-500">Leitura do dia</h2>
-              <Indisponivel motivo={painel.coaching.motivo} />
-            </section>
-          ) : null}
-
-          <Agendamentos motivo={painel?.agendamentos.motivo} />
         </div>
       </div>
+
+      {/* Below both columns, not inside one.
+
+          The queue is roughly as tall as the ticket list; the coaching is not,
+          and hanging it off the right column left the left one dead-ending
+          halfway down the page with eighteen hundred pixels of nothing beside
+          it. Full width it balances the two and reads better besides. */}
+      {coaching ? (
+        <BlocoCoaching c={coaching} />
+      ) : semCoaching ? (
+        <section className="space-y-2">
+          <h2 className="t-micro px-0.5 text-stone-500">Leitura do dia</h2>
+          <Indisponivel motivo={semCoaching.motivo} />
+        </section>
+      ) : null}
+
+      <Agendamentos motivo={painel?.agendamentos.motivo} />
 
       {painel && (
         <p className="t-micro px-0.5 font-normal text-stone-400">

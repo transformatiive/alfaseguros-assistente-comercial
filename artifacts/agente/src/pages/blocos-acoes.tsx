@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AlertTriangle, Flame, PhoneOff, ShieldAlert, Sparkles, Star, TrendingDown } from "lucide-react";
-import { Cabecalho } from "@/components/editorial";
+import { Cabecalho, Faixa } from "@/components/editorial";
 import { cn } from "@/lib/utils";
 import { telefone } from "@/lib/formatos";
 import type { Acao, Coaching, TipoAcao } from "@/lib/tipos";
@@ -40,13 +40,10 @@ const ASPETO: Record<TipoAcao, { rotulo: string; icone: typeof Flame; cor: strin
  * a morning.
  */
 const GRUPOS = [
-  { prioridade: "alta", titulo: "Agir hoje", cor: "text-red-700" },
-  { prioridade: "media", titulo: "Rever", cor: "text-amber-700" },
-  { prioridade: "baixa", titulo: "Oportunidades", cor: "text-blue-700" },
+  { prioridade: "alta", titulo: "Agir hoje", cor: "text-red-700", visiveis: 4 },
+  { prioridade: "media", titulo: "Rever", cor: "text-amber-700", visiveis: 3 },
+  { prioridade: "baixa", titulo: "Oportunidades", cor: "text-blue-700", visiveis: 3 },
 ] as const;
-
-/** Same six as the ticket groups, for the same reason: a thumb's scroll. */
-const VISIVEIS = 6;
 
 export function BlocoAcoes({ itens }: { itens: Acao[] }) {
   return (
@@ -63,14 +60,16 @@ export function BlocoAcoes({ itens }: { itens: Acao[] }) {
 function GrupoDeAcoes({
   titulo,
   cor,
+  visiveis,
   itens,
 }: {
   titulo: string;
   cor: string;
+  visiveis: number;
   itens: Acao[];
 }) {
   const [tudo, setTudo] = useState(false);
-  const mostrados = tudo ? itens : itens.slice(0, VISIVEIS);
+  const mostrados = tudo ? itens : itens.slice(0, visiveis);
   const escondidos = itens.length - mostrados.length;
 
   return (
@@ -129,16 +128,29 @@ function LinhaAcao({ a }: { a: Acao }) {
 }
 
 /**
- * The coaching the daily analysis wrote for this agent.
+ * The one sentence the model wrote about this agent's day.
  *
- * Shown as the prototype shows it: the overview in the dark banner, then
- * strengths and blind spots side by side, then the recommendations. Never as a
- * wall of bullets — the tone rules in the prompt were written so this reads as
- * an ally, and a wall of bullets reads as an audit.
+ * Split out of the coaching block on purpose: it belongs at the *top* of the
+ * page, beside the numbers, not four hundred pixels below a list of sixty
+ * tickets. It is the only thing on the panel that says what the day was
+ * *like*, and a summary read after the detail is not a summary.
+ */
+export function FaixaDoDia({ c }: { c: Coaching }) {
+  if (!c.paragraphOverview) return null;
+  return <Faixa>{c.paragraphOverview}</Faixa>;
+}
+
+/**
+ * The rest of the coaching: what went well, what did not, what to try next.
+ *
+ * Shown as the prototype shows it — strengths and blind spots side by side,
+ * then the recommendations. Never as a wall of bullets: the tone rules in the
+ * prompt were written so this reads as an ally, and a wall of bullets reads as
+ * an audit.
  */
 export function BlocoCoaching({ c }: { c: Coaching }) {
   const nada =
-    !c.paragraphOverview &&
+    !c.closingRateObservations &&
     c.strengths.length === 0 &&
     c.blindSpots.length === 0 &&
     c.coachingRecommendations.length === 0;
@@ -148,19 +160,17 @@ export function BlocoCoaching({ c }: { c: Coaching }) {
     <section className="space-y-2">
       <Cabecalho titulo="Leitura do dia" cor="text-stone-500" />
 
-      {c.paragraphOverview && (
-        <div className="rounded-lg bg-stone-900 p-4 text-stone-50">
-          <p className="t-narrativa italic">{c.paragraphOverview}</p>
-        </div>
-      )}
-
       {c.closingRateObservations && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
           <p className="t-body text-blue-900">{c.closingRateObservations}</p>
         </div>
       )}
 
-      <div className="grid gap-2 sm:grid-cols-2">
+      {/* Three abreast, because this block now has the full page width. In one
+          narrow column the same three lists were a thirteen-hundred-pixel tail
+          that nobody would reach; side by side they read as what they are —
+          what went well, what did not, what to try next. */}
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 lg:items-start">
         <Lista
           titulo="Pontos fortes"
           itens={c.strengths}
@@ -173,14 +183,13 @@ export function BlocoCoaching({ c }: { c: Coaching }) {
           cor="text-amber-700"
           ponto="bg-amber-400"
         />
+        <Lista
+          titulo="Para a próxima semana"
+          itens={c.coachingRecommendations}
+          cor="text-blue-700"
+          ponto="bg-blue-400"
+        />
       </div>
-
-      <Lista
-        titulo="Para a próxima semana"
-        itens={c.coachingRecommendations}
-        cor="text-blue-700"
-        ponto="bg-blue-400"
-      />
     </section>
   );
 }

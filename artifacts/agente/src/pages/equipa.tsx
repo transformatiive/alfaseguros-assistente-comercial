@@ -62,9 +62,9 @@ export function VistaDaEquipa({
         </p>
       </header>
 
-      <TiraDeIndicadores>
-        <Kpi valor={data?.totais.devolucoes ?? "—"} rotulo="Por devolver" alerta={!!data?.totais.devolucoes} />
-        <Kpi valor={data?.totais.ticketsEmRisco ?? "—"} rotulo="Pedidos +24h" alerta={!!data?.totais.ticketsEmRisco} />
+      <TiraDeIndicadores largo>
+        <Kpi valor={data?.totais.devolucoes ?? "—"} rotulo="Por devolver" tom={data?.totais.devolucoes ? "alerta" : "normal"} />
+        <Kpi valor={data?.totais.ticketsEmRisco ?? "—"} rotulo="Pedidos +24h" tom={data?.totais.ticketsEmRisco ? "aviso" : "normal"} />
         <Kpi valor={data?.totais.followUps ?? "—"} rotulo="Seguimentos" />
       </TiraDeIndicadores>
 

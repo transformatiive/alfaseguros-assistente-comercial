@@ -235,6 +235,13 @@
   }
   /* The page title. Georgia, because it is the one place a heading should feel
      written rather than rendered. */
+  /* The page title. One step above .t-display, which is a block heading. */
+  .t-pagina {
+    font-family: var(--app-font-serif);
+    font-size: 24px;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+  }
   .t-display {
     font-family: var(--app-font-serif);
     font-size: 20px;
