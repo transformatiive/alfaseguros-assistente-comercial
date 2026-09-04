@@ -61,7 +61,7 @@ router.post("/checklist/backfill", requireCronSecret, async (req, res): Promise<
   const result = await backfillVidaChecklistForDate({
     date: data,
     client,
-    model: cfg.OPENROUTER_MODEL,
+    model: cfg.OPENROUTER_MODEL_CHECKLIST,
     concurrency: cfg.ANALYSIS_CONCURRENCY,
     force,
   });

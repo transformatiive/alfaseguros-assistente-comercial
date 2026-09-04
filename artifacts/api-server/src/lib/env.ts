@@ -14,6 +14,22 @@ const envSchema = z.object({
    * analysis would have failed on a 400 that named a model nobody could find.
    */
   OPENROUTER_MODEL: z.string().default("anthropic/claude-sonnet-5"),
+  /**
+   * The model for the Vida checklist pass, which is a different job from the
+   * rest of the pipeline and deserves a different model.
+   *
+   * Everything else in the run writes prose a person reads and acts on — a
+   * 1-to-5 quality score, the severity of a procedural deviation, the feedback
+   * a supervisor gives an agent. The checklist does not: it walks a fixed list
+   * of items at temperature 0.1 and says whether each was covered. That is
+   * extraction, not judgement, and it is what Haiku is for — at half the
+   * price of Sonnet on input and output alike.
+   *
+   * Separate from `OPENROUTER_MODEL` on purpose: raising the main model must
+   * not silently raise this one's bill, and lowering this one must not touch
+   * the analysis anybody reads.
+   */
+  OPENROUTER_MODEL_CHECKLIST: z.string().default("anthropic/claude-haiku-4.5"),
   CRON_WEBHOOK_SECRET: z.string().optional(),
   PUBLIC_APP_URL: z.string().optional(),
   ANALYSIS_CONCURRENCY: z.coerce.number().int().positive().default(4),
