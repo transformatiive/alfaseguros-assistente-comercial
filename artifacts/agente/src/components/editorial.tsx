@@ -17,31 +17,64 @@ import { cn } from "@/lib/utils";
 
 const SERIF = { fontFamily: "Georgia, 'Times New Roman', serif" } as const;
 
-/** A single number with its label. The stat strip is built from these. */
+/**
+ * How loud a number is allowed to be.
+ *
+ * Four boxes in four different reds is four boxes in no colour at all. Only a
+ * count that means *somebody is waiting right now* earns red; a count that
+ * means *there is work here* earns amber; everything else is just a number.
+ */
+export type Tom = "normal" | "aviso" | "alerta";
+
+const COR_DO_TOM: Record<Tom, string> = {
+  normal: "text-stone-900",
+  aviso: "text-amber-600",
+  alerta: "text-red-600",
+};
+
+/** A single number with its label. The stat band is built from these. */
 export function Kpi({
   valor,
   rotulo,
-  alerta,
+  tom = "normal",
 }: {
   valor: string | number;
   rotulo: string;
-  /** Turns the value red. For counts that mean somebody is waiting. */
-  alerta?: boolean;
+  tom?: Tom;
 }) {
   return (
-    <div className="rounded-lg border border-stone-200 bg-white px-3 py-2.5">
-      <div
-        className={cn("t-metric", alerta ? "text-red-600" : "text-stone-900")}
-      >
-        {valor}
-      </div>
-      <div className="mt-1.5 t-micro text-stone-400">{rotulo}</div>
+    <div className="bg-white px-4 py-3.5">
+      <div className={cn("t-metric leading-none", COR_DO_TOM[tom])}>{valor}</div>
+      <div className="mt-2 t-micro text-stone-400">{rotulo}</div>
     </div>
   );
 }
 
-export function TiraDeIndicadores({ children }: { children: ReactNode }) {
-  return <div className="grid grid-cols-3 gap-2">{children}</div>;
+/**
+ * The four numbers as one object, not four floating boxes.
+ *
+ * `gap-px` over a stone background draws the hairlines: it gives a true
+ * one-pixel rule between cells in both the 2-up and the 4-up arrangement,
+ * which per-cell borders do not without a pile of `nth-child` rules.
+ */
+export function TiraDeIndicadores({
+  children,
+  /** Four across when the band has the page to itself; 2×2 beside the banner. */
+  largo,
+}: {
+  children: ReactNode;
+  largo?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-stone-200 bg-stone-200",
+        largo && "sm:grid-cols-4",
+      )}
+    >
+      {children}
+    </div>
+  );
 }
 
 /**
@@ -73,10 +106,15 @@ export function Cabecalho({
   );
 }
 
-/** The dark banner the prototype uses for the one sentence that matters most. */
+/**
+ * The dark banner the prototype uses for the one sentence that matters most.
+ *
+ * `h-full` so that when it sits beside the stat band the two read as one
+ * masthead rather than as two things that happen to be adjacent.
+ */
 export function Faixa({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-lg bg-stone-900 p-4 text-stone-50">
+    <div className="flex h-full flex-col justify-center rounded-xl bg-stone-900 p-5 text-stone-50">
       <p className="t-narrativa italic">
         {children}
       </p>
@@ -87,7 +125,7 @@ export function Faixa({ children }: { children: ReactNode }) {
 /** Narrative text — a call's context, a follow-up's description. */
 export function Narrativa({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <p className={cn("t-narrativa text-stone-700", className)}>
+    <p className={cn("t-narrativa break-words text-stone-700", className)}>
       {children}
     </p>
   );

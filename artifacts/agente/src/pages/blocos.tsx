@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
+import { CalendarClock, ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
 import { enviar } from "@/lib/api";
 import { hora, idade, porqueMe, telefone } from "@/lib/formatos";
 import { agruparPorEstado } from "@/lib/estados";
@@ -213,12 +213,20 @@ export function BlocoFollowUps({ itens }: { itens: FollowUp[] }) {
   return (
     <div className="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
       {itens.map((f) => (
-        <div key={f.id} className="p-3">
-          <Narrativa>{f.follow_up_descricao}</Narrativa>
-          <p className="mt-1 t-meta tabular-nums text-stone-400">
-            {f.contact_phone ? telefone(f.contact_phone) : "sem número"}
-            {f.product && <> · {f.product}</>}
-          </p>
+        // Same row grammar as the actions block — icon, label, the promise in
+        // the customer's own terms, then who it was to. Seven bare paragraphs
+        // of Georgia read as an essay next to every other block on the panel,
+        // and the eye had nothing to land on.
+        <div key={f.id} className="flex items-start gap-2 p-3">
+          <CalendarClock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-600" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <span className="t-micro text-blue-700">Prometido</span>
+            <Narrativa className="mt-1">{f.follow_up_descricao}</Narrativa>
+            <p className="mt-1 t-meta tabular-nums text-stone-400">
+              {f.contact_phone ? telefone(f.contact_phone) : "sem número"}
+              {f.product && <> · {f.product}</>}
+            </p>
+          </div>
         </div>
       ))}
     </div>
