@@ -29,29 +29,44 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   const segredo = requireEnv("CRON_WEBHOOK_SECRET");
-  const data = process.env.PAINEL_REFRESH_DATE?.trim();
+
+  // Accepts a comma-separated list so a backfill is one run rather than one
+  // deploy per day. Empty means today, which is what the schedule wants.
+  const datas = (process.env.PAINEL_REFRESH_DATE ?? "")
+    .split(",")
+    .map((d) => d.trim())
+    .filter(Boolean);
+  const alvos: (string | null)[] = datas.length > 0 ? datas : [null];
 
   const url = `${base}/api/painel/refresh`;
-  console.log(`POST ${url}${data ? ` (data=${data})` : " (hoje)"}`);
+  let falhou = false;
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Cron-Secret": segredo },
-    body: JSON.stringify(data ? { date: data } : {}),
-  });
+  for (const data of alvos) {
+    console.log(`\nPOST ${url}${data ? ` (data=${data})` : " (hoje)"}`);
 
-  const texto = await res.text();
-  console.log(`HTTP ${res.status}`);
-  try {
-    console.log(JSON.stringify(JSON.parse(texto), null, 2));
-  } catch {
-    console.log(texto);
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Cron-Secret": segredo },
+      body: JSON.stringify(data ? { date: data } : {}),
+    });
+
+    const texto = await res.text();
+    console.log(`HTTP ${res.status}`);
+    try {
+      console.log(JSON.stringify(JSON.parse(texto), null, 2));
+    } catch {
+      console.log(texto);
+    }
+
+    // One bad day must not abandon the rest: a backfill that stops at the first
+    // failure leaves a hole nobody notices. The exit code still reports it.
+    if (!res.ok) falhou = true;
   }
 
   // A non-2xx is a real failure of the trigger itself. A 200 whose body reports
   // a failed half is not — the endpoint returns 200 on purpose in that case,
   // and the body already says which half, so exit 0 and let the log speak.
-  if (!res.ok) process.exit(1);
+  if (falhou) process.exit(1);
 }
 
 void main().catch((err: unknown) => {
