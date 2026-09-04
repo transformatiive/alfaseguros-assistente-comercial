@@ -15,7 +15,8 @@
     "diag:perdidas": "tsx ./src/diagnostico-chamadas-perdidas.ts",
     "diag:tickets": "tsx ./src/diagnostico-tickets-cliente.ts",
     "diag:devolucoes": "tsx ./src/diagnostico-devolucoes.ts",
-    "painel:link": "tsx ./src/painel-link.ts"
+    "painel:link": "tsx ./src/painel-link.ts",
+    "diag:runs": "tsx ./src/diagnostico-runs.ts"
   },
   "dependencies": {
     "@workspace/db": "workspace:*",
