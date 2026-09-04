@@ -19,6 +19,34 @@ export interface TicketEmRisco {
   idadeHoras: number;
   criadoEm: string;
   deskUrl: string;
+  /** Who the ticket is with. A row without a name is a row you cannot act on. */
+  contactName: string | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
+}
+
+/**
+ * The requester's email, dug out of the stored Desk payload.
+ *
+ * There is no column for it: the sync keeps the whole ticket in `rawJson` and
+ * we never needed the address until the panel started saying *how* to reach
+ * the person. Desk puts it in two places depending on the channel — top level
+ * for email tickets, on the embedded contact otherwise — so both are tried.
+ *
+ * Deliberately total: a shape we did not expect returns null rather than
+ * throwing, because an unreadable address must not take down the whole block.
+ */
+export function emailDoTicket(rawJson: unknown): string | null {
+  if (!rawJson || typeof rawJson !== "object") return null;
+  const raw = rawJson as Record<string, unknown>;
+  const direto = typeof raw.email === "string" ? raw.email.trim() : "";
+  if (direto) return direto;
+  const contacto = raw.contact;
+  if (contacto && typeof contacto === "object") {
+    const e = (contacto as Record<string, unknown>).email;
+    if (typeof e === "string" && e.trim()) return e.trim();
+  }
+  return null;
 }
 
 /** Desk deep link. Built from the ticket id, which is what Desk routes on. */
@@ -74,6 +102,9 @@ export async function listTicketsEmRisco(params: {
         idadeHoras: idadeEmHoras(t.createdTime, now),
         criadoEm: t.createdTime.toISOString(),
         deskUrl: deskUrl(t.id, params.orgId),
+        contactName: t.contactName,
+        contactPhone: t.contactPhone,
+        contactEmail: emailDoTicket(t.rawJson),
       },
     ];
   });

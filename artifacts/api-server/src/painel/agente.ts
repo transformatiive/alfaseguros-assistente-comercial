@@ -6,6 +6,7 @@ import { listTicketsEmRisco, type TicketEmRisco } from "./tickets-risco.js";
 import { loadPendingFollowUps, type FollowUpItem } from "./followups-query.js";
 import { listAcoesDoAgente, loadCoaching, type Coaching } from "./acoes-query.js";
 import type { Acao } from "./acoes.js";
+import { derivarTarefas, impressaoDigital, type Tarefa } from "./tarefas.js";
 
 /**
  * The agent panel payload: what must I do today, in four blocks.
@@ -109,6 +110,14 @@ export interface AgentePainel {
    * without opening anything.
    */
   acoes: Acao[] | BlocoIndisponivel;
+  /**
+   * The same work as `devolucoes` / `ticketsEmRisco` / `followUps` / `acoes`,
+   * regrouped by **what it asks of the agent** rather than by where it came
+   * from. This is what the panel renders; the four source blocks stay in the
+   * payload because the team view still counts them, and because a block that
+   * failed must still be able to say so on its own.
+   */
+  tarefas: Tarefa[];
   /** What the daily analysis wrote about this agent. Null when it has not run. */
   coaching: Coaching | BlocoIndisponivel;
   /**
@@ -150,6 +159,47 @@ function buildExcludedProducts(): Set<string> {
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean),
   );
+}
+
+/**
+ * Turn the four blocks into one task list.
+ *
+ * Blocks that failed contribute nothing rather than blocking the rest: an
+ * agent whose Desk is down should still get their calls and their promises,
+ * and the failed block still renders its own "could not load" notice.
+ *
+ * The name and email maps are built here, from the tickets we already loaded,
+ * because Desk is the only place either of them exists. A call from a number
+ * Desk has seen before therefore arrives with a name on it; one from a genuinely
+ * new caller shows the number, which is all anybody knows about them yet.
+ */
+function montarTarefas(b: {
+  devolucoes: DevolucaoPainel[] | BlocoIndisponivel;
+  ticketsEmRisco: TicketEmRisco[] | BlocoIndisponivel;
+  followUps: FollowUpItem[] | BlocoIndisponivel;
+  acoes: Acao[] | BlocoIndisponivel;
+}): Tarefa[] {
+  const lista = <T,>(x: T[] | BlocoIndisponivel): T[] => (Array.isArray(x) ? x : []);
+  const tickets = lista(b.ticketsEmRisco);
+
+  const nomePorFingerprint = new Map<string, string>();
+  const emailPorFingerprint = new Map<string, string>();
+  for (const t of tickets) {
+    const fp = impressaoDigital(t.contactPhone);
+    if (!fp) continue;
+    if (t.contactName) nomePorFingerprint.set(fp, t.contactName);
+    if (t.contactEmail) emailPorFingerprint.set(fp, t.contactEmail);
+  }
+
+  return derivarTarefas({
+    devolucoes: lista(b.devolucoes),
+    followUps: lista(b.followUps),
+    tickets,
+    acoes: lista(b.acoes),
+    nomePorFingerprint,
+    emailPorFingerprint,
+    now: new Date(),
+  });
 }
 
 /**
@@ -259,6 +309,7 @@ export async function buildAgentePainel(
       ticketsEmRisco,
       followUps,
       acoes,
+      tarefas: montarTarefas({ devolucoes, ticketsEmRisco, followUps, acoes }),
       coaching,
       agendamentos: indisponivel(
         "Os agendamentos ainda não estão disponíveis — vivem no CRM, que ainda não está ligado a este painel.",
