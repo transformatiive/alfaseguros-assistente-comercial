@@ -125,7 +125,7 @@ function Sugestao({ painel }: { painel: SupervisorPainel }) {
   if (haSugestao) {
     return (
       <Faixa>
-        <span className="not-italic font-semibold">{de.nome} → {para.nome}.</span> {razao}
+        <span className="font-semibold">{de.nome} → {para.nome}.</span> {razao}
       </Faixa>
     );
   }

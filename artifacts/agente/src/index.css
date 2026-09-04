@@ -56,7 +56,6 @@
   --color-sidebar-ring: hsl(var(--sidebar-ring));
 
   --font-sans: var(--app-font-sans);
-  --font-serif: var(--app-font-serif);
   --font-mono: var(--app-font-mono);
 
   --radius-sm: calc(var(--radius) - 4px);
@@ -116,9 +115,6 @@
      platform calls "sans-serif" is how a design starts looking like two
      designs. */
   --app-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  /* Georgia is the accent, not a second interface font. It appears only on
-     metrics and narrative — see the .t-metric / .t-narrativa roles below. */
-  --app-font-serif: Georgia, 'Times New Roman', serif;
   --app-font-mono: Menlo, monospace;
   --radius: .5rem;
   --shadow-2xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
@@ -200,20 +196,31 @@
  * each chosen in the moment. That is what "inconsistent font" looks like from
  * the outside, and no amount of colour fixes it.
  *
+ * **One family, sans, everywhere.** Georgia used to carry the metrics, the
+ * page title and every narrative block — the prototype's signature per
+ * HANDOVER §3. In practice it put two typefaces on the same card: a serif
+ * number above a sans label, a serif sentence under a sans heading. Read as a
+ * dashboard rather than as a page, that is not a signature, it is the
+ * inconsistency itself. The signature now lives where it always did the real
+ * work: the warm stone palette, the tracked uppercase labels, the density.
+ *
  * The rule this follows is the ordinary one: at most three sizes visible at
  * once, with the rest of the hierarchy carried by weight and colour. A dense
  * operational screen needs a small body, so the scale is tight — but it is a
- * scale, and every component now picks a role instead of a number.
+ * scale, and every component picks a role instead of a number.
  *
  *   .t-micro     labels and metadata. Uppercase, tracked, never a sentence.
+ *   .t-meta      metadata that is a phrase: times, counts, one-line notices.
  *   .t-body      the workhorse: rows, names, descriptions.
- *   .t-titulo    section and page headings.
- *   .t-metric    a number that should be read across the room. Georgia.
- *   .t-narrativa prose written by a person or the model. Georgia.
+ *   .t-titulo    the thing a card row is about.
+ *   .t-display   a block heading.
+ *   .t-pagina    the page title, one step above .t-display.
+ *   .t-metric    a number that should be read across the room.
+ *   .t-narrativa prose written by a person or the model.
  *
- * Georgia is confined to the last two on purpose. It is the prototype's
- * signature (HANDOVER.md §3) and it stops being a signature the moment it
- * shows up on a button.
+ * Every one of them inherits `--app-font-sans`. A role that wants to stand out
+ * does it with size, weight or colour — never by changing family, because
+ * that is the change the eye reads as "these two cards are different things".
  */
 @layer components {
   .t-micro {
@@ -233,19 +240,17 @@
     font-size: 11px;
     line-height: 1.5;
   }
-  /* The page title. Georgia, because it is the one place a heading should feel
-     written rather than rendered. */
-  /* The page title. One step above .t-display, which is a block heading. */
   .t-pagina {
-    font-family: var(--app-font-serif);
     font-size: 24px;
     line-height: 1.15;
-    letter-spacing: -0.01em;
+    font-weight: 600;
+    letter-spacing: -0.02em;
   }
   .t-display {
-    font-family: var(--app-font-serif);
     font-size: 20px;
     line-height: 1.2;
+    font-weight: 600;
+    letter-spacing: -0.015em;
   }
   .t-titulo {
     font-size: 15px;
@@ -253,20 +258,25 @@
     font-weight: 600;
     letter-spacing: -0.01em;
   }
+  /* Tight tracking and a heavier weight do the work Georgia used to do here:
+     a number that reads as a number, not as body text that happens to be big. */
   .t-metric {
-    font-family: var(--app-font-serif);
     font-size: 28px;
     line-height: 1;
+    font-weight: 600;
+    letter-spacing: -0.03em;
     font-variant-numeric: tabular-nums;
   }
   .t-metric-sm {
-    font-family: var(--app-font-serif);
     font-size: 19px;
     line-height: 1;
+    font-weight: 600;
+    letter-spacing: -0.02em;
     font-variant-numeric: tabular-nums;
   }
+  /* Prose. Same family and size as .t-body — it is set apart by a looser
+     line height and, at the call site, by a quieter colour. */
   .t-narrativa {
-    font-family: var(--app-font-serif);
     font-size: 13px;
     line-height: 1.6;
   }
