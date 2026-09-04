@@ -195,6 +195,24 @@ export function prometeSimulacao(descricao: string | null | undefined): boolean 
   return PALAVRAS_DE_SIMULACAO.test(t) && VERBOS_DE_ENVIO.test(t);
 }
 
+/**
+ * A name worth printing.
+ *
+ * When n8n opens a ticket for a call from a number Desk has never seen, it
+ * fills the contact name with the number itself. Rendered as-is that produced
+ * rows reading "351911051149 · +351 911 051 149" — the same digits twice,
+ * once badly formatted, dressed up as an identification. On a real day it was
+ * eighteen of the seventy-two rows.
+ *
+ * A name with no letter in it is not a name. Dropping it lets the row fall
+ * back to the formatted phone number, which is honestly all we know.
+ */
+export function nomeUtil(nome: string | null | undefined): string | null {
+  const t = (nome ?? "").trim();
+  if (!t) return null;
+  return /\p{L}/u.test(t) ? t : null;
+}
+
 /** The last nine digits — the only form Ringover and Desk agree on. */
 export function impressaoDigital(telefone: string | null | undefined): string | null {
   const digitos = (telefone ?? "").replace(/\D/g, "");
@@ -280,7 +298,9 @@ function contactoDe(
 ): Contacto {
   const fp = impressaoDigital(telefone);
   return {
-    nome: nomeConhecido || (fp ? entrada.nomePorFingerprint.get(fp) ?? null : null),
+    nome:
+      nomeUtil(nomeConhecido) ??
+      (fp ? nomeUtil(entrada.nomePorFingerprint.get(fp)) : null),
     telefone: telefone || null,
     email: fp ? entrada.emailPorFingerprint.get(fp) ?? null : null,
   };
@@ -382,7 +402,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       titulo: assunto,
       porque: null,
       contacto: {
-        nome: t.contactName,
+        nome: nomeUtil(t.contactName),
         telefone: t.contactPhone,
         email: t.contactEmail,
       },
