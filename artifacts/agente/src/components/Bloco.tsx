@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
-import { Card } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Cabecalho } from "@/components/editorial";
 import { estaDisponivel, type Bloco as BlocoDados } from "@/lib/tipos";
 
 /**
@@ -21,6 +20,7 @@ import { estaDisponivel, type Bloco as BlocoDados } from "@/lib/tipos";
  */
 export function Bloco<T>({
   titulo,
+  cor,
   dados,
   aCarregar,
   vazio,
@@ -28,41 +28,32 @@ export function Bloco<T>({
   acessorio,
 }: {
   titulo: string;
+  /** Section colour, per the prototype's semantic palette. */
+  cor?: string;
   dados: BlocoDados<T> | undefined;
   aCarregar: boolean;
   /** What to say when the block is genuinely empty. */
   vazio: string;
   children: (itens: T[]) => ReactNode;
-  /** Rendered on the title row — a count, a link. */
   acessorio?: ReactNode;
 }) {
   const contagem = dados && estaDisponivel(dados) ? dados.length : null;
 
   return (
-    <section className="space-y-2">
-      <header className="flex items-baseline justify-between gap-2 px-1">
-        <h2 className="text-sm font-semibold tracking-tight">
-          {titulo}
-          {contagem !== null && contagem > 0 && (
-            <span className="ml-1.5 font-normal text-muted-foreground tabular-nums">
-              {contagem}
-            </span>
-          )}
-        </h2>
-        {acessorio}
-      </header>
+    <section className="space-y-1.5">
+      <Cabecalho titulo={titulo} cor={cor} contagem={contagem} acessorio={acessorio} />
 
       {aCarregar || !dados ? (
         <div className="space-y-1.5">
-          <Skeleton className="h-14 w-full" />
-          <Skeleton className="h-14 w-full" />
+          <div className="h-14 animate-pulse rounded-lg bg-stone-200/70" />
+          <div className="h-14 animate-pulse rounded-lg bg-stone-200/70" />
         </div>
       ) : !estaDisponivel(dados) ? (
         <Indisponivel motivo={dados.motivo} />
       ) : dados.length === 0 ? (
-        <Vazio texto={vazio} />
+        <p className="px-0.5 py-2 text-xs text-stone-400">{vazio}</p>
       ) : (
-        <div className="space-y-1.5">{children(dados)}</div>
+        children(dados)
       )}
     </section>
   );
@@ -75,14 +66,8 @@ export function Bloco<T>({
  */
 export function Indisponivel({ motivo }: { motivo: string }) {
   return (
-    <Card className="border-dashed bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
+    <div className="rounded-lg border border-dashed border-stone-300 bg-stone-100/60 p-3 text-[11px] leading-relaxed text-stone-500">
       {motivo}
-    </Card>
-  );
-}
-
-function Vazio({ texto }: { texto: string }) {
-  return (
-    <p className="px-1 py-3 text-xs text-muted-foreground">{texto}</p>
+    </div>
   );
 }

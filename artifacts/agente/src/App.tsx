@@ -47,7 +47,7 @@ function PainelComSessao() {
     // Express mounts the panel at /agente, so every route and link is relative
     // to it. Without the base, "/equipa" would leave the app entirely.
     <Router base="/agente">
-      <div className="min-h-screen bg-background text-foreground">
+      <div className="min-h-screen bg-stone-50 text-stone-900">
         {eSupervisor && <Abas />}
         <Switch>
           {/* Wrapped rather than passed as `component`: VistaDaEquipa takes
@@ -67,7 +67,7 @@ function Abas() {
   const naEquipa = local.startsWith("/equipa");
 
   return (
-    <nav className="sticky top-0 z-10 flex gap-1 border-b bg-background/95 px-3 py-2 backdrop-blur">
+    <nav className="sticky top-0 z-10 flex gap-1 border-b border-stone-200 bg-stone-50/95 px-3 py-2 backdrop-blur">
       <Aba para="/" activa={!naEquipa}>
         O meu dia
       </Aba>
@@ -91,8 +91,8 @@ function Aba({
     <Link
       href={para}
       className={
-        "rounded-md px-2.5 py-1 text-xs font-medium transition-colors " +
-        (activa ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground")
+        "rounded-md px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition-colors " +
+        (activa ? "bg-stone-900 text-stone-50" : "text-stone-400 hover:text-stone-700")
       }
     >
       {children}
@@ -110,7 +110,7 @@ function Aba({
  */
 function NotaDeJanelaSolta() {
   return (
-    <p className="px-4 pb-6 text-[11px] leading-relaxed text-muted-foreground">
+    <p className="px-4 pb-6 text-[11px] leading-relaxed text-stone-400">
       Este painel foi aberto fora do Zoho Desk. A sessão dura 15 minutos e não se
       renova sozinha aqui — abre-o pelo Desk para deixar de ter de recarregar.
     </p>

@@ -1,9 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Bloco, Indisponivel } from "@/components/Bloco";
+import { Kpi, Faixa, Narrativa, TiraDeIndicadores } from "@/components/editorial";
 import { obter } from "@/lib/api";
-import { hora, porqueMe, telefone } from "@/lib/formatos";
+import { diaPorExtenso, hora, porqueMe, telefone } from "@/lib/formatos";
 import { comDia, diaPedido } from "@/lib/dia";
 import type { Devolucao, LinhaAgente, SupervisorPainel } from "@/lib/tipos";
 
@@ -54,36 +53,38 @@ export function VistaDaEquipa({
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 p-3 pb-10">
-      <header className="px-1">
-        <h1 className="font-serif text-xl leading-tight">A equipa hoje</h1>
-        {data && (
-          <p className="text-xs text-muted-foreground tabular-nums">
-            {data.totais.devolucoes} chamadas · {data.totais.ticketsEmRisco} pedidos ·{" "}
-            {data.totais.followUps} seguimentos
-          </p>
-        )}
-        {data && diaPedido() && (
-          <p className="mt-0.5 text-xs font-medium">
-            A mostrar {data.data}, não hoje.
-          </p>
-        )}
+      <header className="px-0.5">
+        <h1 className="text-lg leading-tight text-stone-900" style={{ fontFamily: "Georgia, serif" }}>
+          A equipa
+        </h1>
+        <p className="text-[11px] uppercase tracking-wide text-stone-400">
+          {data ? diaPorExtenso(data.data) : " "}
+        </p>
       </header>
+
+      <TiraDeIndicadores>
+        <Kpi valor={data?.totais.devolucoes ?? "—"} rotulo="Por devolver" alerta={!!data?.totais.devolucoes} />
+        <Kpi valor={data?.totais.ticketsEmRisco ?? "—"} rotulo="Pedidos +24h" alerta={!!data?.totais.ticketsEmRisco} />
+        <Kpi valor={data?.totais.followUps ?? "—"} rotulo="Seguimentos" />
+      </TiraDeIndicadores>
 
       {data && <Sugestao painel={data} />}
 
-      <section className="space-y-2">
-        <h2 className="px-1 text-sm font-semibold tracking-tight">Carga por consultor</h2>
+      <section className="space-y-1.5">
+        <h2 className="px-0.5 text-xs font-semibold uppercase tracking-wide text-stone-500">
+          Carga por consultor
+        </h2>
         {isLoading || !data ? (
-          <Card className="h-40 animate-pulse bg-muted/40" />
+          <div className="h-40 animate-pulse rounded-lg bg-stone-200/70" />
         ) : (
-          <Card className="divide-y p-0">
+          <div className="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
             {data.agentes.map((a) => (
               <LinhaCarga key={a.colaboradorId} a={a} max={maxCarga} />
             ))}
-          </Card>
+          </div>
         )}
         {data && (
-          <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
+          <p className="px-0.5 text-[11px] leading-relaxed text-stone-400">
             Carga = chamadas ×{data.regra.pesos.devolucoes} + pedidos ×
             {data.regra.pesos.ticketsEmRisco} + seguimentos ×{data.regra.pesos.followUps}. Uma
             chamada que já virou pedido conta uma vez, não duas.
@@ -93,16 +94,21 @@ export function VistaDaEquipa({
 
       <Bloco<Devolucao>
         titulo="Chamadas sem dono"
+        cor="text-red-700"
         dados={data?.naoAtribuidas}
         aCarregar={isLoading}
-        vazio="Todas as chamadas de hoje têm dono."
+        vazio="Todas as chamadas deste dia têm dono."
       >
-        {(itens) => itens.map((d) => <LinhaSemDono key={d.ids.join("-")} d={d} />)}
+        {(itens) => (
+          <div className="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
+            {itens.map((d) => <LinhaSemDono key={d.ids.join("-")} d={d} />)}
+          </div>
+        )}
       </Bloco>
 
       {data && (
-        <p className="px-1 text-[11px] text-muted-foreground">
-          Atualizado às {hora(data.atualizadoEm)}.
+        <p className="px-0.5 text-[10px] uppercase tracking-wide text-stone-400">
+          Atualizado às {hora(data.atualizadoEm)}
         </p>
       )}
     </div>
@@ -113,20 +119,23 @@ function Sugestao({ painel }: { painel: SupervisorPainel }) {
   const { de, para, razao } = painel.sugestao;
   const haSugestao = de !== null && para !== null;
 
+  // The prototype reserves the dark banner for the one sentence that matters
+  // most on the screen. On the coordinator's view that is the redistribution
+  // call: the only line asking them to actually do something.
+  if (haSugestao) {
+    return (
+      <Faixa>
+        <span className="not-italic font-semibold">{de.nome} → {para.nome}.</span> {razao}
+      </Faixa>
+    );
+  }
+  // The server always writes a sentence, including when it is not suggesting
+  // anything. "Nothing to move" is an answer, and showing it beats an empty
+  // card the coordinator has to interpret.
   return (
-    <Card className={haSugestao ? "border-accent/60 bg-accent/5 p-3" : "bg-muted/30 p-3"}>
-      {haSugestao && (
-        <p className="text-sm font-medium">
-          {de.nome} → {para.nome}
-        </p>
-      )}
-      {/* The server always writes a sentence, including when it is not
-          suggesting anything. "Nothing to move" is an answer, and showing it
-          beats an empty card the coordinator has to interpret. */}
-      <p className={haSugestao ? "mt-1 text-xs leading-relaxed" : "text-xs leading-relaxed"}>
-        {razao}
-      </p>
-    </Card>
+    <div className="rounded-lg border border-stone-200 bg-white p-3">
+      <p className="text-[11px] leading-relaxed text-stone-500">{razao}</p>
+    </div>
   );
 }
 
@@ -134,18 +143,23 @@ function LinhaCarga({ a, max }: { a: LinhaAgente; max: number }) {
   return (
     <div className="p-3">
       <div className="flex items-baseline justify-between gap-2">
-        <p className="min-w-0 truncate text-sm font-medium">{a.nome}</p>
-        <p className="shrink-0 text-sm tabular-nums">{a.cargaPonderada.toFixed(1)}</p>
+        <p className="min-w-0 truncate text-[13px] text-stone-900">{a.nome}</p>
+        <p
+          className="shrink-0 text-lg leading-none tabular-nums text-stone-900"
+          style={{ fontFamily: "Georgia, serif" }}
+        >
+          {a.cargaPonderada.toFixed(1)}
+        </p>
       </div>
 
-      <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-muted">
+      <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-stone-100">
         <div
-          className="h-full rounded-full bg-accent"
+          className="h-full rounded-full bg-amber-500"
           style={{ width: `${(a.cargaPonderada / max) * 100}%` }}
         />
       </div>
 
-      <p className="mt-1.5 text-[11px] text-muted-foreground tabular-nums">
+      <p className="mt-1.5 text-[11px] tabular-nums text-stone-400">
         {a.devolucoes} chamadas · {a.ticketsEmRisco} pedidos · {a.followUps} seguimentos
         {a.jaContadasComoTicket > 0 && (
           <>
@@ -157,7 +171,7 @@ function LinhaCarga({ a, max }: { a: LinhaAgente; max: number }) {
       </p>
 
       {a.indisponiveis.length > 0 && (
-        <p className="mt-1 text-[11px] text-muted-foreground">
+        <p className="mt-1 text-[11px] text-amber-700">
           Sem dados: {a.indisponiveis.join(", ")}. A carga dele está subestimada.
         </p>
       )}
@@ -168,27 +182,23 @@ function LinhaCarga({ a, max }: { a: LinhaAgente; max: number }) {
 function LinhaSemDono({ d }: { d: Devolucao }) {
   const razao = porqueMe(d.atribuicaoOrigem);
   return (
-    <Card className="p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="font-medium tabular-nums">{telefone(d.numeroCliente)}</p>
-          <p className="text-xs text-muted-foreground">
-            {hora(d.primeiraChamada)}
-            {d.tentativas > 1 && <> · até às {hora(d.ultimaChamada)}</>}
-          </p>
-        </div>
-        {d.tentativas > 1 && (
-          <Badge variant="destructive" className="shrink-0">
-            {d.tentativas} tentativas
-          </Badge>
-        )}
+    <div className={d.tentativas > 1 ? "border-l-[3px] border-l-red-600 p-3" : "p-3"}>
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="font-medium tabular-nums text-stone-900">{telefone(d.numeroCliente)}</p>
+        <p className="shrink-0 text-xs tabular-nums text-stone-400">
+          {hora(d.primeiraChamada)}
+          {d.tentativas > 1 && <> – {hora(d.ultimaChamada)}</>}
+        </p>
       </div>
-      {d.contexto && (
-        <p className="mt-2 font-serif text-xs leading-relaxed text-foreground/80">{d.contexto}</p>
+      {d.tentativas > 1 && (
+        <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-red-700">
+          {d.tentativas} tentativas
+        </p>
       )}
-      <p className="mt-1.5 text-[11px] text-muted-foreground">
+      {d.contexto && <Narrativa className="mt-1.5">{d.contexto}</Narrativa>}
+      <p className="mt-1 text-[11px] text-stone-400">
         {razao ?? "Cliente sem pedidos anteriores — ninguém tem histórico com ele."}
       </p>
-    </Card>
+    </div>
   );
 }

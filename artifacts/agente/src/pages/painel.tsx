@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { Bloco, Indisponivel } from "@/components/Bloco";
+import { Indisponivel } from "@/components/Bloco";
 import { obter } from "@/lib/api";
-import { hora } from "@/lib/formatos";
 import { comDia, diaPedido } from "@/lib/dia";
-import { Agendamentos, BlocoDevolucoes, BlocoFollowUps, BlocoTickets } from "@/pages/blocos";
-import type { AgentePainel, Devolucao, FollowUp, TicketEmRisco } from "@/lib/tipos";
+import { CorpoDoPainel } from "@/pages/painel-corpo";
+import { diaPorExtenso } from "@/lib/formatos";
+import type { AgentePainel } from "@/lib/tipos";
 
 /**
  * The agent panel: what must I do today, in four blocks.
@@ -16,9 +16,6 @@ import type { AgentePainel, Devolucao, FollowUp, TicketEmRisco } from "@/lib/tip
  * Laid out narrow by default. It is rendered inside the Zoho Desk left panel,
  * which is roughly a phone's width; designing wide and letting it squash is how
  * you get a panel nobody uses.
- *
- * The rows live in `blocos.tsx`, shared with the preview page, so the screen
- * being reviewed is the screen that ships.
  */
 export function PainelDoAgente() {
   const { data, isLoading, error } = useQuery<AgentePainel>({
@@ -38,57 +35,18 @@ export function PainelDoAgente() {
   }
 
   return (
-    <div className="mx-auto max-w-xl space-y-5 p-3 pb-10">
-      <Cabecalho painel={data} />
-
-      <Bloco<Devolucao>
-        titulo="Chamadas por devolver"
-        dados={data?.devolucoes}
-        aCarregar={isLoading}
-        vazio="Nenhuma chamada por devolver hoje."
-      >
-        {(itens) => <BlocoDevolucoes itens={itens} />}
-      </Bloco>
-
-      <Bloco<TicketEmRisco>
-        titulo="Pedidos há mais de 24 h"
-        dados={data?.ticketsEmRisco}
-        aCarregar={isLoading}
-        vazio="Nenhum pedido teu passou das 24 horas."
-      >
-        {(itens) => <BlocoTickets itens={itens} />}
-      </Bloco>
-
-      <Bloco<FollowUp>
-        titulo="Seguimentos"
-        dados={data?.followUps}
-        aCarregar={isLoading}
-        vazio="Nenhum seguimento por fazer."
-      >
-        {(itens) => <BlocoFollowUps itens={itens} />}
-      </Bloco>
-
-      <Agendamentos motivo={data?.agendamentos.motivo} />
-
-      {data && (
-        <p className="px-1 text-[11px] text-muted-foreground">
-          Atualizado às {hora(data.atualizadoEm)}.
+    <div className="mx-auto max-w-xl space-y-4 p-3 pb-10">
+      <header className="px-0.5">
+        <h1 className="text-lg leading-tight text-stone-900" style={{ fontFamily: "Georgia, serif" }}>
+          O meu dia
+        </h1>
+        <p className="text-[11px] uppercase tracking-wide text-stone-400">
+          {data ? data.colaborador.nome : " "}
+          {data && <> · {diaPorExtenso(data.data)}</>}
         </p>
-      )}
-    </div>
-  );
-}
+      </header>
 
-function Cabecalho({ painel }: { painel: AgentePainel | undefined }) {
-  return (
-    <header className="px-1">
-      <h1 className="font-serif text-xl leading-tight">O meu dia</h1>
-      <p className="text-xs text-muted-foreground">{painel ? painel.colaborador.nome : " "}</p>
-      {/* Only when it is NOT today: a panel showing another day must say so, or
-          an empty Saturday reads as a quiet Monday. */}
-      {painel && diaPedido() && (
-        <p className="mt-0.5 text-xs font-medium">A mostrar {painel.data}, não hoje.</p>
-      )}
-    </header>
+      <CorpoDoPainel painel={data} aCarregar={isLoading} />
+    </div>
   );
 }
