@@ -16,7 +16,8 @@
     "diag:tickets": "tsx ./src/diagnostico-tickets-cliente.ts",
     "diag:devolucoes": "tsx ./src/diagnostico-devolucoes.ts",
     "painel:link": "tsx ./src/painel-link.ts",
-    "diag:runs": "tsx ./src/diagnostico-runs.ts"
+    "diag:runs": "tsx ./src/diagnostico-runs.ts",
+    "diag:ringover": "tsx ./src/diagnostico-ringover.ts"
   },
   "dependencies": {
     "@workspace/db": "workspace:*",
