@@ -1,36 +1,58 @@
-import { Bloco, Indisponivel } from "@/components/Bloco";
+import { Indisponivel } from "@/components/Bloco";
 import { Kpi, TiraDeIndicadores } from "@/components/editorial";
 import { hora } from "@/lib/formatos";
-import { Agendamentos, BlocoDevolucoes, BlocoFollowUps, BlocoTickets } from "@/pages/blocos";
-import { BlocoAcoes, BlocoCoaching, FaixaDoDia } from "@/pages/blocos-acoes";
+import { Agendamentos } from "@/pages/blocos";
+import { BlocoCoaching, FaixaDoDia } from "@/pages/blocos-acoes";
+import { GrupoDeTarefas, SemTarefas } from "@/pages/tarefas";
 import {
+  agruparTarefas,
   coachingDisponivel,
   estaDisponivel,
-  type Acao,
   type AgentePainel,
-  type Devolucao,
-  type FollowUp,
-  type TicketEmRisco,
+  type Bloco,
+  type CategoriaTarefa,
+  type Tarefa,
 } from "@/lib/tipos";
 
 /**
  * The panel's body, shared by the real panel and the preview.
  *
- * **Two columns from 1024px, not one.** The single column was a constraint I
- * invented: `desk.topband` renders full screen, as the Zoho docs say and as
- * section 7A confirmed. Stacking eight blocks vertically on a wide screen
- * means the agent scrolls past their whole morning to see whether anything is
- * at the bottom.
+ * **Organised by what the work asks of you, not by where it came from.** The
+ * panel used to be one block per data source — calls, Desk tickets, follow-ups,
+ * the analysis rules — which is the shape of our plumbing, not the shape of a
+ * morning. It made the agent do the regrouping in their head every day: read
+ * four lists, spot the rows that are the same customer, work out which ones
+ * they can act on now.
  *
- * The split is by rhythm, not by size. The left column is the queue — things
- * with a customer waiting at the other end, read top to bottom and worked
- * through. The right column is context: what the day looked like, what the
- * model noticed. Mixing them makes both harder to scan.
+ * Now there is one task list, grouped into six piles ordered by whose time is
+ * being burned: someone who rang and got no answer, a quote that has not gone
+ * out, a promise made on a call, a Desk ticket waiting on us, a sale that lost
+ * momentum, and — last, because there is nothing to do about it today —
+ * everything parked on somebody else.
  *
- * Above both sits the masthead — the four counts and the day's one sentence,
- * side by side. That sentence used to sit at the bottom of the right column,
- * under sixty ticket rows, which is a summary nobody reads as a summary.
+ * **The two columns split by whether you act today.** Left is the queue; right
+ * is the pile you review. Mixing them makes both harder to scan, and the left
+ * column is the one an agent should be able to work top to bottom without
+ * deciding anything.
+ *
+ * The masthead sits above both: four counts and the day's one sentence, read
+ * together before any scrolling.
  */
+
+/** Worked top to bottom, this morning. */
+const COLUNA_FAZER: readonly CategoriaTarefa[] = [
+  "devolver_chamada",
+  "enviar_simulacao",
+  "cumprir_compromisso",
+];
+
+/** Reviewed, not worked. Nothing here is a promise with a clock on it. */
+const COLUNA_REVER: readonly CategoriaTarefa[] = [
+  "espera_alfa",
+  "retomar_conversa",
+  "espera_cliente",
+];
+
 export function CorpoDoPainel({
   painel,
   aCarregar,
@@ -38,35 +60,29 @@ export function CorpoDoPainel({
 }: {
   painel: AgentePainel | undefined;
   aCarregar: boolean;
+  /** The preview renders the same panel with nothing that writes. */
   somenteLeitura?: boolean;
 }) {
-  const conta = (b: unknown): number | "—" =>
-    b === undefined ? "—" : estaDisponivel(b as never) ? (b as unknown[]).length : "—";
+  const grupos = agruparTarefas(painel?.tarefas ?? []);
+  const porCategoria = new Map(grupos.map((g) => [g.categoria, g.tarefas]));
+  const conta = (c: CategoriaTarefa) => porCategoria.get(c)?.length ?? 0;
 
-  const porDevolver = conta(painel?.devolucoes);
-  const acoes = conta(painel?.acoes);
-  const pedidos = conta(painel?.ticketsEmRisco);
-  const seguimentos = conta(painel?.followUps);
-
-  // Narrowed here rather than inline so the masthead can both *lay out* for the
-  // banner and *render* it without repeating the guard — and so the band takes
-  // the whole width, instead of sitting next to an empty box, when there is no
-  // analysis for this day.
   const bloco = painel?.coaching;
   const coaching = bloco && coachingDisponivel(bloco) ? bloco : null;
   const semCoaching = bloco && !coachingDisponivel(bloco) ? bloco : null;
   const leitura = coaching?.paragraphOverview ? coaching : null;
 
+  // A task list cannot say "we could not read your Desk" — a block that failed
+  // simply contributes no rows, which on screen is indistinguishable from
+  // having none. So the failures are named once, above everything, rather than
+  // silently shrinking the list.
+  const falhas = painel ? blocosEmFalha(painel) : [];
+  const agora = new Date();
+
+  if (aCarregar || !painel) return <Esqueleto />;
+
   return (
     <div className="space-y-4">
-      {/* The masthead: how big today is, and what it was like — read together,
-          before any scrolling.
-
-          The narrative used to live at the bottom of the right column, under
-          sixty ticket rows. A summary read after the detail is not a summary,
-          so it comes up here beside the numbers. The two share a row on a wide
-          screen and stack on a phone; the paragraph gets the wider half
-          because a line of prose at 640px is unreadable. */}
       <div
         className={
           leitura
@@ -75,82 +91,59 @@ export function CorpoDoPainel({
         }
       >
         <TiraDeIndicadores largo={!leitura}>
-          {/* Only a count that means somebody is waiting right now is red.
-              Thirty-one actions is a morning's work, not an emergency, and
-              painting it the same red as an unreturned call teaches the agent
-              to ignore both. */}
+          {/* Only what means somebody is waiting on *us* gets a colour, and
+              only the call — where the customer is already unanswered — gets
+              red. Four red numbers is four numbers in no colour at all. */}
           <Kpi
-            valor={porDevolver}
+            valor={conta("devolver_chamada")}
             rotulo="Por devolver"
-            tom={porDevolver !== "—" && porDevolver > 0 ? "alerta" : "normal"}
+            tom={conta("devolver_chamada") > 0 ? "alerta" : "normal"}
           />
           <Kpi
-            valor={pedidos}
-            rotulo="Pedidos +24h"
-            tom={pedidos !== "—" && pedidos > 0 ? "aviso" : "normal"}
+            valor={conta("enviar_simulacao")}
+            rotulo="Simulações"
+            tom={conta("enviar_simulacao") > 0 ? "aviso" : "normal"}
           />
-          <Kpi valor={acoes} rotulo="Ações do dia" />
-          <Kpi valor={seguimentos} rotulo="Seguimentos" />
+          <Kpi valor={conta("cumprir_compromisso")} rotulo="Compromissos" />
+          <Kpi valor={conta("espera_alfa")} rotulo="À espera da Alfa" />
         </TiraDeIndicadores>
 
         {leitura && <FaixaDoDia c={leitura} />}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
-        {/* ── A fila: alguém está à espera ─────────────────────────── */}
-        <div className="min-w-0 space-y-4">
-          <Bloco<Devolucao>
-            titulo="Chamadas por devolver"
-            cor="text-red-700"
-            dados={painel?.devolucoes}
-            aCarregar={aCarregar}
-            vazio="Nenhuma chamada por devolver."
-          >
-            {(itens) => <BlocoDevolucoes itens={itens} somenteLeitura={somenteLeitura} />}
-          </Bloco>
-
-          <Bloco<Acao>
-            titulo="Ações do dia"
-            cor="text-red-700"
-            dados={painel?.acoes}
-            aCarregar={aCarregar}
-            vazio="Nada por fazer das conversas deste dia."
-          >
-            {(itens) => <BlocoAcoes itens={itens} />}
-          </Bloco>
-
-          <Bloco<FollowUp>
-            titulo="Seguimentos"
-            cor="text-blue-700"
-            dados={painel?.followUps}
-            aCarregar={aCarregar}
-            vazio="Nenhum seguimento por fazer."
-          >
-            {(itens) => <BlocoFollowUps itens={itens} />}
-          </Bloco>
+      {falhas.length > 0 && (
+        <div className="space-y-1.5">
+          {falhas.map((m) => (
+            <Indisponivel key={m} motivo={m} />
+          ))}
         </div>
+      )}
 
-        {/* ── O contexto: como foi o dia ───────────────────────────── */}
-        <div className="min-w-0 space-y-4">
-          <Bloco<TicketEmRisco>
-            titulo="Pedidos há mais de 24 h"
-            cor="text-amber-700"
-            dados={painel?.ticketsEmRisco}
-            aCarregar={aCarregar}
-            vazio="Nenhum pedido passou das 24 horas."
-          >
-            {(itens) => <BlocoTickets itens={itens} />}
-          </Bloco>
-
+      {grupos.length === 0 && falhas.length === 0 ? (
+        <SemTarefas />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
+          <div className="min-w-0 space-y-3">
+            <Coluna
+              titulo="Para hoje"
+              categorias={COLUNA_FAZER}
+              porCategoria={porCategoria}
+              agora={agora}
+              somenteLeitura={somenteLeitura}
+            />
+          </div>
+          <div className="min-w-0 space-y-3">
+            <Coluna
+              titulo="Para rever"
+              categorias={COLUNA_REVER}
+              porCategoria={porCategoria}
+              agora={agora}
+              somenteLeitura={somenteLeitura}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Below both columns, not inside one.
-
-          The queue is roughly as tall as the ticket list; the coaching is not,
-          and hanging it off the right column left the left one dead-ending
-          halfway down the page with eighteen hundred pixels of nothing beside
-          it. Full width it balances the two and reads better besides. */}
       {coaching ? (
         <BlocoCoaching c={coaching} />
       ) : semCoaching ? (
@@ -160,13 +153,77 @@ export function CorpoDoPainel({
         </section>
       ) : null}
 
-      <Agendamentos motivo={painel?.agendamentos.motivo} />
+      <Agendamentos motivo={painel.agendamentos.motivo} />
 
-      {painel && (
-        <p className="t-micro px-0.5 font-normal text-stone-400">
-          Atualizado às {hora(painel.atualizadoEm)}
-        </p>
-      )}
+      <p className="t-micro px-0.5 font-normal text-stone-400">
+        Atualizado às {hora(painel.atualizadoEm)}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * One column of task groups, under a heading that says what the column is for.
+ *
+ * The heading matters more than it looks: without it "À espera da Alfa" and
+ * "Devolver chamadas" are two lists of similar-looking cards, and the fact
+ * that one is this morning's work and the other is a review pile is left for
+ * the agent to infer from the wording of six sub-headings.
+ */
+function Coluna({
+  titulo,
+  categorias,
+  porCategoria,
+  agora,
+  somenteLeitura,
+}: {
+  titulo: string;
+  categorias: readonly CategoriaTarefa[];
+  porCategoria: Map<CategoriaTarefa, Tarefa[]>;
+  agora: Date;
+  somenteLeitura?: boolean;
+}) {
+  const presentes = categorias.filter((c) => (porCategoria.get(c)?.length ?? 0) > 0);
+  if (presentes.length === 0) return null;
+
+  return (
+    <>
+      <h2 className="t-micro px-0.5 text-stone-400">{titulo}</h2>
+      {presentes.map((c) => (
+        <GrupoDeTarefas
+          key={c}
+          categoria={c}
+          tarefas={porCategoria.get(c)!}
+          agora={agora}
+          somenteLeitura={somenteLeitura}
+        />
+      ))}
+    </>
+  );
+}
+
+/** The `motivo` of every block that could not be built. */
+function blocosEmFalha(p: AgentePainel): string[] {
+  // Typed as `Bloco<unknown>`: the four blocks hold four different row types,
+  // and all this needs from them is whether they are an array at all.
+  const blocos: Bloco<unknown>[] = [p.devolucoes, p.ticketsEmRisco, p.followUps, p.acoes];
+  const fora: string[] = [];
+  for (const b of blocos) {
+    if (!estaDisponivel(b)) fora.push(b.motivo);
+  }
+  // The same identity problem produces the same sentence on several blocks —
+  // saying it four times is noise, not four pieces of information.
+  return [...new Set(fora)];
+}
+
+function Esqueleto() {
+  return (
+    <div className="space-y-4">
+      <div className="h-24 animate-pulse rounded-xl bg-stone-200/70" />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="h-64 animate-pulse rounded-xl bg-stone-200/70" />
+        <div className="h-48 animate-pulse rounded-xl bg-stone-200/70" />
+      </div>
     </div>
   );
 }
