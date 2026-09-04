@@ -91,7 +91,7 @@ function Aba({
     <Link
       href={para}
       className={
-        "rounded-md px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition-colors " +
+        "rounded-md px-2.5 py-1 t-micro transition-colors " +
         (activa ? "bg-stone-900 text-stone-50" : "text-stone-400 hover:text-stone-700")
       }
     >
@@ -110,7 +110,7 @@ function Aba({
  */
 function NotaDeJanelaSolta() {
   return (
-    <p className="px-4 pb-6 text-[11px] leading-relaxed text-stone-400">
+    <p className="px-4 pb-6 t-meta text-stone-400">
       Este painel foi aberto fora do Zoho Desk. A sessão dura 15 minutos e não se
       renova sozinha aqui — abre-o pelo Desk para deixar de ter de recarregar.
     </p>

@@ -10,17 +10,12 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
-    "@radix-ui/react-separator": "^1.1.3",
-    "@radix-ui/react-slot": "^1.2.0",
-    "@radix-ui/react-tabs": "^1.1.4",
-    "@radix-ui/react-tooltip": "^1.2.0",
     "@tailwindcss/vite": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
-    "class-variance-authority": "catalog:",
     "clsx": "catalog:",
     "lucide-react": "catalog:",
     "react": "catalog:",

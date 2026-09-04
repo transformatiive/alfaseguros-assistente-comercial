@@ -4,6 +4,8 @@ import { env } from "../lib/env.js";
 import { listDevolucoesPendentes } from "../storage/devolucoes-repo.js";
 import { listTicketsEmRisco, type TicketEmRisco } from "./tickets-risco.js";
 import { loadPendingFollowUps, type FollowUpItem } from "./followups-query.js";
+import { listAcoesDoAgente, loadCoaching, type Coaching } from "./acoes-query.js";
+import type { Acao } from "./acoes.js";
 
 /**
  * The agent panel payload: what must I do today, in four blocks.
@@ -102,6 +104,14 @@ export interface AgentePainel {
   ticketsEmRisco: TicketEmRisco[] | BlocoIndisponivel;
   followUps: FollowUpItem[] | BlocoIndisponivel;
   /**
+   * The seven rules of "Ações do Dia", for this agent only. Each carries the
+   * call's own sentence, so the row says what the conversation was about
+   * without opening anything.
+   */
+  acoes: Acao[] | BlocoIndisponivel;
+  /** What the daily analysis wrote about this agent. Null when it has not run. */
+  coaching: Coaching | BlocoIndisponivel;
+  /**
    * Always a `BlocoIndisponivel`, never an empty array. Scheduling data lives
    * in the CRM, and the CRM 360 migration has not happened — the UI must be
    * able to tell "nothing scheduled today" from "we cannot see schedules yet",
@@ -155,7 +165,7 @@ export async function buildAgentePainel(
 ): Promise<{ painel: AgentePainel; erros: unknown[] }> {
   const cfg = env();
 
-  const [devolucoesR, ticketsR, followUpsR] = await Promise.allSettled([
+  const [devolucoesR, ticketsR, followUpsR, acoesR, coachingR] = await Promise.allSettled([
     listDevolucoesPendentes(colaborador.id, data),
 
     colaborador.zid
@@ -172,10 +182,20 @@ export async function buildAgentePainel(
           agentRef: colaborador.ringoverUserId,
         })
       : Promise.resolve(null),
+
+    // Both read what the daily analysis already produced. Neither calls the
+    // model: the panel refreshes twice a day and must not touch that budget.
+    colaborador.ringoverUserId
+      ? listAcoesDoAgente({ ringoverUserId: colaborador.ringoverUserId, data })
+      : Promise.resolve(null),
+
+    colaborador.ringoverUserId
+      ? loadCoaching({ ringoverUserId: colaborador.ringoverUserId, data })
+      : Promise.resolve(null),
   ]);
 
   const erros: unknown[] = [];
-  for (const r of [devolucoesR, ticketsR, followUpsR]) {
+  for (const r of [devolucoesR, ticketsR, followUpsR, acoesR, coachingR]) {
     if (r.status === "rejected") erros.push(r.reason);
   }
 
@@ -204,6 +224,28 @@ export async function buildAgentePainel(
     followUps = followUpsR.value.pending;
   }
 
+  let acoes: Acao[] | BlocoIndisponivel;
+  if (acoesR.status === "rejected") {
+    acoes = indisponivel("Não foi possível carregar as ações do dia.");
+  } else if (acoesR.value === null) {
+    acoes = indisponivel("Ainda não está associado a um utilizador do Ringover.");
+  } else {
+    acoes = acoesR.value;
+  }
+
+  let coaching: Coaching | BlocoIndisponivel;
+  if (coachingR.status === "rejected") {
+    coaching = indisponivel("Não foi possível carregar o coaching.");
+  } else if (!coachingR.value) {
+    // A missing row is not a failure — it means the analysis has not run for
+    // this day yet. Saying so beats an empty card the agent has to interpret.
+    coaching = indisponivel(
+      "A análise deste dia ainda não correu, por isso ainda não há leitura do dia.",
+    );
+  } else {
+    coaching = coachingR.value;
+  }
+
   return {
     painel: {
       colaborador: {
@@ -216,6 +258,8 @@ export async function buildAgentePainel(
       devolucoes,
       ticketsEmRisco,
       followUps,
+      acoes,
+      coaching,
       agendamentos: indisponivel(
         "Os agendamentos ainda não estão disponíveis — vivem no CRM, que ainda não está ligado a este painel.",
       ),

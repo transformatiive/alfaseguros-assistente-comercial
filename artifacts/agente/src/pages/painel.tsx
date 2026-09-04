@@ -35,12 +35,12 @@ export function PainelDoAgente() {
   }
 
   return (
-    <div className="mx-auto max-w-xl space-y-4 p-3 pb-10">
+    <div className="mx-auto max-w-6xl space-y-4 p-3 pb-10 sm:p-4">
       <header className="px-0.5">
-        <h1 className="text-lg leading-tight text-stone-900" style={{ fontFamily: "Georgia, serif" }}>
+        <h1 className="t-display text-stone-900">
           O meu dia
         </h1>
-        <p className="text-[11px] uppercase tracking-wide text-stone-400">
+        <p className="t-micro text-stone-400">
           {data ? data.colaborador.nome : " "}
           {data && <> · {diaPorExtenso(data.data)}</>}
         </p>
