@@ -13,6 +13,52 @@
  * test, cannot reach OpenRouter.
  */
 
+/** Sleep, for the backoff between attempts. */
+function esperar(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * POST the refresh, retrying a transient failure.
+ *
+ * The one that actually happened: this script runs on a Railway service wired
+ * to the same repo, so a merge starts it and the *app's* own redeploy at the
+ * same moment. The first request landed while the app was restarting and got
+ * `502 Application failed to respond` — nothing wrong with the refresh, the
+ * server simply was not up yet. Every later date returned 200.
+ *
+ * So a 5xx or a network error is retried; a 4xx is not, because a wrong secret
+ * or a malformed date will not get better by asking again.
+ */
+async function pedirComRetentativa(
+  url: string,
+  corpo: unknown,
+  segredo: string,
+  tentativas = 3,
+): Promise<{ res: Response; texto: string }> {
+  let ultimoErro: unknown;
+  for (let i = 1; i <= tentativas; i++) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Cron-Secret": segredo },
+        body: JSON.stringify(corpo),
+      });
+      const texto = await res.text();
+      if (res.status < 500 || i === tentativas) return { res, texto };
+      console.log(`HTTP ${res.status} — tentativa ${i} de ${tentativas}, a repetir`);
+    } catch (err) {
+      ultimoErro = err;
+      if (i === tentativas) throw err;
+      console.log(`Erro de rede na tentativa ${i} de ${tentativas}, a repetir`);
+    }
+    // 5s, 15s: long enough for a container to finish coming up, short enough
+    // that a genuinely down instance still fails the run inside a minute.
+    await esperar(i * 5000 + 5000);
+  }
+  throw ultimoErro ?? new Error("inalcançável");
+}
+
 function requireEnv(name: string): string {
   const v = process.env[name];
   if (!v) {
@@ -44,13 +90,11 @@ async function main(): Promise<void> {
   for (const data of alvos) {
     console.log(`\nPOST ${url}${data ? ` (data=${data})` : " (hoje)"}`);
 
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Cron-Secret": segredo },
-      body: JSON.stringify(data ? { date: data } : {}),
-    });
-
-    const texto = await res.text();
+    const { res, texto } = await pedirComRetentativa(
+      url,
+      data ? { date: data } : {},
+      segredo,
+    );
     console.log(`HTTP ${res.status}`);
     try {
       console.log(JSON.stringify(JSON.parse(texto), null, 2));
