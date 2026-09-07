@@ -74,3 +74,24 @@ Os dois crons que hoje disparam `painel/refresh` e `run` a partir do n8n
 passam a ser duplicados. Devem ser desativados — não por custo (a análise não
 reanalisa o que já tem `analysisJson`), mas para haver **uma só** fonte da
 verdade sobre quando é que estas coisas correm.
+
+## Por fazer: desligar os crons do n8n
+
+Os agendamentos que hoje existem no n8n para disparar `POST /api/run` e
+`POST /api/painel/refresh` passaram a ser duplicados do serviço `agenda`.
+
+Não é uma questão de custo — a análise não reanalisa uma conversa que já
+tenha `analysisJson`, por isso a segunda corrida do dia é quase gratuita. É
+uma questão de haver **uma só** resposta à pergunta "quando é que isto
+corre". Com dois agendadores, quem investigar uma manhã em que o painel
+chegou vazio tem de descobrir primeiro qual dos dois falhou.
+
+Ficam identificados:
+
+- `4rx93UXKxdDdmPpY` — *ALFASEGUROS: Supervisor Virtual — Daily Cron*,
+  `POST /api/run`
+- o workflow de refresh do painel criado em setembro, `POST /api/painel/refresh`
+  às 08:00 e 16:30 (`Europe/Lisbon`)
+
+Basta desativá-los (não apagar: o histórico de execuções é útil se algo
+correr mal na primeira semana do serviço novo).
