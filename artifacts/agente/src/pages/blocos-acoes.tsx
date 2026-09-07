@@ -1,19 +1,6 @@
-import { Cabecalho, Faixa } from "@/components/editorial";
+import { Cabecalho } from "@/components/editorial";
 import { cn } from "@/lib/utils";
 import type { Coaching } from "@/lib/tipos";
-
-/**
- * The one sentence the model wrote about this agent's day.
- *
- * Split out of the coaching block on purpose: it belongs at the *top* of the
- * page, beside the numbers, not four hundred pixels below a list of sixty
- * tickets. It is the only thing on the panel that says what the day was
- * *like*, and a summary read after the detail is not a summary.
- */
-export function FaixaDoDia({ c }: { c: Coaching }) {
-  if (!c.paragraphOverview) return null;
-  return <Faixa>{c.paragraphOverview}</Faixa>;
-}
 
 /**
  * The rest of the coaching: what went well, what did not, what to try next.
