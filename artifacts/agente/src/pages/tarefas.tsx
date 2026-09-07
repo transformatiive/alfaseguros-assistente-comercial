@@ -6,8 +6,10 @@ import {
   CircleCheck,
   Handshake,
   Hourglass,
+  CalendarDays,
   Check,
   Circle,
+  Clock,
   Inbox,
   PhoneIncoming,
   Search,
@@ -17,7 +19,14 @@ import {
 import { cn } from "@/lib/utils";
 import { enviar } from "@/lib/api";
 import { porqueMe, telefone } from "@/lib/formatos";
-import type { Cadeia, CategoriaTarefa, Passo, Tarefa, TarefaFechada } from "@/lib/tipos";
+import type {
+  BaldeDePrazo,
+  Cadeia,
+  CategoriaTarefa,
+  Passo,
+  Tarefa,
+  TarefaFechada,
+} from "@/lib/tipos";
 
 /**
  * The task list — the whole panel, really.
@@ -223,58 +232,106 @@ function PorqueAberta({ texto }: { texto: string }) {
 
 /* ── Componentes ────────────────────────────────────────────────────────── */
 
-export function GrupoDeTarefas({
-  categoria,
+/**
+ * The three piles that have a clock on them, and their headings.
+ *
+ * "Atrasado" earns red; the other two do not. Three coloured headings is no
+ * heading coloured at all, and the whole point of this grouping is that the
+ * top of the page is the part you cannot leave until tomorrow.
+ */
+const ASPETO_PRAZO: Record<
+  Exclude<BaldeDePrazo, "aguardar">,
+  { titulo: string; legenda: string; icone: LucideIcon; cor: string; fundo: string }
+> = {
+  atrasado: {
+    titulo: "Atrasado",
+    legenda: "o prazo passou e nada mostra que ficou feito",
+    icone: Clock,
+    cor: "text-red-700",
+    fundo: "bg-red-100",
+  },
+  hoje: {
+    titulo: "Hoje",
+    legenda: "prometido ao cliente, ou o prazo é hoje",
+    icone: CalendarDays,
+    cor: "text-indigo-700",
+    fundo: "bg-indigo-100",
+  },
+  semana: {
+    titulo: "Esta semana",
+    legenda: "há tempo, mas já tem data",
+    icone: CalendarDays,
+    cor: "text-stone-600",
+    fundo: "bg-stone-100",
+  },
+};
+
+/** Rows shown before "mostrar mais". The pile you work first shows more. */
+const VISIVEIS: Record<Exclude<BaldeDePrazo, "aguardar">, number> = {
+  atrasado: 6,
+  hoje: 6,
+  semana: 4,
+};
+
+export function GrupoPorPrazo({
+  balde,
   tarefas,
   agora,
   somenteLeitura,
 }: {
-  categoria: CategoriaTarefa;
+  balde: Exclude<BaldeDePrazo, "aguardar">;
   tarefas: Tarefa[];
   agora: Date;
   /** The preview renders the same panel with nothing that writes. */
   somenteLeitura?: boolean;
 }) {
-  const a = ASPETO[categoria];
+  const a = ASPETO_PRAZO[balde];
   const [tudo, setTudo] = useState(false);
-  const mostradas = tudo ? tarefas : tarefas.slice(0, a.visiveis);
+  const mostradas = tudo ? tarefas : tarefas.slice(0, VISIVEIS[balde]);
   const escondidas = tarefas.length - mostradas.length;
   const Icone = a.icone;
 
+  if (tarefas.length === 0) return null;
+
   return (
-    <section className="overflow-hidden rounded-xl border border-stone-200 bg-white">
-      {/* The heading carries the icon, the count and the one-line explanation.
-          The explanation is not decoration: "à espera do cliente" and "à espera
-          da Alfa" are indistinguishable to somebody reading fast, and getting
-          that pair the wrong way round is the difference between chasing a
-          customer and ignoring one. */}
-      <header className={cn("flex items-start gap-2.5 px-3 py-2.5", a.fundo)}>
+    <section>
+      <header className="mb-2 flex items-center gap-2 px-0.5">
         <span
           className={cn(
-            "mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white/70",
+            "flex h-6 w-6 shrink-0 items-center justify-center rounded-md",
+            a.fundo,
             a.cor,
           )}
         >
           <Icone className="h-3.5 w-3.5" aria-hidden />
         </span>
-        <div className="min-w-0 flex-1">
-          <h2 className={cn("t-micro", a.cor)}>
-            {a.titulo}
-            <span className="ml-1.5 tabular-nums opacity-60">{tarefas.length}</span>
-          </h2>
-          <p className="t-meta mt-0.5 text-stone-500">{a.legenda}</p>
-        </div>
+        <h2 className="t-titulo text-stone-900">{a.titulo}</h2>
+        <span
+          className={cn(
+            "rounded-full px-2 py-0.5 t-meta font-semibold tabular-nums text-white",
+            balde === "atrasado" ? "bg-red-600" : "bg-stone-400",
+          )}
+        >
+          {tarefas.length}
+        </span>
+        <span className="t-meta truncate text-stone-400">{a.legenda}</span>
       </header>
 
-      <div className="divide-y divide-stone-100">
+      <div className="space-y-1.5">
         {mostradas.map((t) => (
-          <LinhaTarefa key={t.id} t={t} agora={agora} somenteLeitura={somenteLeitura} />
+          <LinhaTarefa
+            key={t.id}
+            t={t}
+            agora={agora}
+            atrasada={balde === "atrasado"}
+            somenteLeitura={somenteLeitura}
+          />
         ))}
       </div>
 
       {escondidas > 0 && (
         <button
-          className="t-meta w-full border-t border-stone-200 bg-stone-50 py-1.5 text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900"
+          className="t-meta mt-1.5 w-full rounded-lg border border-stone-200 bg-white py-1.5 text-stone-500 transition-colors hover:bg-stone-50 hover:text-stone-900"
           onClick={() => setTudo(true)}
         >
           mostrar mais {escondidas}
@@ -287,32 +344,50 @@ export function GrupoDeTarefas({
 function LinhaTarefa({
   t,
   agora,
+  atrasada,
   somenteLeitura,
 }: {
   t: Tarefa;
   agora: Date;
+  /** Whether it sits in the overdue pile — which is what earns the red edge. */
+  atrasada?: boolean;
   somenteLeitura?: boolean;
 }) {
-  const urgente = t.prioridade === "alta";
   const prazo = t.prazo ? prazoTexto(t.prazo, agora) : null;
   const razao = porqueMe(t.atribuicaoOrigem);
+  // The category no longer groups the page, so it lives here: an icon the eye
+  // reads without stopping, next to the row it describes.
+  const marca = ASPETO[t.categoria];
+  const Icone = marca.icone;
 
   return (
-    <div
+    <article
       className={cn(
-        "px-3 py-2.5",
+        "flex gap-3 rounded-xl border border-stone-200 bg-white px-3 py-2.5",
         // A left rule rather than a red background: on a list of thirty rows a
         // tinted background is a wall, a rule is a scannable edge.
-        urgente && "border-l-[3px] border-l-red-600 pl-[9px]",
+        atrasada && "border-l-[3px] border-l-red-600 pl-[9px]",
       )}
     >
+      <span
+        className={cn(
+          "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+          marca.fundo,
+          marca.cor,
+        )}
+        title={marca.titulo}
+      >
+        <Icone className="h-4 w-4" aria-hidden />
+      </span>
+
+      <div className="min-w-0 flex-1">
       <div className="flex items-baseline justify-between gap-3">
         <h3 className="t-titulo min-w-0 flex-1 text-stone-900">{t.titulo}</h3>
         {t.esperaHoras != null && (
           <span
             className={cn(
               "t-meta shrink-0 tabular-nums",
-              urgente ? "text-red-600" : "text-stone-400",
+              atrasada ? "text-red-600" : "text-stone-400",
             )}
           >
             {espera(t.esperaHoras)}
@@ -377,7 +452,8 @@ function LinhaTarefa({
       )}
 
       {t.devolucaoIds && !somenteLeitura && <Fechar ids={t.devolucaoIds} />}
-    </div>
+      </div>
+    </article>
   );
 }
 

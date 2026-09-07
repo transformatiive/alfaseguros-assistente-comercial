@@ -138,46 +138,78 @@ export interface Tarefa {
   atribuicaoOrigem: OrigemAtribuicao | null;
 }
 
-/** Ordered by whose time is being burned, not by size. Mirrors the server. */
-export const ORDEM_CATEGORIAS: readonly CategoriaTarefa[] = [
-  "devolver_chamada",
-  "enviar_simulacao",
-  "cumprir_compromisso",
-  "espera_alfa",
-  "retomar_conversa",
-  "espera_cliente",
-];
-
 const PESO_PRIORIDADE: Record<Tarefa["prioridade"], number> = { alta: 0, media: 1, baixa: 2 };
-
-export function agruparTarefas(
-  tarefas: readonly Tarefa[],
-): Array<{ categoria: CategoriaTarefa; tarefas: Tarefa[] }> {
-  const porCategoria = new Map<CategoriaTarefa, Tarefa[]>();
-  for (const t of tarefas) {
-    porCategoria.set(t.categoria, [...(porCategoria.get(t.categoria) ?? []), t]);
-  }
-  return ORDEM_CATEGORIAS.flatMap((categoria) => {
-    const lista = porCategoria.get(categoria);
-    if (!lista || lista.length === 0) return [];
-    return [
-      {
-        categoria,
-        tarefas: [...lista].sort(
-          (a, b) =>
-            PESO_PRIORIDADE[a.prioridade] - PESO_PRIORIDADE[b.prioridade] ||
-            (b.esperaHoras ?? 0) - (a.esperaHoras ?? 0),
-        ),
-      },
-    ];
-  });
-}
 
 export interface TarefaFechada {
   id: string;
   titulo: string;
   quem: string | null;
   prova: { tipo: "chamada" | "resposta"; descricao: string };
+}
+
+/* ── Agrupamento por quando ─────────────────────────────────────────────── */
+
+/**
+ * The four piles a morning actually has.
+ *
+ * Grouping by category — calls here, quotes there, Desk over there — is the
+ * shape of where the rows came from. It is not the order anybody works in: an
+ * agent does not decide to "do calls now", they do whatever is latest first.
+ * Two lists sorted by type make that decision every time you scan them; four
+ * piles sorted by *when* make it once.
+ *
+ * The category has not gone away — it is the icon on each row, which is where
+ * it belongs: useful at a glance, never the axis of the page.
+ */
+export type BaldeDePrazo = "atrasado" | "hoje" | "semana" | "aguardar";
+
+/** `YYYY-MM-DD` for an instant, on Lisbon's calendar. */
+function diaLisboa(d: Date): string {
+  return d.toLocaleDateString("en-CA", { timeZone: "Europe/Lisbon" });
+}
+
+export function baldeDaTarefa(t: Tarefa, agora: Date): BaldeDePrazo {
+  // Parked on the customer is never late *to us*, however old it is. Putting
+  // these in "atrasado" would fill the urgent pile with rows there is nothing
+  // to do about, which is the fastest way to teach somebody to ignore red.
+  if (t.categoria === "espera_cliente" || !t.prazo) return "aguardar";
+
+  const prazo = new Date(t.prazo);
+  if (Number.isNaN(prazo.getTime())) return "aguardar";
+  if (prazo.getTime() < agora.getTime()) return "atrasado";
+  if (diaLisboa(prazo) === diaLisboa(agora)) return "hoje";
+  if (prazo.getTime() - agora.getTime() <= 7 * 86_400_000) return "semana";
+  return "aguardar";
+}
+
+export interface TarefasPorPrazo {
+  atrasado: Tarefa[];
+  hoje: Tarefa[];
+  semana: Tarefa[];
+  aguardar: Tarefa[];
+}
+
+export function agruparPorPrazo(
+  tarefas: readonly Tarefa[],
+  agora: Date,
+): TarefasPorPrazo {
+  const out: TarefasPorPrazo = { atrasado: [], hoje: [], semana: [], aguardar: [] };
+  for (const t of tarefas) out[baldeDaTarefa(t, agora)].push(t);
+
+  // Inside a pile: soonest first, which for "atrasado" means the one that has
+  // been waiting longest is at the top.
+  const quando = (t: Tarefa) => (t.prazo ? Date.parse(t.prazo) : Number.MAX_SAFE_INTEGER);
+  for (const k of ["atrasado", "hoje", "semana"] as const) {
+    out[k].sort((a, b) => quando(a) - quando(b));
+  }
+  // Nothing in "aguardar" has a deadline worth sorting by, so fall back to the
+  // old rule: urgency, then whoever has waited longest.
+  out.aguardar.sort(
+    (a, b) =>
+      PESO_PRIORIDADE[a.prioridade] - PESO_PRIORIDADE[b.prioridade] ||
+      (b.esperaHoras ?? 0) - (a.esperaHoras ?? 0),
+  );
+  return out;
 }
 
 export interface Coaching {

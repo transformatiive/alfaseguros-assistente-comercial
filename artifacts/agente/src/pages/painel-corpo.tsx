@@ -1,57 +1,36 @@
 import { Indisponivel } from "@/components/Bloco";
-import { Kpi, TiraDeIndicadores } from "@/components/editorial";
 import { hora } from "@/lib/formatos";
-import { Agendamentos } from "@/pages/blocos";
-import { BlocoCoaching, FaixaDoDia } from "@/pages/blocos-acoes";
-import { FecharamSozinhas, GrupoDeTarefas, SemTarefas } from "@/pages/tarefas";
+import { BlocoCoaching } from "@/pages/blocos-acoes";
+import { FecharamSozinhas, GrupoPorPrazo, SemTarefas } from "@/pages/tarefas";
 import {
-  agruparTarefas,
+  agruparPorPrazo,
   coachingDisponivel,
   estaDisponivel,
   type AgentePainel,
   type Bloco,
-  type CategoriaTarefa,
+  type Coaching,
   type Tarefa,
 } from "@/lib/tipos";
 
 /**
  * The panel's body, shared by the real panel and the preview.
  *
- * **Organised by what the work asks of you, not by where it came from.** The
- * panel used to be one block per data source — calls, Desk tickets, follow-ups,
- * the analysis rules — which is the shape of our plumbing, not the shape of a
- * morning. It made the agent do the regrouping in their head every day: read
- * four lists, spot the rows that are the same customer, work out which ones
- * they can act on now.
+ * **Ordered by when, not by what.** The panel used to group by category —
+ * calls here, quotes there, Desk tickets over there. That is the shape of
+ * where the rows came from, and it is not the order anybody works in: nobody
+ * decides to "do calls now", they do whatever is latest first. Two columns
+ * sorted by type made that decision again on every scan.
  *
- * Now there is one task list, grouped into six piles ordered by whose time is
- * being burned: someone who rang and got no answer, a quote that has not gone
- * out, a promise made on a call, a Desk ticket waiting on us, a sale that lost
- * momentum, and — last, because there is nothing to do about it today —
- * everything parked on somebody else.
+ * So the left column is an agenda: **Atrasado**, then **Hoje**, then **Esta
+ * semana** — read top to bottom, and nothing is decided. The category is still
+ * there, as the icon on each row, which is where it earns its keep.
  *
- * **The two columns split by whether you act today.** Left is the queue; right
- * is the pile you review. Mixing them makes both harder to scan, and the left
- * column is the one an agent should be able to work top to bottom without
- * deciding anything.
+ * **The right column is context, not work.** The day's reading, how tasks
+ * close themselves, and the count of what is parked. Everything there is read
+ * once in the morning; nothing there is a thing to do.
  *
- * The masthead sits above both: four counts and the day's one sentence, read
- * together before any scrolling.
+ * The masthead carries the three numbers that decide whether today is heavy.
  */
-
-/** Worked top to bottom, this morning. */
-const COLUNA_FAZER: readonly CategoriaTarefa[] = [
-  "devolver_chamada",
-  "enviar_simulacao",
-  "cumprir_compromisso",
-];
-
-/** Reviewed, not worked. Nothing here is a promise with a clock on it. */
-const COLUNA_REVER: readonly CategoriaTarefa[] = [
-  "espera_alfa",
-  "retomar_conversa",
-  "espera_cliente",
-];
 
 export function CorpoDoPainel({
   painel,
@@ -63,53 +42,31 @@ export function CorpoDoPainel({
   /** The preview renders the same panel with nothing that writes. */
   somenteLeitura?: boolean;
 }) {
-  const grupos = agruparTarefas(painel?.tarefas ?? []);
-  const porCategoria = new Map(grupos.map((g) => [g.categoria, g.tarefas]));
-  const conta = (c: CategoriaTarefa) => porCategoria.get(c)?.length ?? 0;
+  const agora = new Date();
+  const piles = agruparPorPrazo(painel?.tarefas ?? [], agora);
 
   const bloco = painel?.coaching;
   const coaching = bloco && coachingDisponivel(bloco) ? bloco : null;
   const semCoaching = bloco && !coachingDisponivel(bloco) ? bloco : null;
-  const leitura = coaching?.paragraphOverview ? coaching : null;
 
   // A task list cannot say "we could not read your Desk" — a block that failed
   // simply contributes no rows, which on screen is indistinguishable from
   // having none. So the failures are named once, above everything, rather than
   // silently shrinking the list.
   const falhas = painel ? blocosEmFalha(painel) : [];
-  const agora = new Date();
 
   if (aCarregar || !painel) return <Esqueleto />;
 
+  const total = piles.atrasado.length + piles.hoje.length + piles.semana.length;
+
   return (
     <div className="space-y-4">
-      <div
-        className={
-          leitura
-            ? "grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] lg:items-stretch"
-            : ""
-        }
-      >
-        <TiraDeIndicadores largo={!leitura}>
-          {/* Only what means somebody is waiting on *us* gets a colour, and
-              only the call — where the customer is already unanswered — gets
-              red. Four red numbers is four numbers in no colour at all. */}
-          <Kpi
-            valor={conta("devolver_chamada")}
-            rotulo="Por devolver"
-            tom={conta("devolver_chamada") > 0 ? "alerta" : "normal"}
-          />
-          <Kpi
-            valor={conta("enviar_simulacao")}
-            rotulo="Simulações"
-            tom={conta("enviar_simulacao") > 0 ? "aviso" : "normal"}
-          />
-          <Kpi valor={conta("cumprir_compromisso")} rotulo="Compromissos" />
-          <Kpi valor={conta("espera_alfa")} rotulo="À espera da Alfa" />
-        </TiraDeIndicadores>
-
-        {leitura && <FaixaDoDia c={leitura} />}
-      </div>
+      <Masthead
+        atrasado={piles.atrasado.length}
+        hoje={piles.hoje.length}
+        aguardar={piles.aguardar.length}
+        atualizadoEm={painel.atualizadoEm}
+      />
 
       {falhas.length > 0 && (
         <div className="space-y-1.5">
@@ -119,88 +76,159 @@ export function CorpoDoPainel({
         </div>
       )}
 
-      {grupos.length === 0 && falhas.length === 0 ? (
-        <SemTarefas />
-      ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
-          <div className="min-w-0 space-y-3">
-            <Coluna
-              titulo="Para hoje"
-              categorias={COLUNA_FAZER}
-              porCategoria={porCategoria}
-              agora={agora}
-              somenteLeitura={somenteLeitura}
-            />
-          </div>
-          <div className="min-w-0 space-y-3">
-            <Coluna
-              titulo="Para rever"
-              categorias={COLUNA_REVER}
-              porCategoria={porCategoria}
-              agora={agora}
-              somenteLeitura={somenteLeitura}
-            />
-          </div>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+        <div className="min-w-0 space-y-4">
+          {total === 0 && falhas.length === 0 ? (
+            <SemTarefas />
+          ) : (
+            <>
+              <GrupoPorPrazo
+                balde="atrasado"
+                tarefas={piles.atrasado}
+                agora={agora}
+                somenteLeitura={somenteLeitura}
+              />
+              <GrupoPorPrazo
+                balde="hoje"
+                tarefas={piles.hoje}
+                agora={agora}
+                somenteLeitura={somenteLeitura}
+              />
+              <GrupoPorPrazo
+                balde="semana"
+                tarefas={piles.semana}
+                agora={agora}
+                somenteLeitura={somenteLeitura}
+              />
+            </>
+          )}
         </div>
-      )}
 
-      <FecharamSozinhas fechadas={painel.fechadas ?? []} />
+        <aside className="min-w-0 space-y-3">
+          <LeituraDoDia c={coaching} motivo={semCoaching?.motivo} />
+          <FecharamSozinhas fechadas={painel.fechadas ?? []} />
+          <AAguardar tarefas={piles.aguardar} />
+        </aside>
+      </div>
 
-      {coaching ? (
-        <BlocoCoaching c={coaching} />
-      ) : semCoaching ? (
-        <section className="space-y-2">
-          <h2 className="t-micro px-0.5 text-stone-500">Leitura do dia</h2>
-          <Indisponivel motivo={semCoaching.motivo} />
-        </section>
-      ) : null}
-
-      <Agendamentos motivo={painel.agendamentos.motivo} />
+      {coaching && <BlocoCoaching c={coaching} />}
 
       <p className="t-micro px-0.5 font-normal text-stone-400">
-        Atualizado às {hora(painel.atualizadoEm)}
+        Análise e prazos às 08:00 e 16:30 · verificação de evidência de 15 em 15 minutos ·
+        atualizado às {hora(painel.atualizadoEm)}
       </p>
     </div>
   );
 }
 
-/**
- * One column of task groups, under a heading that says what the column is for.
- *
- * The heading matters more than it looks: without it "À espera da Alfa" and
- * "Devolver chamadas" are two lists of similar-looking cards, and the fact
- * that one is this morning's work and the other is a review pile is left for
- * the agent to infer from the wording of six sub-headings.
- */
-function Coluna({
-  titulo,
-  categorias,
-  porCategoria,
-  agora,
-  somenteLeitura,
+/** The three numbers that say whether today is heavy, above everything else. */
+function Masthead({
+  atrasado,
+  hoje,
+  aguardar,
+  atualizadoEm,
 }: {
-  titulo: string;
-  categorias: readonly CategoriaTarefa[];
-  porCategoria: Map<CategoriaTarefa, Tarefa[]>;
-  agora: Date;
-  somenteLeitura?: boolean;
+  atrasado: number;
+  hoje: number;
+  aguardar: number;
+  atualizadoEm: string;
 }) {
-  const presentes = categorias.filter((c) => (porCategoria.get(c)?.length ?? 0) > 0);
-  if (presentes.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3">
+      <div className="flex gap-6">
+        {/* Only the overdue count gets red. Three red numbers is no number in
+            red at all, and this is the one that means somebody is waiting. */}
+        <Numero valor={atrasado} rotulo="Atrasado" cor={atrasado > 0 ? "text-red-600" : undefined} />
+        <Numero valor={hoje} rotulo="Hoje" />
+        <Numero valor={aguardar} rotulo="A aguardar" cor="text-stone-500" />
+      </div>
+      <span className="flex items-center gap-1.5 t-meta text-stone-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
+        atualizado às {hora(atualizadoEm)}
+      </span>
+    </div>
+  );
+}
+
+function Numero({ valor, rotulo, cor }: { valor: number; rotulo: string; cor?: string }) {
+  return (
+    <div>
+      <div className={`t-pagina tabular-nums ${cor ?? "text-stone-900"}`}>{valor}</div>
+      <div className="t-micro text-stone-400">{rotulo}</div>
+    </div>
+  );
+}
+
+/**
+ * The day's one sentence, at the top of the rail.
+ *
+ * When it is missing, the reason matters more than the box: an analysis that
+ * has not run for this day is not a broken panel, and saying so in one grey
+ * line beats a bordered placeholder that looks like a failure.
+ */
+function LeituraDoDia({ c, motivo }: { c: Coaching | null; motivo?: string }) {
+  if (c?.paragraphOverview) {
+    return (
+      <section className="rounded-xl border border-indigo-200 bg-indigo-50/60 px-4 py-3">
+        <h2 className="t-micro mb-1.5 text-indigo-700">Uma sugestão para hoje</h2>
+        <p className="t-narrativa text-stone-700">{c.paragraphOverview}</p>
+      </section>
+    );
+  }
+  if (!motivo) return null;
+  return <p className="px-0.5 t-meta text-stone-400">{motivo}</p>;
+}
+
+/**
+ * What is parked, split by whose move it is.
+ *
+ * Deliberately a count and not a list. Nothing here is work for today — the
+ * whole reason it is out of the agenda is that there is nothing to do about it
+ * — and a list would put sixty rows of not-work under five rows of work.
+ */
+function AAguardar({ tarefas }: { tarefas: Tarefa[] }) {
+  if (tarefas.length === 0) return null;
+  const cliente = tarefas.filter((t) => t.categoria === "espera_cliente").length;
+  const nosso = tarefas.length - cliente;
 
   return (
-    <>
-      <h2 className="t-micro px-0.5 text-stone-400">{titulo}</h2>
-      {presentes.map((c) => (
-        <GrupoDeTarefas
-          key={c}
-          categoria={c}
-          tarefas={porCategoria.get(c)!}
-          agora={agora}
-          somenteLeitura={somenteLeitura}
+    <section className="rounded-xl border border-stone-200 bg-white px-4 py-3">
+      <h2 className="t-micro mb-2 text-stone-500">
+        A aguardar
+        <span className="ml-1.5 tabular-nums opacity-60">{tarefas.length}</span>
+      </h2>
+      <div className="flex gap-2">
+        <Balde valor={nosso} titulo="Contigo" nota="A bola está do lado da Alfa" tom="amber" />
+        <Balde
+          valor={cliente}
+          titulo="Com o cliente"
+          nota="Só relembrar se passar do prazo"
+          tom="stone"
         />
-      ))}
-    </>
+      </div>
+    </section>
+  );
+}
+
+function Balde({
+  valor,
+  titulo,
+  nota,
+  tom,
+}: {
+  valor: number;
+  titulo: string;
+  nota: string;
+  tom: "amber" | "stone";
+}) {
+  const cores =
+    tom === "amber" ? "bg-amber-50 text-amber-700" : "bg-stone-100 text-stone-500";
+  return (
+    <div className={`flex-1 rounded-lg px-3 py-2 ${cores}`}>
+      <div className="t-titulo tabular-nums">{valor}</div>
+      <div className="t-meta font-semibold text-stone-700">{titulo}</div>
+      <div className="t-meta text-stone-400">{nota}</div>
+    </div>
   );
 }
 
@@ -221,9 +249,9 @@ function blocosEmFalha(p: AgentePainel): string[] {
 function Esqueleto() {
   return (
     <div className="space-y-4">
-      <div className="h-24 animate-pulse rounded-xl bg-stone-200/70" />
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="h-64 animate-pulse rounded-xl bg-stone-200/70" />
+      <div className="h-16 animate-pulse rounded-xl bg-stone-200/70" />
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="h-72 animate-pulse rounded-xl bg-stone-200/70" />
         <div className="h-48 animate-pulse rounded-xl bg-stone-200/70" />
       </div>
     </div>
