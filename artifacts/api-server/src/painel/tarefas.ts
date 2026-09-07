@@ -27,6 +27,19 @@
  * literal and why adding a category costs one entry here and one icon in the UI.
  */
 
+import { toLisbonDate } from "../lib/dates.js";
+import { derivarCadeia, type Cadeia } from "./cadeia.js";
+import {
+  porqueContinuaAberta,
+  procurarProva,
+  type ChamadaParaEvidencia,
+  type PedidoDeProva,
+  type Prova,
+  type RespostaParaEvidencia,
+} from "./evidencia.js";
+import { derivarPrazo, type OrigemPrazo, type TipoDeEspera } from "./prazos.js";
+import { urlDoDesk } from "./tickets-risco.js";
+
 export type CategoriaTarefa =
   | "devolver_chamada"
   | "enviar_simulacao"
@@ -55,6 +68,27 @@ export interface Tarefa {
   contacto: Contacto;
   /** When this should be done by, ISO. Null when nothing sets a deadline. */
   prazo: string | null;
+  /**
+   * Whether that date was promised to the customer or worked out by us.
+   *
+   * On the row it is the difference between "you said six o'clock" and "we
+   * think two days is fair" — and an agent is entitled to argue with the
+   * second and not with the first.
+   */
+  prazoOrigem: OrigemPrazo | null;
+  /** The one line under the date: "prometido na conversa de 03/09". */
+  prazoPorque: string | null;
+  /** When the obligation started — the call, or the ticket being opened. */
+  desde: string | null;
+  /** Where this sits in pedido → simulação → follow-up. Null when it has no chain. */
+  cadeia: Cadeia | null;
+  /**
+   * Why this is still on the list, written as the absence that puts it there.
+   *
+   * The row's own argument. Without it the panel is asking to be believed;
+   * with it, an agent who knows better can see exactly which lookup was wrong.
+   */
+  porqueAberta: string | null;
   /** How long it has been waiting, in hours. Drives ordering and the age chip. */
   esperaHoras: number | null;
   /** Desk status, verbatim, for the rows that come from a ticket. */
@@ -131,6 +165,12 @@ export interface EntradaTarefas {
   nomePorFingerprint: ReadonlyMap<string, string>;
   /** Same, for the email. Desk is the only place either of them exists. */
   emailPorFingerprint: ReadonlyMap<string, string>;
+  /** Answered-call history, for proving a task was done. */
+  chamadas: readonly ChamadaParaEvidencia[];
+  /** Desk comments, for the same, and for reading when a quote went out. */
+  respostas: readonly RespostaParaEvidencia[];
+  /** Zoho org id, so every row with a ticket can link straight to it. */
+  deskOrgId?: string;
   now: Date;
 }
 
@@ -306,13 +346,56 @@ function contactoDe(
   };
 }
 
+
+/**
+ * Our own moves on a ticket, read from its comments.
+ *
+ * Two dates, and they answer different questions. The **first** agent comment
+ * after the ticket opened is when the quote went out — that is what turns
+ * "simulação por enviar" into "simulação enviada". The **last** one is our
+ * most recent contact, which is what decides whether the follow-up happened.
+ *
+ * Only `AGENT` counts. `END_USER` is the customer and `SYSTEM` is Desk talking
+ * to itself; reading either as our work would mark a quote sent because the
+ * customer chased us for it.
+ */
+interface ContactosNossos {
+  primeiro: string | null;
+  ultimo: string | null;
+}
+
+function contactosPorTicket(
+  respostas: readonly RespostaParaEvidencia[],
+): Map<string, ContactosNossos> {
+  const out = new Map<string, ContactosNossos>();
+  for (const r of respostas) {
+    if ((r.autorTipo ?? "").toUpperCase() !== "AGENT") continue;
+    const atual = out.get(r.ticketId);
+    if (!atual) {
+      out.set(r.ticketId, { primeiro: r.quando, ultimo: r.quando });
+      continue;
+    }
+    if (r.quando < (atual.primeiro ?? r.quando)) atual.primeiro = r.quando;
+    if (r.quando > (atual.ultimo ?? r.quando)) atual.ultimo = r.quando;
+  }
+  return out;
+}
+
 export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
   const out: Tarefa[] = [];
+  const nossos = contactosPorTicket(entrada.respostas);
 
   // 1. Chamadas por devolver. No deadline field: the deadline is now, which is
   //    why these sort first and carry the only unconditional `alta`.
   for (const d of entrada.devolucoes) {
     const inicio = new Date(d.primeiraChamada);
+    const prazo = derivarPrazo({
+      texto: d.contexto,
+      referencia: inicio,
+      desde: inicio,
+      tipo: "primeira_resposta",
+      agora: entrada.now,
+    });
     out.push({
       id: `dev_${d.ids[0]}`,
       categoria: "devolver_chamada",
@@ -322,11 +405,16 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
           : "Devolver chamada",
       porque: d.contexto,
       contacto: contactoDe(d.numeroCliente, entrada),
-      prazo: null,
+      prazo: prazo.quando,
+      prazoOrigem: prazo.origem,
+      prazoPorque: prazo.porque,
+      desde: inicio.toISOString(),
+      cadeia: null,
+      porqueAberta: null,
       esperaHoras: horasEntre(inicio, entrada.now),
       estado: null,
       ticketId: d.ticketId,
-      deskUrl: null,
+      deskUrl: d.ticketId ? urlDoDesk(d.ticketId, entrada.deskOrgId) : null,
       prioridade: "alta",
       devolucaoIds: d.ids,
       atribuicaoOrigem: d.atribuicaoOrigem,
@@ -338,10 +426,35 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
   //    of promise where being late loses the sale outright.
   for (const f of entrada.followUps) {
     const detectado = new Date(f.detected_at);
-    const prazo = new Date(detectado.getTime() + f.follow_up_sla_hours * 3_600_000);
     const simulacao = prometeSimulacao(f.follow_up_descricao);
     const contacto = contactoDe(f.contact_phone, entrada);
     if (f.contact_email) contacto.email = f.contact_email;
+
+    // The promise usually names its own date. `follow_up_sla_hours` is the
+    // constant 24 for every follow-up ever written, so using it here threw
+    // away "até segunda-feira de manhã, conforme prometido" and replaced it
+    // with a number nobody said to anybody.
+    const prazo = derivarPrazo({
+      texto: f.follow_up_descricao,
+      referencia: detectado,
+      desde: detectado,
+      tipo: simulacao ? "simulacao_pedida" : "compromisso",
+      agora: entrada.now,
+    });
+    const nosso = f.linked_ticket_id ? nossos.get(f.linked_ticket_id) : undefined;
+    const cadeia = derivarCadeia({
+      pedidoEm: f.detected_at,
+      envolveSimulacao: simulacao,
+      simulacaoEnviadaEm: nosso?.primeiro ?? null,
+      ultimoContactoNosso: nosso?.ultimo ?? null,
+    });
+    const prova: PedidoDeProva = {
+      diaDoCompromisso: toLisbonDate(detectado),
+      desde: f.detected_at,
+      fingerprint: impressaoDigital(f.contact_phone),
+      ticketId: f.linked_ticket_id,
+    };
+    const vencido = Date.parse(prazo.quando) < entrada.now.getTime();
 
     out.push({
       id: f.id,
@@ -351,13 +464,18 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
         : resumirPromessa(f.follow_up_descricao),
       porque: f.follow_up_descricao,
       contacto,
-      prazo: prazo.toISOString(),
+      prazo: prazo.quando,
+      prazoOrigem: prazo.origem,
+      prazoPorque: prazo.porque,
+      desde: f.detected_at,
+      cadeia,
+      porqueAberta: porqueContinuaAberta(prova),
       esperaHoras: horasEntre(detectado, entrada.now),
       estado: null,
       ticketId: f.linked_ticket_id,
-      deskUrl: null,
-      // Past its SLA is high; still inside it is a normal day's work.
-      prioridade: prazo < entrada.now ? "alta" : "media",
+      deskUrl: f.linked_ticket_id ? urlDoDesk(f.linked_ticket_id, entrada.deskOrgId) : null,
+      // Past its deadline is high; still inside it is a normal day's work.
+      prioridade: vencido ? "alta" : "media",
       devolucaoIds: null,
       atribuicaoOrigem: null,
     });
@@ -373,6 +491,11 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       porque: a.descricao,
       contacto: contactoDe(a.customerPhone, entrada, a.contactName),
       prazo: null,
+      prazoOrigem: null,
+      prazoPorque: null,
+      desde: null,
+      cadeia: null,
+      porqueAberta: null,
       esperaHoras: null,
       estado: null,
       ticketId: null,
@@ -390,7 +513,48 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
     const estado = (t.status ?? "").trim();
     const aguardaTerceiros = ESTADOS_A_AGUARDAR_TERCEIROS.has(estado.toLowerCase());
     const assunto = t.subject?.trim() || "Pedido sem assunto";
-    const simulacao = !aguardaTerceiros && (/^fazer simula/i.test(estado) || pedeSimulacao(assunto));
+    const eDeSimulacao = /^fazer simula/i.test(estado) || pedeSimulacao(assunto);
+    const simulacao = !aguardaTerceiros && eDeSimulacao;
+
+    const criado = new Date(t.criadoEm);
+    const nosso = nossos.get(t.id);
+    const cadeia = derivarCadeia({
+      pedidoEm: t.criadoEm,
+      envolveSimulacao: eDeSimulacao,
+      simulacaoEnviadaEm: nosso?.primeiro ?? null,
+      ultimoContactoNosso: nosso?.ultimo ?? null,
+    });
+
+    // What kind of waiting this is, which is what sets the clock. A ticket
+    // nobody has answered owes a first reply; one where the quote already went
+    // out is a follow-up going cold; one parked on the customer is neither.
+    const tipo: TipoDeEspera = aguardaTerceiros
+      ? "espera_cliente"
+      : cadeia.emFalta === "follow_up"
+        ? "follow_up_simulacao"
+        : simulacao
+          ? "simulacao_pedida"
+          : "primeira_resposta";
+
+    // The deadline counts from our last move when there was one: a ticket
+    // answered a week ago and then left is not twenty days late, it is a
+    // week late, and saying otherwise makes the oldest row the loudest
+    // rather than the most neglected.
+    const desde = nosso?.ultimo ? new Date(nosso.ultimo) : criado;
+    const prazo = derivarPrazo({
+      texto: assunto,
+      referencia: criado,
+      desde,
+      tipo,
+      agora: entrada.now,
+    });
+    const prova: PedidoDeProva = {
+      diaDoCompromisso: toLisbonDate(desde),
+      desde: desde.toISOString(),
+      fingerprint: impressaoDigital(t.contactPhone),
+      ticketId: t.id,
+    };
+    const vencido = Date.parse(prazo.quando) < entrada.now.getTime();
 
     out.push({
       id: `tkt_${t.id}`,
@@ -406,13 +570,20 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
         telefone: t.contactPhone,
         email: t.contactEmail,
       },
-      prazo: null,
+      prazo: prazo.quando,
+      prazoOrigem: prazo.origem,
+      prazoPorque: prazo.porque,
+      desde: desde.toISOString(),
+      cadeia,
+      // A ticket parked on the customer is not open because we failed to
+      // reply, so the "no reply from you" line would be a lie on that row.
+      porqueAberta: aguardaTerceiros ? null : porqueContinuaAberta(prova),
       esperaHoras: t.idadeHoras,
       estado: estado || null,
       ticketId: t.id,
-      deskUrl: t.deskUrl,
+      deskUrl: t.deskUrl || urlDoDesk(t.id, entrada.deskOrgId),
       // Waiting on someone else is never urgent to *us*, however old it is.
-      prioridade: aguardaTerceiros ? "baixa" : t.idadeHoras >= 72 ? "alta" : "media",
+      prioridade: aguardaTerceiros ? "baixa" : vencido ? "alta" : "media",
       devolucaoIds: null,
       atribuicaoOrigem: null,
     });
@@ -464,4 +635,72 @@ export function agruparTarefas(tarefas: readonly Tarefa[]): GrupoDeTarefas[] {
     );
     return [{ categoria, tarefas: ordenadas }];
   });
+}
+
+/* ── O que já está feito sai sozinho ────────────────────────────────────── */
+
+/** A task that closed itself, and the proof that closed it. */
+export interface TarefaFechada {
+  id: string;
+  titulo: string;
+  /** Who it was with, for the card that lists them. */
+  quem: string | null;
+  prova: Prova;
+}
+
+export interface ResultadoDeProva {
+  tarefas: Tarefa[];
+  fechadas: TarefaFechada[];
+}
+
+/**
+ * Split the list into what is still owed and what the record already shows was
+ * done.
+ *
+ * This is what replaces the "Devolvida" button. A button is a declaration and
+ * can be wrong in the direction that hurts; Ringover and Desk already hold the
+ * answer, and asking them costs a comparison.
+ *
+ * `espera_cliente` is deliberately exempt. Those rows are not work — they are
+ * a note that the ball is elsewhere — and what would "complete" one is the
+ * *customer* answering, which is somebody else's evidence entirely. Closing
+ * them on our own reply would delete the row for doing the thing that put it
+ * there.
+ */
+export function separarPorProva(
+  tarefas: readonly Tarefa[],
+  chamadas: readonly ChamadaParaEvidencia[],
+  respostas: readonly RespostaParaEvidencia[],
+): ResultadoDeProva {
+  const abertas: Tarefa[] = [];
+  const fechadas: TarefaFechada[] = [];
+
+  for (const t of tarefas) {
+    if (t.categoria === "espera_cliente" || !t.desde) {
+      abertas.push(t);
+      continue;
+    }
+    const prova = procurarProva(
+      {
+        diaDoCompromisso: toLisbonDate(new Date(t.desde)),
+        desde: t.desde,
+        fingerprint: impressaoDigital(t.contacto.telefone),
+        ticketId: t.ticketId,
+      },
+      chamadas,
+      respostas,
+    );
+    if (prova) {
+      fechadas.push({
+        id: t.id,
+        titulo: t.titulo,
+        quem: t.contacto.nome ?? t.contacto.telefone,
+        prova,
+      });
+    } else {
+      abertas.push(t);
+    }
+  }
+
+  return { tarefas: abertas, fechadas };
 }

@@ -49,8 +49,15 @@ export function emailDoTicket(rawJson: unknown): string | null {
   return null;
 }
 
-/** Desk deep link. Built from the ticket id, which is what Desk routes on. */
-function deskUrl(ticketId: string, orgId: string | undefined): string {
+/**
+ * Desk deep link. Built from the ticket id, which is what Desk routes on.
+ *
+ * Exported because every task with a ticket deserves one, not just the rows
+ * that came *from* the ticket table: a promise made on a call carries a
+ * `linked_ticket_id` and used to render without a way to reach it, which left
+ * the agent knowing the ticket number and having to search for it by hand.
+ */
+export function urlDoDesk(ticketId: string, orgId: string | undefined): string {
   // Without an org id there is no valid tenant path, so fall back to the
   // generic agent URL rather than emitting a link that 404s.
   if (!orgId) return `https://desk.zoho.com/agent/tickets/details/${encodeURIComponent(ticketId)}`;
@@ -101,7 +108,7 @@ export async function listTicketsEmRisco(params: {
         status: t.status,
         idadeHoras: idadeEmHoras(t.createdTime, now),
         criadoEm: t.createdTime.toISOString(),
-        deskUrl: deskUrl(t.id, params.orgId),
+        deskUrl: urlDoDesk(t.id, params.orgId),
         contactName: t.contactName,
         contactPhone: t.contactPhone,
         contactEmail: emailDoTicket(t.rawJson),
