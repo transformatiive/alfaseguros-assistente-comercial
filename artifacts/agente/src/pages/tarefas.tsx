@@ -6,15 +6,18 @@ import {
   CircleCheck,
   Handshake,
   Hourglass,
+  Check,
+  Circle,
   Inbox,
   PhoneIncoming,
+  Search,
   TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { enviar } from "@/lib/api";
 import { porqueMe, telefone } from "@/lib/formatos";
-import type { CategoriaTarefa, Tarefa } from "@/lib/tipos";
+import type { Cadeia, CategoriaTarefa, Passo, Tarefa, TarefaFechada } from "@/lib/tipos";
 
 /**
  * The task list — the whole panel, really.
@@ -139,6 +142,85 @@ export function prazoTexto(prazo: string, agora: Date): { texto: string; tarde: 
   };
 }
 
+
+/* ── A cadeia ───────────────────────────────────────────────────────────── */
+
+const NOME_DO_PASSO: Record<Passo["passo"], string> = {
+  pedido: "Pedido",
+  simulacao: "Simulação",
+  follow_up: "Follow-up",
+};
+
+/** "25/08", from an ISO instant. The year is noise on a list about this week. */
+function diaCurto(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString("pt-PT", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "Europe/Lisbon",
+  });
+}
+
+/**
+ * The three steps, with the missing one marked.
+ *
+ * This is the row's argument in one line: the customer asked, the quote went
+ * out, nobody followed up. Reading it takes about as long as reading the
+ * heading, and it is the difference between "there is a ticket" and "there is
+ * a gap".
+ *
+ * Rendered only when at least two steps are meaningful. A single "Pedido ✓" is
+ * a chain of one, which explains nothing and costs a line on every row.
+ */
+function CadeiaDaTarefa({ cadeia }: { cadeia: Cadeia }) {
+  const passos = cadeia.passos.filter((p) => p.estado !== "nao_aplicavel");
+  if (passos.length < 2) return null;
+
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-x-1 gap-y-1">
+      {passos.map((p, i) => (
+        <span key={p.passo} className="flex items-center gap-1">
+          {i > 0 && <span className="mr-1 h-px w-3 bg-stone-200" aria-hidden />}
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 rounded px-1.5 py-0.5 t-meta",
+              p.estado === "feito"
+                ? "bg-emerald-50 text-emerald-800"
+                : "bg-red-50 font-medium text-red-700",
+            )}
+          >
+            {p.estado === "feito" ? (
+              <Check className="h-3 w-3" aria-hidden />
+            ) : (
+              <Circle className="h-2.5 w-2.5" aria-hidden />
+            )}
+            {NOME_DO_PASSO[p.passo]}
+            {p.quando && <span className="tabular-nums opacity-70">{diaCurto(p.quando)}</span>}
+            {p.estado === "em_falta" && <span>em falta</span>}
+          </span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Why the task is still here, said as the thing that was looked for and not
+ * found.
+ *
+ * A panel that decides what you owe without showing its working asks to be
+ * believed. This line is what makes it arguable instead: an agent who knows
+ * they called yesterday can see that the lookup missed, and say so.
+ */
+function PorqueAberta({ texto }: { texto: string }) {
+  return (
+    <p className="mt-1 flex items-start gap-1 t-meta text-stone-400">
+      <Search className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+      <span>{texto}</span>
+    </p>
+  );
+}
+
 /* ── Componentes ────────────────────────────────────────────────────────── */
 
 export function GrupoDeTarefas({
@@ -244,10 +326,14 @@ function LinhaTarefa({
           agent knows what the conversation was about without opening a thing. */}
       {t.porque && <p className="t-narrativa mt-1 text-stone-600">{t.porque}</p>}
 
+      {t.cadeia && <CadeiaDaTarefa cadeia={t.cadeia} />}
+
       {/* Why this landed on this agent. Only the missed calls have it, and only
           they need it: a call attributed by history rather than by a ticket is
           an inference, and an agent double-checking one is right to. */}
       {razao && <p className="mt-1 t-meta text-stone-400">{razao}</p>}
+
+      {t.porqueAberta && <PorqueAberta texto={t.porqueAberta} />}
 
       {(prazo || t.estado || t.deskUrl) && (
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -257,8 +343,15 @@ function LinhaTarefa({
                 "t-meta rounded px-1.5 py-0.5",
                 prazo.tarde ? "bg-red-50 text-red-700" : "bg-stone-100 text-stone-600",
               )}
+              // The reason belongs next to the date, not in a legend: an agent
+              // argues with "we think two days is fair" and does not argue with
+              // "you told the customer Monday morning".
+              title={t.prazoPorque ?? undefined}
             >
               {prazo.texto}
+              {t.prazoPorque && (
+                <span className="ml-1 font-normal opacity-60">· {t.prazoPorque}</span>
+              )}
             </span>
           )}
           {t.estado && (
@@ -270,7 +363,10 @@ function LinhaTarefa({
             <a
               href={t.deskUrl}
               target="_blank"
-              rel="noreferrer"
+              // `noopener` as well as `noreferrer`: the panel runs inside a
+              // Zoho widget, and a tab opened from it must not keep a handle
+              // back to the window it came from.
+              rel="noopener noreferrer"
               className="t-meta inline-flex items-center gap-0.5 text-stone-400 transition-colors hover:text-stone-900"
             >
               abrir no Desk
@@ -356,6 +452,64 @@ function Contacto({ t }: { t: Tarefa }) {
         </a>
       )}
     </p>
+  );
+}
+
+/**
+ * What closed itself, and the proof that closed it.
+ *
+ * This card exists because of something the panel takes away. A "Devolvida"
+ * button gives the agent a receipt: they press it, the row goes, the system
+ * clearly noticed. Closing tasks by evidence instead is more honest — the
+ * record decides, not a claim — but it removes that receipt, and a list that
+ * silently loses rows reads as forgetful rather than as attentive.
+ *
+ * So the receipt moves here, and gets better in the process: it no longer says
+ * "you said you did this", it says *"chamada atendida de 6 min a 05/09"*.
+ */
+export function FecharamSozinhas({ fechadas }: { fechadas: TarefaFechada[] }) {
+  const [tudo, setTudo] = useState(false);
+  if (fechadas.length === 0) return null;
+  const mostradas = tudo ? fechadas : fechadas.slice(0, 4);
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+      <header className="flex items-start gap-2.5 bg-emerald-50 px-3 py-2.5">
+        <span className="mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white/70 text-emerald-700">
+          <CircleCheck className="h-3.5 w-3.5" aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="t-micro text-emerald-800">
+            Fecharam-se sozinhas
+            <span className="ml-1.5 tabular-nums opacity-60">{fechadas.length}</span>
+          </h2>
+          <p className="t-meta mt-0.5 text-stone-500">
+            Nada para marcar — saíram da lista porque o registo mostra que foram feitas
+          </p>
+        </div>
+      </header>
+
+      <ul className="divide-y divide-stone-100">
+        {mostradas.map((f) => (
+          <li key={f.id} className="px-3 py-2">
+            <p className="t-body text-stone-700">
+              {f.titulo}
+              {f.quem && <span className="text-stone-500"> · {f.quem}</span>}
+            </p>
+            <p className="t-meta mt-0.5 text-stone-400">{f.prova.descricao}</p>
+          </li>
+        ))}
+      </ul>
+
+      {fechadas.length > mostradas.length && (
+        <button
+          className="t-meta w-full border-t border-stone-200 bg-stone-50 py-1.5 text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900"
+          onClick={() => setTudo(true)}
+        >
+          mostrar mais {fechadas.length - mostradas.length}
+        </button>
+      )}
+    </section>
   );
 }
 

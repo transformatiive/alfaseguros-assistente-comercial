@@ -97,6 +97,21 @@ export interface Contacto {
  * (`titulo`), why (`porque`), with whom (`contacto`), by when (`prazo`) —
  * whichever of the four sources it came from.
  */
+export type NomeDoPasso = "pedido" | "simulacao" | "follow_up";
+export type EstadoDoPasso = "feito" | "em_falta" | "nao_aplicavel";
+
+export interface Passo {
+  passo: NomeDoPasso;
+  estado: EstadoDoPasso;
+  quando: string | null;
+}
+
+/** Where the business sits in pedido → simulação → follow-up. */
+export interface Cadeia {
+  passos: Passo[];
+  emFalta: NomeDoPasso | null;
+}
+
 export interface Tarefa {
   id: string;
   categoria: CategoriaTarefa;
@@ -104,6 +119,13 @@ export interface Tarefa {
   porque: string | null;
   contacto: Contacto;
   prazo: string | null;
+  /** Promised to the customer, or worked out by us. The row says which. */
+  prazoOrigem: "prometido" | "inferido" | null;
+  prazoPorque: string | null;
+  desde: string | null;
+  cadeia: Cadeia | null;
+  /** The absence that keeps this on the list, written out. */
+  porqueAberta: string | null;
   esperaHoras: number | null;
   /** Desk status, verbatim, on the rows that come from a ticket. */
   estado: string | null;
@@ -151,6 +173,13 @@ export function agruparTarefas(
   });
 }
 
+export interface TarefaFechada {
+  id: string;
+  titulo: string;
+  quem: string | null;
+  prova: { tipo: "chamada" | "resposta"; descricao: string };
+}
+
 export interface Coaching {
   paragraphOverview: string;
   strengths: string[];
@@ -174,6 +203,8 @@ export interface AgentePainel {
   acoes: Bloco<Acao>;
   /** The four blocks above, regrouped by what each row asks of the agent. */
   tarefas: Tarefa[];
+  /** What closed itself since the last look, and the proof that closed it. */
+  fechadas: TarefaFechada[];
   coaching: Coaching | BlocoIndisponivel;
   /** Always unavailable today — scheduling lives in the CRM, which is not connected. */
   agendamentos: BlocoIndisponivel;

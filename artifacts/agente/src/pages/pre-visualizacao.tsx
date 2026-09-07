@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Indisponivel } from "@/components/Bloco";
+import { Seletor } from "@/components/seletor";
 import { diaPorExtenso } from "@/lib/formatos";
 import { CorpoDoPainel } from "@/pages/painel-corpo";
 import { VistaDaEquipa } from "@/pages/equipa";
@@ -68,21 +69,20 @@ export function PreVisualizacao() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2 border-b border-stone-200 bg-white px-3 py-2">
-        <select
-          className="rounded-md border border-stone-200 bg-white px-2 py-1 t-body text-stone-700"
-          value={escolhido === null ? "" : String(escolhido)}
-          onChange={(e) =>
-            setQuem(e.target.value === "equipa" ? "equipa" : Number(e.target.value))
-          }
-        >
-          {colaboradores.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.nome}
-              {c.papel === "supervisor" ? " (supervisor)" : ""}
-            </option>
-          ))}
-          <option value="equipa">— Vista da equipa —</option>
-        </select>
+        <Seletor
+          className="w-56"
+          etiqueta="Ver o painel de"
+          valor={escolhido === null ? "" : String(escolhido)}
+          aoMudar={(v) => setQuem(v === "equipa" ? "equipa" : Number(v))}
+          opcoes={[
+            ...colaboradores.map((c) => ({
+              valor: String(c.id),
+              rotulo: c.nome,
+              nota: c.papel === "supervisor" ? "supervisor" : undefined,
+            })),
+            { valor: "equipa", rotulo: "Vista da equipa", nota: "todos os agentes" },
+          ]}
+        />
 
         <input
           type="date"

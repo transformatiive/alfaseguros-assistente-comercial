@@ -6,8 +6,15 @@ import { listTicketsEmRisco, type TicketEmRisco } from "./tickets-risco.js";
 import { loadPendingFollowUps, type FollowUpItem } from "./followups-query.js";
 import { listAcoesDoAgente, loadCoaching, type Coaching } from "./acoes-query.js";
 import type { Acao } from "./acoes.js";
-import { derivarTarefas, impressaoDigital, type Tarefa } from "./tarefas.js";
+import {
+  derivarTarefas,
+  impressaoDigital,
+  separarPorProva,
+  type Tarefa,
+  type TarefaFechada,
+} from "./tarefas.js";
 import { carregarContactos } from "./contactos.js";
+import { carregarEvidencias } from "./evidencia-query.js";
 
 /**
  * The agent panel payload: what must I do today, in four blocks.
@@ -119,6 +126,15 @@ export interface AgentePainel {
    * failed must still be able to say so on its own.
    */
   tarefas: Tarefa[];
+  /**
+   * What closed itself since the last look, and the proof that closed it.
+   *
+   * Not decoration. Taking away the "Devolvida" button takes away the agent's
+   * only sign that the panel noticed them working; this is what gives it back,
+   * and it is the difference between a list that feels alive and one that
+   * feels like it forgot.
+   */
+  fechadas: TarefaFechada[];
   /** What the daily analysis wrote about this agent. Null when it has not run. */
   coaching: Coaching | BlocoIndisponivel;
   /**
@@ -179,7 +195,7 @@ async function montarTarefas(b: {
   ticketsEmRisco: TicketEmRisco[] | BlocoIndisponivel;
   followUps: FollowUpItem[] | BlocoIndisponivel;
   acoes: Acao[] | BlocoIndisponivel;
-}): Promise<Tarefa[]> {
+}): Promise<{ tarefas: Tarefa[]; fechadas: TarefaFechada[] }> {
   const lista = <T,>(x: T[] | BlocoIndisponivel): T[] => (Array.isArray(x) ? x : []);
   const devolucoes = lista(b.devolucoes);
   const followUps = lista(b.followUps);
@@ -213,15 +229,36 @@ async function montarTarefas(b: {
     if (t.contactEmail) contactos.emails.set(fp, t.contactEmail);
   }
 
-  return derivarTarefas({
+  // Every ticket any row might point at — the ones on the panel plus the ones
+  // a promise was linked to. Narrowing the comment scan to these is what keeps
+  // the evidence pass cheap enough to run far more often than the analysis.
+  const ticketIds = [
+    ...tickets.map((t) => t.id),
+    ...followUps.map((f) => f.linked_ticket_id),
+    ...devolucoes.map((d) => d.ticketId),
+  ].filter((id): id is string => !!id);
+
+  // A failure here must not empty the list: with no evidence, nothing closes
+  // itself and every task stays — which is exactly the safe direction.
+  const evidencias = await carregarEvidencias([...new Set(ticketIds)]).catch(() => ({
+    chamadas: [],
+    respostas: [],
+  }));
+
+  const todas = derivarTarefas({
     devolucoes,
     followUps,
     tickets,
     acoes,
     nomePorFingerprint: contactos.nomes,
     emailPorFingerprint: contactos.emails,
+    chamadas: evidencias.chamadas,
+    respostas: evidencias.respostas,
+    deskOrgId: env().ZOHO_DESK_ORG_ID,
     now: new Date(),
   });
+
+  return separarPorProva(todas, evidencias.chamadas, evidencias.respostas);
 }
 
 /**
@@ -321,7 +358,12 @@ export async function buildAgentePainel(
   // Built after the blocks settle, because it reshapes what they produced —
   // and looked up here rather than inside `derivarTarefas` so that function
   // stays pure and testable with a literal.
-  const tarefas = await montarTarefas({ devolucoes, ticketsEmRisco, followUps, acoes });
+  const { tarefas, fechadas } = await montarTarefas({
+    devolucoes,
+    ticketsEmRisco,
+    followUps,
+    acoes,
+  });
 
   return {
     painel: {
@@ -337,6 +379,7 @@ export async function buildAgentePainel(
       followUps,
       acoes,
       tarefas,
+      fechadas,
       coaching,
       agendamentos: indisponivel(
         "Os agendamentos ainda não estão disponíveis — vivem no CRM, que ainda não está ligado a este painel.",

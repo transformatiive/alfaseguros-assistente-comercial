@@ -22,6 +22,8 @@ function entrada(p: Partial<EntradaTarefas> = {}): EntradaTarefas {
     acoes: [],
     nomePorFingerprint: new Map(),
     emailPorFingerprint: new Map(),
+    chamadas: [],
+    respostas: [],
     now: AGORA,
     ...p,
   };
@@ -217,8 +219,37 @@ describe("derivarTarefas", () => {
     expect(t.map((x) => x.categoria)).toEqual(["enviar_simulacao", "cumprir_compromisso"]);
     expect(t[0].titulo).toBe("Enviar simulação — Multirriscos");
     expect(t[1].titulo).toBe("Confirmar a morada com o cliente");
-    // Both carry the deadline, because "for whom and by when" is the point.
-    expect(t[0].prazo).toBe("2026-08-30T08:00:00.000Z");
+    // Both carry a deadline, because "for whom and by when" is the point —
+    // and the deadline is no longer detection + a flat 24 h. Promised on a
+    // Saturday with no date said, a quote is due at the end of the second
+    // working day: Tuesday 1 September, 18:00 Lisbon.
+    expect(t[0].prazo).toBe("2026-09-01T17:00:00.000Z");
+    expect(t[0].prazoOrigem).toBe("inferido");
+    expect(t[0].prazoPorque).toBe("simulação pedida — 2 dias úteis");
+  });
+
+  it("lê a data escrita na promessa em vez de inventar um prazo", () => {
+    const t = derivarTarefas(
+      entrada({
+        followUps: [
+          {
+            id: "a",
+            contact_phone: "351917240802",
+            contact_email: null,
+            follow_up_descricao:
+              "Confirmar até ao final do dia 03/09 se o Carlos enviou os dados da Médis.",
+            follow_up_sla_hours: 24,
+            linked_ticket_id: null,
+            product: "Saúde",
+            detected_at: "2026-09-04T11:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    // 03/09 às 18:00 de Lisboa, e não 05/09 (detecção + 24 h).
+    expect(t[0].prazo).toBe("2026-09-03T17:00:00.000Z");
+    expect(t[0].prazoOrigem).toBe("prometido");
+    expect(t[0].prazoPorque).toBe("prometido na conversa de 04/09");
   });
 
   it("marca como alta uma promessa que já passou do prazo", () => {

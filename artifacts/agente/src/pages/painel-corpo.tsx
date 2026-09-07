@@ -3,7 +3,7 @@ import { Kpi, TiraDeIndicadores } from "@/components/editorial";
 import { hora } from "@/lib/formatos";
 import { Agendamentos } from "@/pages/blocos";
 import { BlocoCoaching, FaixaDoDia } from "@/pages/blocos-acoes";
-import { GrupoDeTarefas, SemTarefas } from "@/pages/tarefas";
+import { FecharamSozinhas, GrupoDeTarefas, SemTarefas } from "@/pages/tarefas";
 import {
   agruparTarefas,
   coachingDisponivel,
@@ -143,6 +143,8 @@ export function CorpoDoPainel({
           </div>
         </div>
       )}
+
+      <FecharamSozinhas fechadas={painel.fechadas ?? []} />
 
       {coaching ? (
         <BlocoCoaching c={coaching} />

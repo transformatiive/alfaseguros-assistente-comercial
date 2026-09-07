@@ -58,3 +58,41 @@ export function lisbonDayBoundsISO(yyyymmdd: string): [string, string] {
 export function isValidIsoDate(s: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(`${s}T00:00:00Z`));
 }
+
+/**
+ * An instant at a given Lisbon wall-clock time on a given Lisbon calendar day.
+ *
+ * Deadlines are said in wall-clock terms — "até às 18:00", "até quinta-feira"
+ * — and storing them as UTC arithmetic on a day boundary drifts by an hour
+ * twice a year. Going through the zone's real offset for that date keeps
+ * "18:00" meaning 18:00 in Lisbon in March and in August alike.
+ */
+export function lisbonInstant(yyyymmdd: string, hour: number, minute = 0): Date {
+  const hh = String(Math.max(0, Math.min(23, Math.trunc(hour)))).padStart(2, "0");
+  const mm = String(Math.max(0, Math.min(59, Math.trunc(minute)))).padStart(2, "0");
+  return new Date(`${yyyymmdd}T${hh}:${mm}:00${lisbonOffsetForDate(yyyymmdd)}`);
+}
+
+/** Add calendar days to a `YYYY-MM-DD`, staying on the Lisbon calendar. */
+export function somarDias(yyyymmdd: string, dias: number): string {
+  const [y, m, d] = yyyymmdd.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d) + dias * 86_400_000).toISOString().slice(0, 10);
+}
+
+/** Day of week for a `YYYY-MM-DD`: 0 = Sunday … 6 = Saturday. */
+export function diaDaSemana(yyyymmdd: string): number {
+  const [y, m, d] = yyyymmdd.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
+/** Add working days, skipping Saturday and Sunday. `dias` must be >= 0. */
+export function somarDiasUteis(yyyymmdd: string, dias: number): string {
+  let dia = yyyymmdd;
+  let restantes = Math.max(0, Math.trunc(dias));
+  while (restantes > 0) {
+    dia = somarDias(dia, 1);
+    const w = diaDaSemana(dia);
+    if (w !== 0 && w !== 6) restantes -= 1;
+  }
+  return dia;
+}
