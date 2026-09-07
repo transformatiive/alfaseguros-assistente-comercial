@@ -32,18 +32,29 @@ momento. O horário acompanha as mudanças da hora porque vem do tzdata.
 
 - **Nome**: `agenda` (projeto *Alfaseguros Supervisor Virtual*)
 - **Cron**: `*/15 * * * *`
-- **Config**: `railway.agenda.json` — apontado em *Settings → Config as code*
+- **Start command**: `pnpm --filter @workspace/scripts run agenda`
 - **Restart policy**: `NEVER` (é um trabalho pontual, não um servidor)
-- **Variáveis**: `PUBLIC_APP_URL`, `CRON_WEBHOOK_SECRET`, `AGENDA_INTERVALO_MIN`
+- **Variáveis**: `PUBLIC_APP_URL`, `CRON_WEBHOOK_SECRET`, `AGENDA_INTERVALO_MIN`,
+  `BASE_PATH`
 
-### Porque tem um ficheiro de configuração próprio
+### Porque é que a agenda precisa de `BASE_PATH`
 
-O `railway.json` da raiz corre `pnpm run build`, que constrói o repositório
-inteiro — incluindo o `mockup-sandbox`, que exige `BASE_PATH` e faz o build
-falhar sem ele. Um ficheiro de configuração no repositório sobrepõe-se ao que
-está definido pela API ou pelo painel, por isso não bastava mudar o comando
-de build no serviço: era ignorado. A agenda corre por `tsx` e não precisa de
-build nenhum, só de `pnpm install`.
+Não precisa — precisa o *build*. O `railway.json` da raiz corre
+`pnpm run build`, que constrói o repositório inteiro, incluindo o
+`mockup-sandbox`, cujo `vite.config.ts` rebenta se `BASE_PATH` não estiver
+definida. O primeiro build da agenda falhou exactamente aí.
+
+O caminho limpo seria um ficheiro de configuração só para este serviço, mas o
+Railway depreciou o config-as-code (`railway.json` / `railway.toml`) a favor
+de `.railway/railway.ts`, e a API já recusa apontar um ficheiro alternativo.
+Por isso a agenda leva `BASE_PATH=/`, que nunca usa: o valor só existe para o
+build do repositório passar. É desperdício — a agenda constrói frontends de
+que não precisa — mas só acontece quando há um commit novo, nunca nas
+corridas do cron, que reutilizam o build.
+
+Vale a pena, um dia, fazer o `mockup-sandbox` assumir um valor por omissão em
+vez de rebentar: hoje `pnpm run build` na raiz também falha numa máquina
+local sem essa variável.
 
 ## Verificar
 
