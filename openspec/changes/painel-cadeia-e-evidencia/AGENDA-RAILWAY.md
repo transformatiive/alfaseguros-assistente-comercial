@@ -27,6 +27,18 @@ evidência lê, por isso uma resposta enviada no Desk às 09:15 só faz a tarefa
 desaparecer depois de isto ter corrido. A verificação em si é SQL puro e
 acontece a cada leitura do painel — não tem cron nem custo.
 
+### A janela do Desk
+
+Os ticks frequentes pedem **2 horas** de histórico de tickets; os de 08:00 e
+16:30 pedem os **2 dias** por omissão do endpoint.
+
+Duas horas cobrem um tick perdido e são baratas o suficiente para correr
+quatro vezes por hora sem gastar a quota do Zoho. Não cobrem um serviço que
+esteve em baixo toda a tarde, nem uma segunda-feira a olhar para trás para um
+fim-de-semana — e um ticket alterado dentro de um buraco que nada volta a ler
+é uma tarefa que fica errada até alguém reparar à mão. Por isso as duas
+corridas que já param para trabalhar a sério fazem a sincronização larga.
+
 ## Porque é que a hora está no código e não no cron
 
 **Os agendamentos do Railway são avaliados só em UTC.** Não há campo de fuso.

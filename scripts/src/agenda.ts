@@ -86,11 +86,26 @@ async function main(): Promise<void> {
 
   let falhou = false;
 
-  if (plano.refresh) {
-    // Two hours of Desk history: enough to cover a missed tick, cheap enough
-    // to run four times an hour without eating the org's API quota.
-    const r = await pedir(`${base}/api/painel/refresh`, { janelaHoras: 2 }, segredo);
-    console.log(`refresh → HTTP ${r.estado} ${r.texto.slice(0, 400)}`);
+  // A wide sync on the slots that already stop to do real work, a narrow one
+  // the rest of the time.
+  //
+  // Two hours covers a missed tick and is cheap enough to run four times an
+  // hour without eating the org's Zoho quota. It does not cover a service that
+  // was down all afternoon, or a Monday morning looking back at a weekend —
+  // and a ticket modified inside a gap that nothing ever re-reads is a task
+  // that stays wrong until somebody notices by hand. So the twice-daily slots
+  // omit the window and take the endpoint's default of two days.
+  const janelaLarga = plano.analise !== null;
+
+  if (plano.refresh || janelaLarga) {
+    const r = await pedir(
+      `${base}/api/painel/refresh`,
+      janelaLarga ? {} : { janelaHoras: 2 },
+      segredo,
+    );
+    console.log(
+      `refresh (${janelaLarga ? "2 dias" : "2 h"}) → HTTP ${r.estado} ${r.texto.slice(0, 400)}`,
+    );
     if (!r.ok) falhou = true;
   }
 
