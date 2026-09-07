@@ -1,5 +1,6 @@
+import { BarChart3 } from "lucide-react";
 import { Indisponivel } from "@/components/Bloco";
-import { hora } from "@/lib/formatos";
+import { diaPorExtenso, haQuantoTempo, iniciais, primeiroNome, saudacao } from "@/lib/formatos";
 import { BlocoCoaching } from "@/pages/blocos-acoes";
 import { FecharamSozinhas, GrupoPorPrazo, SemTarefas } from "@/pages/tarefas";
 import {
@@ -62,10 +63,13 @@ export function CorpoDoPainel({
   return (
     <div className="space-y-4">
       <Masthead
+        nome={painel.colaborador.nome}
+        data={painel.data}
         atrasado={piles.atrasado.length}
         hoje={piles.hoje.length}
         aguardar={piles.aguardar.length}
         atualizadoEm={painel.atualizadoEm}
+        agora={agora}
       />
 
       {falhas.length > 0 && (
@@ -115,46 +119,89 @@ export function CorpoDoPainel({
 
       <p className="t-micro px-0.5 font-normal text-stone-400">
         Análise e prazos às 08:00 e 16:30 · verificação de evidência de 15 em 15 minutos ·
-        atualizado às {hora(painel.atualizadoEm)}
+        {" "}
+        {painel.tarefas.length} tarefas
       </p>
     </div>
   );
 }
 
-/** The three numbers that say whether today is heavy, above everything else. */
+/**
+ * Who, when, and how heavy — the three things read before any scrolling.
+ *
+ * The greeting is not decoration. This panel tells somebody what they failed
+ * to do yet; opening on their own name, in their own language, is the
+ * difference between a colleague's note and an audit. The date beside it is
+ * what stops a preview of last Thursday being mistaken for this morning.
+ *
+ * Only the overdue count is coloured. Three red numbers is no number in red at
+ * all, and this is the one that means a person is waiting.
+ */
 function Masthead({
+  nome,
+  data,
   atrasado,
   hoje,
   aguardar,
   atualizadoEm,
+  agora,
 }: {
+  nome: string;
+  data: string;
   atrasado: number;
   hoje: number;
   aguardar: number;
   atualizadoEm: string;
+  agora: Date;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3">
-      <div className="flex gap-6">
-        {/* Only the overdue count gets red. Three red numbers is no number in
-            red at all, and this is the one that means somebody is waiting. */}
-        <Numero valor={atrasado} rotulo="Atrasado" cor={atrasado > 0 ? "text-red-600" : undefined} />
-        <Numero valor={hoje} rotulo="Hoje" />
-        <Numero valor={aguardar} rotulo="A aguardar" cor="text-stone-500" />
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-stone-200 bg-white px-4 py-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white">
+          <BarChart3 className="h-4.5 w-4.5" aria-hidden />
+        </span>
+        <div className="min-w-0">
+          <div className="t-micro truncate text-stone-400">
+            {diaPorExtenso(data)} · Agenda do dia
+          </div>
+          <h1 className="t-pagina truncate text-stone-900">
+            {saudacao(agora)}, {primeiroNome(nome)}
+          </h1>
+        </div>
       </div>
-      <span className="flex items-center gap-1.5 t-meta text-stone-400">
-        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
-        atualizado às {hora(atualizadoEm)}
-      </span>
+
+      <div className="flex items-center gap-4">
+        <div className="flex gap-5">
+          <Numero
+            valor={atrasado}
+            rotulo="Atrasado"
+            cor={atrasado > 0 ? "text-red-600" : undefined}
+          />
+          <Numero valor={hoje} rotulo="Hoje" />
+          <Numero valor={aguardar} rotulo="A aguardar" cor="text-stone-500" />
+        </div>
+        <div className="flex items-center gap-3 border-l border-stone-200 pl-4">
+          <span className="flex items-center gap-1.5 t-meta whitespace-nowrap text-stone-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
+            Atualizado {haQuantoTempo(atualizadoEm, agora)}
+          </span>
+          <span
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-50 t-meta font-bold text-indigo-700"
+            title={nome}
+          >
+            {iniciais(nome)}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
 
 function Numero({ valor, rotulo, cor }: { valor: number; rotulo: string; cor?: string }) {
   return (
-    <div>
+    <div className="text-center">
       <div className={`t-pagina tabular-nums ${cor ?? "text-stone-900"}`}>{valor}</div>
-      <div className="t-micro text-stone-400">{rotulo}</div>
+      <div className="t-micro whitespace-nowrap text-stone-400">{rotulo}</div>
     </div>
   );
 }

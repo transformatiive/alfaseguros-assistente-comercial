@@ -72,3 +72,49 @@ export function porqueMe(origem: string | null): string | null {
       return null;
   }
 }
+
+/**
+ * "Bom dia" / "Boa tarde" / "Boa noite", by Lisbon's clock.
+ *
+ * Reads the *current* hour and not the panel's date on purpose: the greeting
+ * is addressed to the person reading, and somebody reviewing Friday's panel on
+ * a Monday afternoon is not being greeted about Friday.
+ */
+export function saudacao(agora: Date = new Date()): string {
+  const h = Number(
+    agora.toLocaleString("en-GB", { timeZone: "Europe/Lisbon", hour: "2-digit", hour12: false }),
+  );
+  if (h < 12) return "Bom dia";
+  if (h < 20) return "Boa tarde";
+  return "Boa noite";
+}
+
+/** The name people are actually called by. "Tiago", not "Tiago Paiva". */
+export function primeiroNome(nome: string): string {
+  return nome.trim().split(/\s+/)[0] ?? nome;
+}
+
+/** Up to two initials, for the avatar. */
+export function iniciais(nome: string): string {
+  const partes = nome.trim().split(/\s+/).filter(Boolean);
+  if (partes.length === 0) return "?";
+  const primeiras = [partes[0], partes[partes.length - 1]].map((p) => p[0]?.toUpperCase() ?? "");
+  return [...new Set(primeiras)].join("").slice(0, 2) || "?";
+}
+
+/**
+ * "há 4 min" — how long ago the panel was built.
+ *
+ * A wall-clock time ("às 08:00") makes the reader do the subtraction to answer
+ * the only question they have, which is whether they are looking at something
+ * stale. Relative answers it directly.
+ */
+export function haQuantoTempo(iso: string, agora: Date = new Date()): string {
+  const minutos = Math.floor((agora.getTime() - Date.parse(iso)) / 60_000);
+  if (!Number.isFinite(minutos) || minutos < 1) return "agora mesmo";
+  if (minutos < 60) return `há ${minutos} min`;
+  const horas = Math.floor(minutos / 60);
+  if (horas < 24) return horas === 1 ? "há 1 h" : `há ${horas} h`;
+  const dias = Math.floor(horas / 24);
+  return dias === 1 ? "há 1 dia" : `há ${dias} dias`;
+}
