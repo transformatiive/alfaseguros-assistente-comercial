@@ -2,10 +2,24 @@
 
 ## Os dois trabalhos
 
-| Trabalho | Endpoint | Ritmo | Toca no modelo? |
-|---|---|---|---|
-| Refresh dos canais | `POST /api/painel/refresh` | 15 min, 07:00–20:00, dias úteis | **Não**, por construção e por teste |
-| Análise | `POST /api/run` | 08:00 e 16:30, dias úteis | Sim, por conversa |
+| Trabalho | Endpoint | Ritmo | Dia analisado | Toca no modelo? |
+|---|---|---|---|---|
+| Refresh dos canais | `POST /api/painel/refresh` | 15 min, 07:00–20:00, seg–sex | — | **Não**, por construção e por teste |
+| Análise da manhã | `POST /api/run` | 08:00, **ter–sáb** | o dia anterior | Sim, por conversa |
+| Análise da tarde | `POST /api/run` | 16:30, seg–sex | o próprio dia | Sim, por conversa |
+
+### Porque é que a análise da manhã corre de terça a sábado
+
+Porque lê o **dia anterior**. Correr de segunda a sexta — que é a escolha
+óbvia — perde a sexta-feira para sempre: sexta de manhã lê quinta, e segunda
+de manhã lê domingo. Um dia de trabalho inteiro desaparecia todas as semanas,
+e em silêncio, porque uma segunda vazia é indistinguível de uma segunda calma.
+
+A corrida de sábado não tem ninguém no escritório, e é esse o ponto: o painel
+está pronto quando chegarem na segunda.
+
+A da tarde lê o **próprio dia**, que é o que a torna útil — apanha as chamadas
+da manhã. Por isso corre nos dias de trabalho.
 
 O refresh ressincroniza as chamadas do dia no Ringover e os tickets e
 comentários recentes no Desk. São esses dois canais que a verificação de
@@ -74,3 +88,24 @@ Os dois crons que hoje disparam `painel/refresh` e `run` a partir do n8n
 passam a ser duplicados. Devem ser desativados — não por custo (a análise não
 reanalisa o que já tem `analysisJson`), mas para haver **uma só** fonte da
 verdade sobre quando é que estas coisas correm.
+
+## Por fazer: desligar os crons do n8n
+
+Os agendamentos que hoje existem no n8n para disparar `POST /api/run` e
+`POST /api/painel/refresh` passaram a ser duplicados do serviço `agenda`.
+
+Não é uma questão de custo — a análise não reanalisa uma conversa que já
+tenha `analysisJson`, por isso a segunda corrida do dia é quase gratuita. É
+uma questão de haver **uma só** resposta à pergunta "quando é que isto
+corre". Com dois agendadores, quem investigar uma manhã em que o painel
+chegou vazio tem de descobrir primeiro qual dos dois falhou.
+
+Ficam identificados:
+
+- `4rx93UXKxdDdmPpY` — *ALFASEGUROS: Supervisor Virtual — Daily Cron*,
+  `POST /api/run`
+- o workflow de refresh do painel criado em setembro, `POST /api/painel/refresh`
+  às 08:00 e 16:30 (`Europe/Lisbon`)
+
+Basta desativá-los (não apagar: o histórico de execuções é útil se algo
+correr mal na primeira semana do serviço novo).

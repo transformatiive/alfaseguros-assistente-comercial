@@ -71,10 +71,36 @@ function diaUtil(dia: number): boolean {
  * A slot fires on the tick that *contains* it, so the window has to be at
  * least as wide as the cron interval or a slot falls between two ticks and
  * never runs. Fifteen minutes of cron, fifteen minutes of window.
+ *
+ * ## The days are not "working days", and that distinction has teeth
+ *
+ * The morning run analyses **yesterday**, so the day it must run on is the day
+ * *after* a working day — Tuesday to Saturday. Running it Monday to Friday
+ * instead, which is the obvious-looking choice, means Friday's calls are never
+ * analysed at all: Friday morning reads Thursday, and Monday morning reads
+ * Sunday. A whole working day would vanish every week, and quietly, because an
+ * empty Monday looks exactly like a quiet Monday.
+ *
+ * Saturday's run costs nothing but the container: nobody is in the office, but
+ * the panel is ready when they arrive on Monday.
+ *
+ * The afternoon run reads **today**, which is what makes it worth paying for —
+ * it picks up the morning's calls. So it runs on the working days themselves.
  */
-export const SLOTS_ANALISE: readonly { hora: number; minuto: number }[] = [
-  { hora: 8, minuto: 0 },
-  { hora: 16, minuto: 30 },
+export interface SlotDeAnalise {
+  hora: number;
+  minuto: number;
+  /** Which day to analyse: -1 is yesterday, 0 is today. */
+  offset: number;
+  /** Lisbon weekday numbers, 0 = Sunday. */
+  dias: readonly number[];
+}
+
+export const SLOTS_ANALISE: readonly SlotDeAnalise[] = [
+  // Terça a sábado: o dia anterior foi um dia de trabalho.
+  { hora: 8, minuto: 0, offset: -1, dias: [2, 3, 4, 5, 6] },
+  // Segunda a sexta: apanha as chamadas da própria manhã.
+  { hora: 16, minuto: 30, offset: 0, dias: [1, 2, 3, 4, 5] },
 ];
 
 /** The hours the refresh is worth running. Nobody is working at 03:00. */
@@ -83,26 +109,30 @@ export const HORA_FIM = 20;
 
 export interface Plano {
   refresh: boolean;
-  analise: boolean;
+  /** The day to analyse, or null when no analysis is due on this tick. */
+  analise: number | null;
   porque: string;
 }
 
 export function planear(agora: Date, intervaloMin = 15): Plano {
   const { dia, hora, minuto } = relogioLisboa(agora);
   const relogio = `${String(hora).padStart(2, "0")}:${String(minuto).padStart(2, "0")}`;
-
-  if (!diaUtil(dia)) return { refresh: false, analise: false, porque: `fim-de-semana (${relogio})` };
-
-  const dentroDoHorario = hora >= HORA_INICIO && hora < HORA_FIM;
   const agoraMin = hora * 60 + minuto;
-  const analise = SLOTS_ANALISE.some((s) => {
-    const slot = s.hora * 60 + s.minuto;
-    return agoraMin >= slot && agoraMin < slot + intervaloMin;
+
+  // Deliberately not an early return on the weekend: Saturday morning has no
+  // refresh and does have the analysis of Friday, and collapsing the two
+  // decisions into one "is it a working day" is exactly how Friday got lost.
+  const refresh = diaUtil(dia) && hora >= HORA_INICIO && hora < HORA_FIM;
+
+  const slot = SLOTS_ANALISE.find((s) => {
+    if (!s.dias.includes(dia)) return false;
+    const inicio = s.hora * 60 + s.minuto;
+    return agoraMin >= inicio && agoraMin < inicio + intervaloMin;
   });
 
   return {
-    refresh: dentroDoHorario,
-    analise,
+    refresh,
+    analise: slot ? slot.offset : null,
     porque: `${relogio} em Lisboa`,
   };
 }
