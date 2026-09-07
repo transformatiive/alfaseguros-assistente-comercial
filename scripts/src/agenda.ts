@@ -75,9 +75,11 @@ async function main(): Promise<void> {
   const intervalo = Number(process.env.AGENDA_INTERVALO_MIN ?? 15);
 
   const plano = planear(new Date(), Number.isFinite(intervalo) ? intervalo : 15);
-  console.log(`Tick: ${plano.porque} → refresh=${plano.refresh} análise=${plano.analise}`);
+  const queDia =
+    plano.analise === null ? "não" : plano.analise === 0 ? "hoje" : `há ${-plano.analise} dia(s)`;
+  console.log(`Tick: ${plano.porque} → refresh=${plano.refresh} análise=${queDia}`);
 
-  if (!plano.refresh && !plano.analise) {
+  if (!plano.refresh && plano.analise === null) {
     console.log("Nada a fazer neste tick.");
     return;
   }
@@ -92,12 +94,14 @@ async function main(): Promise<void> {
     if (!r.ok) falhou = true;
   }
 
-  if (plano.analise) {
-    // `date_offset: -1` — the analysis reads yesterday, which is the day whose
-    // calls are complete. The endpoint resolves it in Lisbon time.
+  if (plano.analise !== null) {
+    // The offset comes from the slot, not from a constant: the morning run
+    // reads yesterday (the day whose calls are complete) and the afternoon one
+    // reads today (which is what makes it worth paying for). The endpoint
+    // resolves the offset in Lisbon time.
     const r = await pedir(
       `${base}/api/run`,
-      { date_offset: -1, source: "cron" },
+      { date_offset: plano.analise, source: "cron" },
       segredo,
     );
     console.log(`análise → HTTP ${r.estado} ${r.texto.slice(0, 400)}`);
