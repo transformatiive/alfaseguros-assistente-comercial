@@ -17,7 +17,9 @@
     "diag:devolucoes": "tsx ./src/diagnostico-devolucoes.ts",
     "painel:link": "tsx ./src/painel-link.ts",
     "diag:runs": "tsx ./src/diagnostico-runs.ts",
-    "diag:ringover": "tsx ./src/diagnostico-ringover.ts"
+    "diag:ringover": "tsx ./src/diagnostico-ringover.ts",
+    "agenda": "tsx ./src/agenda.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@workspace/db": "workspace:*",
@@ -28,6 +30,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "tsx": "catalog:"
+    "tsx": "catalog:",
+    "vitest": "^3.2.4"
   }
 }

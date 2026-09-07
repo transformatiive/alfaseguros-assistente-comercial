@@ -23,6 +23,24 @@ import { syncTickets } from "./sync-tickets.js";
 /** Days of ticket history to re-sync. Two covers a weekend gap or a missed run. */
 export const DIAS_DE_TICKETS = 2;
 
+/**
+ * The narrow window the frequent runs use.
+ *
+ * The evidence pass — "did a reply go out on this ticket?" — is only as fresh
+ * as the last Desk sync, so this job now runs every fifteen minutes and not
+ * twice a day. Re-syncing two whole days of tickets fifty times a day is a lot
+ * of Zoho calls for an answer that changed in the last few minutes, so a
+ * frequent run asks for two hours and the twice-daily one still asks for two
+ * days. Two hours rather than one: a run that fails silently must not leave a
+ * gap the next run cannot cover.
+ */
+export const HORAS_FREQUENTE = 2;
+
+export interface OpcoesRefresh {
+  /** How far back to re-sync tickets. Defaults to `DIAS_DE_TICKETS` days. */
+  janelaHoras?: number;
+}
+
 export interface RefreshResult {
   data: string;
   devolucoes: { ok: true; candidatos: number; pendentes: number } | { ok: false; erro: string };
@@ -33,8 +51,15 @@ function mensagem(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-export async function runPainelRefresh(data: string = todayLisbon()): Promise<RefreshResult> {
+export async function runPainelRefresh(
+  data: string = todayLisbon(),
+  opcoes: OpcoesRefresh = {},
+): Promise<RefreshResult> {
   const cfg = env();
+  const janelaHoras =
+    opcoes.janelaHoras && opcoes.janelaHoras > 0
+      ? opcoes.janelaHoras
+      : DIAS_DE_TICKETS * 24;
   const inicio = Date.now();
 
   const [devolucoesR, ticketsR] = await Promise.allSettled([
@@ -57,7 +82,7 @@ export async function runPainelRefresh(data: string = todayLisbon()): Promise<Re
       const client = new ZohoDeskClient({ auth, orgId: cfg.ZOHO_DESK_ORG_ID });
 
       const to = new Date();
-      const from = new Date(to.getTime() - DIAS_DE_TICKETS * 86_400_000);
+      const from = new Date(to.getTime() - janelaHoras * 3_600_000);
       return syncTickets(client, from, to);
     })(),
   ]);

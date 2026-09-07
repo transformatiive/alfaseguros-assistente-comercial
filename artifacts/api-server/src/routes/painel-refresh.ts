@@ -29,14 +29,29 @@ router.post("/painel/refresh", (req, res, next) => {
       return;
     }
 
-    const body = (req.body ?? {}) as { date?: unknown };
+    const body = (req.body ?? {}) as { date?: unknown; janelaHoras?: unknown };
     if (body.date !== undefined && (typeof body.date !== "string" || !DATA_RE.test(body.date))) {
       res.status(400).json({ error: "Invalid date format — use YYYY-MM-DD" });
       return;
     }
+    // Bounded, not just typed: this number decides how much of Zoho's history
+    // is pulled, so an unbounded one is a way to spend the org's API quota
+    // from outside. A week is more than any caller here needs.
+    if (
+      body.janelaHoras !== undefined &&
+      (typeof body.janelaHoras !== "number" ||
+        !Number.isFinite(body.janelaHoras) ||
+        body.janelaHoras <= 0 ||
+        body.janelaHoras > 168)
+    ) {
+      res.status(400).json({ error: "janelaHoras must be a number between 1 and 168" });
+      return;
+    }
 
     const data = typeof body.date === "string" ? body.date : todayLisbon();
-    const result = await runPainelRefresh(data);
+    const result = await runPainelRefresh(data, {
+      janelaHoras: typeof body.janelaHoras === "number" ? body.janelaHoras : undefined,
+    });
 
     // 200 even when one half failed: the caller is a scheduler, and the body
     // says exactly what worked. A blanket 500 would make n8n retry the half

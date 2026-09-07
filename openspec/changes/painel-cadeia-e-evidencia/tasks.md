@@ -61,3 +61,16 @@
       que nenhuma evidência consegue fazer.
 - [ ] Depende de 6: sem a verificação de 15 em 15 minutos, tirar os botões
       deixa o agente sete horas a olhar para trabalho já feito.
+
+## 6. Cadência — FEITO
+- [x] `scripts/src/agenda-plano.ts` — a regra, pura: que trabalhos são devidos
+      a um dado momento de Lisboa. `scripts/src/agenda.ts` — o disparo.
+- [x] Um só cron no Railway, de 15 em 15 minutos. **A decisão de hora está no
+      código e não na expressão cron**: os agendamentos do Railway são
+      avaliados só em UTC, e Portugal é UTC+1 sete meses por ano e UTC+0 os
+      outros cinco. `0 7 * * 1-5` são 08:00 em agosto e 07:00 em janeiro.
+- [x] `runPainelRefresh` aceita `janelaHoras`: os ticks frequentes pedem 2
+      horas de histórico do Desk, os de 08:00/16:30 pedem 2 dias. Sem isto,
+      cinquenta corridas por dia custavam cinquenta sincronizações de 2 dias.
+- [x] 9 testes sobre a regra, cada um com o mesmo momento de Lisboa escrito
+      nos dois offsets.
