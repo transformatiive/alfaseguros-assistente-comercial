@@ -346,10 +346,13 @@ export async function buildAgentePainel(
   if (coachingR.status === "rejected") {
     coaching = indisponivel("Não foi possível carregar o coaching.");
   } else if (!coachingR.value) {
-    // A missing row is not a failure — it means the analysis has not run for
-    // this day yet. Saying so beats an empty card the agent has to interpret.
+    // A missing row is not a failure. With the lookback in `loadCoaching`, it
+    // now means something narrower and worth saying precisely: no day in the
+    // last week was analysed for this agent. The old wording ("a análise deste
+    // dia ainda não correu") was true of every morning and therefore told
+    // nobody anything.
     coaching = indisponivel(
-      "A análise deste dia ainda não correu, por isso ainda não há leitura do dia.",
+      "Ainda não há leitura do dia — a análise mais recente é anterior à última semana.",
     );
   } else {
     coaching = coachingR.value;
