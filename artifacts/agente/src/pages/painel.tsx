@@ -3,7 +3,6 @@ import { Indisponivel } from "@/components/Bloco";
 import { obter } from "@/lib/api";
 import { comDia, diaPedido } from "@/lib/dia";
 import { CorpoDoPainel } from "@/pages/painel-corpo";
-import { diaPorExtenso } from "@/lib/formatos";
 import type { AgentePainel } from "@/lib/tipos";
 
 /**
@@ -35,17 +34,11 @@ export function PainelDoAgente() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 pb-10 sm:p-4">
-      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 px-0.5">
-        <h1 className="t-pagina text-stone-900">
-          O meu dia
-        </h1>
-        <p className="t-micro text-stone-400">
-          {data ? data.colaborador.nome : " "}
-          {data && <> · {diaPorExtenso(data.data)}</>}
-        </p>
-      </header>
-
+    // The heading lives in the panel body's masthead, with the name, the date
+    // and the counts together. Two headings, one here and one there, put the
+    // agent's name on screen twice and the day's numbers under a title that
+    // said nothing.
+    <div className="mx-auto max-w-6xl p-3 pb-10 sm:p-4">
       <CorpoDoPainel painel={data} aCarregar={isLoading} />
     </div>
   );
