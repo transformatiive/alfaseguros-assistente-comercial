@@ -218,6 +218,8 @@ export interface Coaching {
   blindSpots: string[];
   closingRateObservations: string;
   coachingRecommendations: string[];
+  /** The day this reading is about — not always the day on screen. */
+  data: string;
 }
 
 export function coachingDisponivel(

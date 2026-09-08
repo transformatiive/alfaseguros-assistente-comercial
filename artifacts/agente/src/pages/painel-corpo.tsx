@@ -109,7 +109,7 @@ export function CorpoDoPainel({
         </div>
 
         <aside className="min-w-0 space-y-3">
-          <LeituraDoDia c={coaching} motivo={semCoaching?.motivo} />
+          <LeituraDoDia c={coaching} motivo={semCoaching?.motivo} dia={painel.data} />
           <FecharamSozinhas fechadas={painel.fechadas ?? []} />
           <AAguardar tarefas={piles.aguardar} />
         </aside>
@@ -207,17 +207,33 @@ function Numero({ valor, rotulo, cor }: { valor: number; rotulo: string; cor?: s
 }
 
 /**
- * The day's one sentence, at the top of the rail.
+ * The day's one sentence, at the top of the rail — and *which* day it is about.
  *
- * When it is missing, the reason matters more than the box: an analysis that
- * has not run for this day is not a broken panel, and saying so in one grey
- * line beats a bordered placeholder that looks like a failure.
+ * The panel shows today; a reading of the day is written once the day is over.
+ * Those are two different clocks, and pretending they are one produced a card
+ * that every morning said the analysis had not run — true, and useless, since
+ * what somebody wants at nine o'clock is yesterday's reading. So the reading
+ * falls back to the most recent one and says so out loud: "Leitura de segunda,
+ * 7 de setembro" is honest and still useful; the same words presented as
+ * today's would be neither.
  */
-function LeituraDoDia({ c, motivo }: { c: Coaching | null; motivo?: string }) {
+function LeituraDoDia({
+  c,
+  motivo,
+  dia,
+}: {
+  c: Coaching | null;
+  motivo?: string;
+  /** The day the panel itself is showing. */
+  dia: string;
+}) {
   if (c?.paragraphOverview) {
+    const doProprioDia = c.data === dia;
     return (
       <section className="rounded-xl border border-indigo-200 bg-indigo-50/60 px-4 py-3">
-        <h2 className="t-micro mb-1.5 text-indigo-700">Uma sugestão para hoje</h2>
+        <h2 className="t-micro mb-1.5 text-indigo-700">
+          {doProprioDia ? "Uma sugestão para hoje" : `Leitura de ${diaPorExtenso(c.data)}`}
+        </h2>
         <p className="t-narrativa text-stone-700">{c.paragraphOverview}</p>
       </section>
     );
