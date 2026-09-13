@@ -44,7 +44,10 @@ aberta a manhã toda, e um token emitido às 09:00 já morreu às 11:00.
 ## Instalação
 
 1. `zet validate` e depois `zet pack` nesta pasta. O pacote sai em
-   `dist/zoho-desk.zip`.
+   `dist/zoho-desk.zip`. (O `zet pack` é um zip simples dos quatro ficheiros —
+   `app/widget.html`, `app/translations/en.json`, `plugin-manifest.json`,
+   `resources.json` — por isso o pacote também se reconstrói sem o CLI, desde
+   que a estrutura de pastas dentro do zip seja essa.)
 2. Em [sigma.zoho.com](https://sigma.zoho.com), criar uma extensão **privada**
    para o Desk e carregar o zip.
 3. Instalar no portal da Alfaseguros.
@@ -81,3 +84,17 @@ várias formas plausíveis e, quando não encontra identidade nenhuma, mostra o 
 recebeu — para o próximo a olhar resolver num relance em vez de adivinhar.
 
 É o primeiro teste a fazer com `zet run` ou com uma conta real.
+
+## Porque é que o "Endereço do painel" não é realmente configurável
+
+O domínio está fixado duas vezes no manifesto — `whiteListedDomains` e
+`cspDomains.connect-src`. Um valor diferente no campo de configuração seria
+bloqueado pelo browser antes de chegar a lado nenhum. O campo continua a
+existir (retirá-lo deixava órfão o valor já guardado no portal), mas o widget
+tem o endereço por omissão no código e só precisa mesmo de ler o **token**.
+
+Isto foi uma decisão tomada a corrigir um bug real: o widget dava-se como não
+configurado porque não conseguia ler a resposta de
+`ZOHODESK.get("extension.config")`, cuja forma a Zoho não documenta. Fazer o
+arranque depender de duas leituras quando só uma é indispensável era um risco
+sem retorno.
