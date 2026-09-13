@@ -1,20 +1,22 @@
-# Extensão do Zoho Desk — lançador do painel
+# Extensão do Zoho Desk — o painel dentro do Desk
 
-Uma barra no topo do Zoho Desk com um botão, **O meu painel**, e a contagem de
-chamadas por devolver do próprio agente.
+O painel do agente, inteiro, numa faixa de ecrã inteiro no topo do Zoho Desk.
 
-Não é o painel. É o que identifica o agente e o leva lá.
+A extensão não desenha o painel: identifica o agente, emite-lhe um token de 15
+minutos e aponta-lhe um `<iframe>`. O painel continua a ser servido pelo Railway.
 
-## Porque é um lançador e não o painel
+## Foi um lançador até 13/09
 
-`desk.topband` **é** ecrã inteiro — está documentado como tal e foi confirmado
-contra a documentação da Zoho. A extensão podia, tecnicamente, desenhar o painel
-inteiro aqui dentro.
+Até aqui era uma barra fina com um botão **O meu painel** que abria um separador
+novo. A razão era a sessão de 8 horas prevista na secção 7C: dentro de um iframe
+o armazenamento do browser é particionado, e um cookie *first-party* só existe
+numa navegação de topo.
 
-Não o faz por uma razão diferente da capacidade: dentro de um iframe o
-armazenamento do browser é particionado, e a sessão de 8 horas prevista na
-secção 7C precisa de um cookie *first-party*, que só existe numa navegação de
-topo. Abrir num separador novo é o que torna essa sessão possível.
+Essa razão caiu porque a sessão de 8 horas também caiu. O painel (`lib/sessao.ts`)
+guarda o token **só em memória** — sem cookie, sem `localStorage`, sem
+`sessionStorage` — por isso não há nada que o particionamento possa partir. O
+que se perde é a sessão longa; o que se ganha é o painel onde o agente já está,
+sem um separador extra a gerir.
 
 ## Como funciona
 
@@ -27,19 +29,39 @@ ZOHODESK.get("user")  ──►  POST /api/agente/sessao   (X-Painel-Widget-Toke
         │                          ▼
         │                   token de 15 minutos
         ▼                          │
-GET /api/agente/painel ◄───────────┘
-   (contagem na barra)
+<iframe src="/agente#token=…"> ◄───┘
         │
-   clique no botão
+        │  o painel apanha um 401 e diz
         ▼
-novo separador: /agente#token=…
+postMessage "painel-agente:token-expirado"  ──►  novo token, novo src
 ```
 
 O token viaja no fragmento do URL — a única parte que os browsers nunca enviam
 ao servidor nem escrevem num log de acessos. O painel lê-o uma vez e apaga-o.
 
-Cada clique pede um token novo em vez de reutilizar o do arranque: a barra fica
-aberta a manhã toda, e um token emitido às 09:00 já morreu às 11:00.
+Três decisões que é fácil desfazer sem querer:
+
+- **O token é emitido antes de o iframe ser desenhado.** Um iframe apontado a um
+  token morto é uma página em branco, e branco é indistinguível de um portal
+  partido. Emitir primeiro dá a cada falha um sítio onde ser dita.
+- **A renovação é conduzida pelo painel, não por um relógio.** É o painel que
+  sabe quando o token morreu — apanha um 401 e avisa. Um temporizador sozinho
+  recarregaria a página debaixo das mãos do agente com o token ainda bom. O
+  temporizador que existe só dispara com o separador escondido, onde o painel
+  não faz pedidos e portanto nunca daria por nada.
+- **A escuta de `message` verifica a origem.** Qualquer coisa na página pode
+  enviar uma mensagem; agir sobre uma de outra proveniência era deixar um
+  terceiro emitir-nos tokens à vontade.
+
+## Enquadramento (framing)
+
+Duas coisas têm de estar certas, e estão:
+
+- O `/agente` responde sem `X-Frame-Options` e sem CSP `frame-ancestors`, por
+  isso pode ser enquadrado. Confirmado a 13/09; nada a mudar no Railway.
+- O manifesto autoriza o nosso domínio em `frame-src` **e** `child-src`
+  (`connect-src` cobre o `fetch`, não o enquadramento). São iframes encadeados —
+  Desk → `zappsusercontent.com` → Railway.
 
 ## Instalação
 
@@ -51,7 +73,7 @@ aberta a manhã toda, e um token emitido às 09:00 já morreu às 11:00.
 2. Em [sigma.zoho.com](https://sigma.zoho.com), criar uma extensão **privada**
    para o Desk e carregar o zip.
 3. Instalar no portal da Alfaseguros.
-4. **Preencher os dois parâmetros de configuração** — sem eles a barra diz que
+4. **Preencher os dois parâmetros de configuração** — sem eles o widget diz que
    não está configurada e não faz mais nada:
 
    | Parâmetro | Valor |
@@ -62,16 +84,16 @@ aberta a manhã toda, e um token emitido às 09:00 já morreu às 11:00.
 O token do widget é pedido na instalação, e não escrito no código, por duas
 razões: não vive no repositório, e pode ser rodado sem reempacotar a extensão.
 
-## O que a barra diz quando corre mal
+## O que aparece quando corre mal
 
 Nunca fica em branco. Cada falha diz o que fazer a seguir:
 
 | Situação | O que aparece |
 |---|---|
-| Configuração por preencher | pede a um administrador que preencha os dois campos |
+| Configuração por preencher | pede a um administrador que preencha os dois campos, e mostra o que o Desk devolveu |
 | Agente sem `zid` no painel (403) | nomeia o email dele e manda falar com o Nuno |
 | SDK do Desk não carregou | pede para recarregar |
-| Contagem falhou, mas o resto está bem | o botão continua a funcionar |
+| Renovação do token falhou | esconde o iframe e diz porquê — um painel morto não fica a fingir que está vivo |
 
 Uma falha silenciosa é indistinguível de um portal partido, e o agente não tem
 como saber qual dos dois é.
@@ -88,7 +110,7 @@ recebeu — para o próximo a olhar resolver num relance em vez de adivinhar.
 ## Porque é que o "Endereço do painel" não é realmente configurável
 
 O domínio está fixado duas vezes no manifesto — `whiteListedDomains` e
-`cspDomains.connect-src`. Um valor diferente no campo de configuração seria
+`cspDomains`. Um valor diferente no campo de configuração seria
 bloqueado pelo browser antes de chegar a lado nenhum. O campo continua a
 existir (retirá-lo deixava órfão o valor já guardado no portal), mas o widget
 tem o endereço por omissão no código e só precisa mesmo de ler o **token**.
@@ -118,4 +140,4 @@ não chaves do objecto — foi assim que uma versão anterior do widget falhou: 
 à procura de chaves com esses nomes e nunca as encontrava.
 
 O `procurarValores()` lê as duas formas, a de pares e a de chave directa, para
-que um SDK futuro que achate o array não parta a barra em silêncio.
+que um SDK futuro que achate o array não parta o arranque em silêncio.

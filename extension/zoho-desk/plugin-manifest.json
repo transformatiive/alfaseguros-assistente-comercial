@@ -20,6 +20,12 @@
   "cspDomains": {
     "connect-src": [
       "https://supervisor-production-f030.up.railway.app"
+    ],
+    "frame-src": [
+      "https://supervisor-production-f030.up.railway.app"
+    ],
+    "child-src": [
+      "https://supervisor-production-f030.up.railway.app"
     ]
   },
   "zohoAuthorisation": {},
