@@ -13,33 +13,22 @@
         --perigo: #dc2626;
       }
       * { box-sizing: border-box; }
+      html, body { height: 100%; }
       body {
         margin: 0;
         font: 14px/1.45 Inter, -apple-system, "Segoe UI", sans-serif;
         color: var(--fg);
         background: #fff;
+        overflow: hidden;
       }
-      .barra {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 10px 16px;
-        border-bottom: 1px solid var(--linha);
-      }
-      button {
-        font: inherit;
-        font-weight: 600;
-        color: #fff;
-        background: var(--fg);
+      /* The panel fills the band. No chrome of our own around it: anything we
+         drew here would be a second header above the panel's own. */
+      #quadro {
+        display: block;
+        width: 100%;
+        height: 100%;
         border: 0;
-        border-radius: 6px;
-        padding: 7px 14px;
-        cursor: pointer;
       }
-      button:disabled { opacity: 0.55; cursor: default; }
-      .contagem { color: var(--muted); font-size: 13px; }
-      .contagem strong { color: var(--fg); font-variant-numeric: tabular-nums; }
-      .urgente strong { color: var(--perigo); }
       .aviso {
         padding: 12px 16px;
         font-size: 13px;
@@ -58,37 +47,42 @@
     </style>
   </head>
   <body>
-    <div class="barra" id="barra" hidden>
-      <button id="abrir" disabled>O meu painel</button>
-      <span class="contagem" id="contagem"></span>
-    </div>
+    <iframe id="quadro" title="O meu painel" hidden></iframe>
     <div class="aviso" id="aviso" hidden></div>
 
     <script src="https://js.zohostatic.com/support/developer_sdk/v1/js/ZohoDeskClientSDK.min.js"></script>
     <script>
       /*
-       * The Desk launcher.
+       * The Desk host for the panel.
        *
-       * Its whole job is to turn "this browser has a logged-in Desk agent" into
-       * "this browser has a 15-minute panel token", and then to get out of the
-       * way. It renders a button and a count; it never renders the panel.
+       * It turns "this browser has a logged-in Desk agent" into "this browser
+       * has a 15-minute panel token", puts the panel on screen inside Desk,
+       * and then keeps that token alive. It used to be a launcher — a thin
+       * band with a button that opened the panel in another tab — and the
+       * button and the second tab are both gone.
        *
-       * Two things here are deliberate and easy to undo by accident:
+       * Three things here are deliberate and easy to undo by accident:
        *
-       *  1. **The token is minted fresh on click**, not reused from page load.
-       *     A band sits open all morning; a token minted at 09:00 is long dead
-       *     by 11:00, and handing the panel a dead token produces a blank page
-       *     with no explanation.
+       *  1. **The token is minted before the frame is drawn**, never after.
+       *     An iframe pointed at a dead token renders a blank page with no
+       *     explanation, and blank is indistinguishable from a broken portal.
+       *     Minting first means every failure has somewhere to be said.
        *
-       *  2. **Every failure says something.** A launcher that silently does
-       *     nothing is indistinguishable from a broken portal, and the agent
-       *     has no way to tell which. Each failure names what to do next.
+       *  2. **Renewal is driven by the panel, not by a clock.** The panel
+       *     posts `painel-agente:token-expirado` when the API rejects its
+       *     token; this listens and swaps the frame. A timer alone would
+       *     reload the page under the agent's hands while the token was still
+       *     good. The timer that does exist only fires while the tab is
+       *     hidden — see `agendarRenovacao`.
+       *
+       *  3. **Every failure says something.** A host that silently shows
+       *     nothing is the worst outcome: the agent cannot tell whether the
+       *     panel is empty, broken, or still loading. Each failure names what
+       *     to do next.
        */
 
       var el = {
-        barra: document.getElementById("barra"),
-        abrir: document.getElementById("abrir"),
-        contagem: document.getElementById("contagem"),
+        quadro: document.getElementById("quadro"),
         aviso: document.getElementById("aviso"),
       };
 
@@ -287,36 +281,39 @@
         });
       }
 
-      function contarDevolucoes(cfg, token) {
-        return fetch(cfg.base + "/api/agente/painel", {
-          headers: { Authorization: "Bearer " + token },
-        })
-          .then(function (res) {
-            if (!res.ok) throw new Error(String(res.status));
-            return res.json();
-          })
-          .then(function (painel) {
-            // An unavailable block is an object, not an array. Counting its
-            // length would quietly report 0 — "nothing to do" — when the truth
-            // is "we could not look".
-            if (!Array.isArray(painel.devolucoes)) return null;
-            return painel.devolucoes.length;
-          });
+      /*
+       * Put the panel on screen with a freshly minted token.
+       *
+       * The token travels in the fragment: browsers never send a fragment to a
+       * server and never write it to an access log. The panel reads it once and
+       * erases it from its own address bar.
+       *
+       * Swapping `src` is a full reload of the panel, which is the point — it is
+       * the only way to hand a new token to an app that keeps it in memory and
+       * nowhere else.
+       */
+      function desenharPainel(cfg, token) {
+        el.quadro.src = cfg.base + "/agente#token=" + encodeURIComponent(token);
+        el.quadro.hidden = false;
+        el.aviso.hidden = true;
       }
 
-      function desenharContagem(n) {
-        if (n === null) {
-          el.contagem.textContent = "";
-          return;
+      /*
+       * Ask Desk for the whole height.
+       *
+       * `desk.topband` is full-screen, but the frame Desk gives an extension is
+       * sized by Desk, not by its content, and a panel in a 200px slot is not a
+       * panel. RESIZE is documented with px/%/vh/vw units. It is wrapped because
+       * an SDK that does not know this verb must not cost us the panel: a
+       * badly-sized panel is still a panel, an exception here would be a blank
+       * one.
+       */
+      function ocuparEcra() {
+        try {
+          ZOHODESK.invoke("RESIZE", { height: "100vh", width: "100%" });
+        } catch (e) {
+          /* a smaller panel is still a panel */
         }
-        if (n === 0) {
-          el.contagem.textContent = "Sem chamadas por devolver.";
-          return;
-        }
-        el.contagem.className = "contagem urgente";
-        el.contagem.innerHTML =
-          "<strong>" + n + "</strong> " +
-          (n === 1 ? "chamada por devolver" : "chamadas por devolver");
       }
 
       window.onload = function () {
@@ -365,57 +362,81 @@
               return;
             }
 
-            el.barra.hidden = false;
+            // One renewal at a time. The panel can post the same complaint from
+            // several requests failing together; without this each one would
+            // mint a token and reload the frame on top of the last.
+            var aRenovar = false;
 
-            // The count needs a token too, so this doubles as a live check that
-            // minting works. If it fails with 403 the agent learns now, on
-            // arrival, rather than on the click.
-            pedirToken(cfg, utilizador, portalId)
-              .then(function (sessao) {
-                el.abrir.disabled = false;
-                return contarDevolucoes(cfg, sessao.token).then(desenharContagem);
-              })
-              .catch(function (erro) {
-                if (erro && erro.naoReconhecido) {
-                  el.barra.hidden = true;
-                  mostrarAviso(
-                    "A tua conta do Zoho Desk (<b>" +
-                      (utilizador.email || utilizador.id) +
-                      "</b>) ainda não está ligada ao painel. Fala com o Nuno " +
-                      "para ficares ligado — é uma linha de configuração, não " +
-                      "demora."
-                  );
-                  return;
-                }
-                // Anything else may well be transient, so the button stays
-                // usable: a failed count must not block the panel.
-                el.abrir.disabled = false;
-                el.contagem.textContent = "Não consegui ler as chamadas por devolver.";
-              });
-
-            el.abrir.onclick = function () {
-              el.abrir.disabled = true;
+            function renovar() {
+              if (aRenovar) return;
+              aRenovar = true;
               pedirToken(cfg, utilizador, portalId)
                 .then(function (sessao) {
-                  el.abrir.disabled = false;
-                  // The token travels in the fragment: browsers never send it to
-                  // a server and never write it to an access log. The panel
-                  // reads it once and erases it.
-                  window.open(
-                    cfg.base + "/agente#token=" + encodeURIComponent(sessao.token),
-                    "_blank",
-                    "noopener"
-                  );
+                  aRenovar = false;
+                  desenharPainel(cfg, sessao.token);
                 })
                 .catch(function (erro) {
-                  el.abrir.disabled = false;
-                  mostrarAviso(
-                    erro && erro.naoReconhecido
-                      ? "A tua conta do Zoho Desk ainda não está ligada ao painel. Fala com o Nuno."
-                      : "Não foi possível abrir o painel. Tenta outra vez; se continuar, avisa o Nuno."
-                  );
+                  aRenovar = false;
+                  falhou(erro);
                 });
-            };
+            }
+
+            function falhou(erro) {
+              el.quadro.hidden = true;
+              if (erro && erro.naoReconhecido) {
+                mostrarAviso(
+                  "A tua conta do Zoho Desk (<b>" +
+                    (utilizador.email || utilizador.id) +
+                    "</b>) ainda não está ligada ao painel. Fala com o Nuno " +
+                    "para ficares ligado — é uma linha de configuração, não " +
+                    "demora."
+                );
+                return;
+              }
+              mostrarAviso(
+                "Não foi possível abrir o painel. Recarrega a página; se " +
+                  "continuar, avisa o Nuno. <code>" +
+                  String(erro && erro.message ? erro.message : erro).slice(0, 200) +
+                  "</code>"
+              );
+            }
+
+            /*
+             * The panel asks; we answer. `sessao.ts` posts this message the
+             * moment the API rejects its token, which is the only moment that
+             * actually needs a new one.
+             *
+             * The origin check is the whole security of this listener: anything
+             * on the page can post a message, and acting on one from elsewhere
+             * would let a third party make us mint tokens at will.
+             */
+            window.addEventListener("message", function (evento) {
+              if (evento.origin !== cfg.base) return;
+              var dados = evento.data;
+              if (!dados || dados.tipo !== "painel-agente:token-expirado") return;
+              renovar();
+            });
+
+            /*
+             * The clock, kept only for the case the message cannot cover: a tab
+             * left open and hidden, where the panel makes no requests, notices
+             * nothing, and would come back dead. A visible tab is left alone —
+             * reloading the panel under the agent's hands while their token is
+             * still good is worse than the wait for the next 401.
+             */
+            var ANTES_DE_EXPIRAR_MS = 13 * 60 * 1000;
+            setInterval(function () {
+              if (document.hidden) renovar();
+            }, ANTES_DE_EXPIRAR_MS);
+
+            // Mint first, draw second: an iframe pointed at a dead token is a
+            // blank page, and blank is indistinguishable from a broken portal.
+            pedirToken(cfg, utilizador, portalId)
+              .then(function (sessao) {
+                desenharPainel(cfg, sessao.token);
+                ocuparEcra();
+              })
+              .catch(falhou);
           });
         }).catch(function (erro) {
           mostrarAviso(
