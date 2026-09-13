@@ -158,29 +158,50 @@
       /*
        * Find the config values anywhere in whatever ZOHODESK hands back.
        *
-       * The previous version tried four fixed paths and, when Desk wrapped the
-       * answer in a fifth, reported the extension as unconfigured — while the
-       * values sat there, saved and correct, one level deeper.
+       * Desk returns them as an array of pairs under one key:
        *
-       * Guessing a sixth path would be the same mistake with a longer list.
-       * The shape of this response is NOT in Zoho's extension guide
-       * (`global-methods.html` documents User, Portal, Department and Current
-       * Call, and nothing else), so there is no path worth trusting. What IS
-       * stable is the *key names* — they are ours, declared in the manifest.
-       * So: walk the object and take the keys wherever they turn up.
+       *   {"extension.config": [
+       *     {"name": "agenteAppUrl", "value": "https://…", "defaultValue": null},
+       *     {"name": "widgetToken",  "value": "…",         "defaultValue": null}
+       *   ]}
        *
-       * Bounded on purpose. A depth and a node budget mean a surprising
+       * Confirmed against the real portal. It is not in Zoho's extension guide
+       * — `global-methods.html` documents User, Portal, Department and Current
+       * Call, and nothing else — so it was found by printing what arrived.
+       *
+       * Two readings, in one pass, because the first version of this made the
+       * mistake of assuming one:
+       *
+       *  1. **Pairs.** An object carrying a `name` that matches one of ours
+       *     contributes `name → value`, falling back to `defaultValue`, which
+       *     is what that field is for.
+       *
+       *  2. **Direct keys.** An object carrying `agenteAppUrl` or
+       *     `widgetToken` as its own key contributes them as they are.
+       *
+       * The second is the safety net. Keeping it costs a comparison per node
+       * and covers a future SDK that flattens the array — which is exactly the
+       * kind of change that would otherwise break the band silently.
+       *
+       * Bounded on purpose: a depth limit and a node budget mean a surprising
        * response costs microseconds instead of hanging the band, and `seen`
        * makes a cyclic object terminate rather than spin.
        */
-      function procurarChaves(raiz, chaves) {
+      function procurarValores(raiz, nomes) {
         var encontrado = {};
-        var porEncontrar = chaves.length;
+        var porEncontrar = nomes.length;
         var seen = [];
         var fila = [{ no: raiz, profundidade: 0 }];
         var visitados = 0;
 
-        while (fila.length > 0 && visitados < 500) {
+        function registar(nome, valor) {
+          if (encontrado[nome] === undefined && typeof valor === "string" && valor) {
+            encontrado[nome] = valor;
+            porEncontrar--;
+          }
+        }
+
+        while (fila.length > 0 && visitados < 800) {
           var item = fila.shift();
           var no = item.no;
           visitados++;
@@ -188,18 +209,20 @@
           if (seen.indexOf(no) !== -1) continue;
           seen.push(no);
 
-          for (var k = 0; k < chaves.length; k++) {
-            var chave = chaves[k];
-            if (encontrado[chave] === undefined && typeof no[chave] === "string" && no[chave]) {
-              encontrado[chave] = no[chave];
-              porEncontrar--;
+          // 1. the pair shape
+          if (typeof no.name === "string") {
+            for (var p = 0; p < nomes.length; p++) {
+              if (no.name === nomes[p]) registar(nomes[p], no.value || no.defaultValue);
             }
           }
+          // 2. the direct-key shape
+          for (var k = 0; k < nomes.length; k++) registar(nomes[k], no[nomes[k]]);
+
           if (porEncontrar === 0) return encontrado;
 
-          for (var nome in no) {
-            if (Object.prototype.hasOwnProperty.call(no, nome)) {
-              fila.push({ no: no[nome], profundidade: item.profundidade + 1 });
+          for (var chave in no) {
+            if (Object.prototype.hasOwnProperty.call(no, chave)) {
+              fila.push({ no: no[chave], profundidade: item.profundidade + 1 });
             }
           }
         }
@@ -207,7 +230,7 @@
       }
 
       function extrairConfig(resposta) {
-        var achado = procurarChaves(resposta, ["agenteAppUrl", "widgetToken"]);
+        var achado = procurarValores(resposta, ["agenteAppUrl", "widgetToken"]);
         // Only the token is genuinely required: without it nothing can be
         // minted. The URL has a default that the manifest pins anyway.
         if (!achado.widgetToken) return null;

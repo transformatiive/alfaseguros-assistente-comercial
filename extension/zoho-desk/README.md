@@ -98,3 +98,24 @@ configurado porque não conseguia ler a resposta de
 `ZOHODESK.get("extension.config")`, cuja forma a Zoho não documenta. Fazer o
 arranque depender de duas leituras quando só uma é indispensável era um risco
 sem retorno.
+
+## A forma de `ZOHODESK.get("extension.config")`
+
+A Zoho não documenta isto em lado nenhum — o `global-methods.html` documenta
+User, Portal, Department e Current Call, e mais nada. Confirmado contra o
+portal real a 13/09:
+
+```json
+{"extension.config": [
+  {"name": "agenteAppUrl", "value": "https://…up.railway.app", "defaultValue": null},
+  {"name": "widgetToken",  "value": "…",                       "defaultValue": null}
+]}
+```
+
+**Um array de pares `{name, value, defaultValue}` sob a chave
+`"extension.config"`.** Os nomes dos parâmetros são *valores* do campo `name`,
+não chaves do objecto — foi assim que uma versão anterior do widget falhou: ia
+à procura de chaves com esses nomes e nunca as encontrava.
+
+O `procurarValores()` lê as duas formas, a de pares e a de chave directa, para
+que um SDK futuro que achate o array não parta a barra em silêncio.
