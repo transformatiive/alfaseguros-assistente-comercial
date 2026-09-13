@@ -141,18 +141,102 @@
         return null;
       }
 
-      function extrairConfig(resposta) {
-        var candidatos = [
-          resposta,
-          resposta && resposta["extension.config"],
-          resposta && resposta.config,
-          resposta && resposta.value,
-        ];
-        for (var i = 0; i < candidatos.length; i++) {
-          var c = candidatos[i];
-          if (c && (c.agenteAppUrl || c.widgetToken)) return c;
+      /*
+       * The base URL, which is not really configurable and never was.
+       *
+       * It is pinned twice in the manifest already — `whiteListedDomains` and
+       * `cspDomains.connect-src` — so a different value in the config field
+       * would be blocked by the browser before it reached anything. Keeping it
+       * as a parameter offered an flexibility that does not exist, and made a
+       * working panel depend on reading a response shape Zoho does not
+       * document. The field stays for now (removing it would orphan the value
+       * already saved in the portal), but it is no longer load-bearing: it can
+       * only override the default with the same origin the manifest allows.
+       */
+      var BASE_POR_OMISSAO = "https://supervisor-production-f030.up.railway.app";
+
+      /*
+       * Find the config values anywhere in whatever ZOHODESK hands back.
+       *
+       * The previous version tried four fixed paths and, when Desk wrapped the
+       * answer in a fifth, reported the extension as unconfigured — while the
+       * values sat there, saved and correct, one level deeper.
+       *
+       * Guessing a sixth path would be the same mistake with a longer list.
+       * The shape of this response is NOT in Zoho's extension guide
+       * (`global-methods.html` documents User, Portal, Department and Current
+       * Call, and nothing else), so there is no path worth trusting. What IS
+       * stable is the *key names* — they are ours, declared in the manifest.
+       * So: walk the object and take the keys wherever they turn up.
+       *
+       * Bounded on purpose. A depth and a node budget mean a surprising
+       * response costs microseconds instead of hanging the band, and `seen`
+       * makes a cyclic object terminate rather than spin.
+       */
+      function procurarChaves(raiz, chaves) {
+        var encontrado = {};
+        var porEncontrar = chaves.length;
+        var seen = [];
+        var fila = [{ no: raiz, profundidade: 0 }];
+        var visitados = 0;
+
+        while (fila.length > 0 && visitados < 500) {
+          var item = fila.shift();
+          var no = item.no;
+          visitados++;
+          if (!no || typeof no !== "object" || item.profundidade > 6) continue;
+          if (seen.indexOf(no) !== -1) continue;
+          seen.push(no);
+
+          for (var k = 0; k < chaves.length; k++) {
+            var chave = chaves[k];
+            if (encontrado[chave] === undefined && typeof no[chave] === "string" && no[chave]) {
+              encontrado[chave] = no[chave];
+              porEncontrar--;
+            }
+          }
+          if (porEncontrar === 0) return encontrado;
+
+          for (var nome in no) {
+            if (Object.prototype.hasOwnProperty.call(no, nome)) {
+              fila.push({ no: no[nome], profundidade: item.profundidade + 1 });
+            }
+          }
         }
-        return null;
+        return encontrado;
+      }
+
+      function extrairConfig(resposta) {
+        var achado = procurarChaves(resposta, ["agenteAppUrl", "widgetToken"]);
+        // Only the token is genuinely required: without it nothing can be
+        // minted. The URL has a default that the manifest pins anyway.
+        if (!achado.widgetToken) return null;
+        return {
+          agenteAppUrl: achado.agenteAppUrl || BASE_POR_OMISSAO,
+          widgetToken: achado.widgetToken,
+        };
+      }
+
+      /*
+       * What the config response actually looked like, for the failure notice.
+       *
+       * Printed because the alternative is another publish cycle spent finding
+       * out — and a publish cycle here is a pack, a new Sigma version, and an
+       * update to the installed extension. The token is redacted: this notice
+       * is rendered inside the Desk band, where anyone walking past the agent's
+       * screen can read it.
+       */
+      function formaDaConfig(resposta) {
+        var texto;
+        try {
+          texto = JSON.stringify(resposta);
+        } catch (e) {
+          texto = String(resposta);
+        }
+        if (!texto) return "(vazio)";
+        // Any long opaque run is assumed to be the token.
+        texto = texto.replace(/[A-Za-z0-9_\-]{20,}/g, "«valor»");
+        return texto.slice(0, 400);
       }
 
       /** Mint a panel token for this agent. Resolves to the JSON body. */
@@ -231,11 +315,14 @@
             var portalId = extrairPortal(respostas[1]);
             var config = extrairConfig(respostas[2]);
 
-            if (!config || !config.agenteAppUrl || !config.widgetToken) {
+            if (!config) {
               mostrarAviso(
-                "A extensão está instalada mas não está configurada. Um " +
-                  "administrador tem de preencher <b>Endereço do painel</b> e " +
-                  "<b>Token do widget</b> nas definições da extensão."
+                "A extensão está instalada mas não consegui ler o <b>Token do " +
+                  "widget</b>. Se o campo está preenchido nas definições, isto " +
+                  "é um problema nosso e não teu — mostra ao Nuno o que o Desk " +
+                  "devolveu: <code>" +
+                  formaDaConfig(respostas[2]) +
+                  "</code>"
               );
               return;
             }
