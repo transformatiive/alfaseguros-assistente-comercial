@@ -63,13 +63,38 @@ Duas coisas têm de estar certas, e estão:
   (`connect-src` cobre o `fetch`, não o enquadramento). São iframes encadeados —
   Desk → `zappsusercontent.com` → Railway.
 
+## Onde é que o widget aparece (e porque é que ninguém o encontra)
+
+O `desk.topband` **não** é um item sempre visível na barra. Segundo a
+documentação da Zoho: *"Click the More icon on the top of Zoho Desk portal. The
+widgets configured in this location will be listed. Select the widget to be
+loaded."*
+
+Ou seja: **ícone "mais" (⋯) no topo do portal → escolher "O meu painel"**. Só
+depois é que o painel ocupa o ecrã todo. Quem espera um separador novo na barra
+não o encontra, e conclui que não tem permissões.
+
+Duas coisas no manifesto também contavam para isso, e foram corrigidas:
+
+- **Faltavam o `logo` e o `icon` do widget.** A lista do menu "mais" é
+  desenhada a partir deles, e a documentação inclui-os no exemplo do
+  `desk.topband`. Um item sem ícone é, na melhor das hipóteses, difícil de ver.
+- **Havia um `"type": "personal"` no topo do manifesto.** Essa chave não existe
+  no manifesto do Desk — as documentadas são `locale`, `service`, `storage`,
+  `whiteListedDomains`, `modules`, `cspDomains`, `connectors`,
+  `zohoAuthorisation`, `config`, `moduleSupport`, `updateBefore` e `secret`.
+  Vem do Zoho Projects, onde "personal" significa que **cada utilizador**
+  configura a extensão por si. Foi retirada: no melhor caso era ruído, no pior
+  fazia a instalação comportar-se como pessoal em vez de da organização.
+
 ## Instalação
 
 1. `zet validate` e depois `zet pack` nesta pasta. O pacote sai em
-   `dist/zoho-desk.zip`. (O `zet pack` é um zip simples dos quatro ficheiros —
-   `app/widget.html`, `app/translations/en.json`, `plugin-manifest.json`,
-   `resources.json` — por isso o pacote também se reconstrói sem o CLI, desde
-   que a estrutura de pastas dentro do zip seja essa.)
+   `dist/zoho-desk.zip`. (O `zet pack` é um zip simples dos seis ficheiros —
+   `app/widget.html`, `app/translations/en.json`, `app/img/logo.png`,
+   `app/img/icon.png`, `plugin-manifest.json`, `resources.json` — por isso o
+   pacote também se reconstrói sem o CLI, desde que a estrutura de pastas
+   dentro do zip seja essa.)
 2. Em [sigma.zoho.com](https://sigma.zoho.com), criar uma extensão **privada**
    para o Desk e carregar o zip.
 3. Instalar no portal da Alfaseguros.
