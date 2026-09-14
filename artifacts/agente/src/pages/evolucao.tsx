@@ -28,10 +28,29 @@ import type { EvolucaoDaEquipa } from "@/lib/tipos";
  * horas, por cento, contagem — e sobrepô-las num só desenho seria a maneira
  * mais rápida de tornar as três ilegíveis.
  */
-export function VistaDaEvolucao() {
+export function VistaDaEvolucao({
+  origem,
+  chave,
+}: {
+  /**
+   * De onde ler. Por omissão o endpoint com token; a pré-visualização passa o
+   * seu, que não precisa de nenhum. O desenho é o mesmo nos dois casos — uma
+   * pré-visualização construída com outro desenho validaria um ecrã que
+   * ninguém vai ver.
+   */
+  origem?: string;
+  chave?: unknown[];
+} = {}) {
+  const semToken = origem !== undefined;
+
   const { data, isLoading, error } = useQuery<EvolucaoDaEquipa>({
-    queryKey: ["evolucao"],
-    queryFn: () => obter<EvolucaoDaEquipa>("/api/supervisor/evolucao"),
+    queryKey: chave ?? ["evolucao"],
+    queryFn: async () => {
+      if (!semToken) return obter<EvolucaoDaEquipa>("/api/supervisor/evolucao");
+      const res = await fetch(origem);
+      if (!res.ok) throw new Error(`O servidor respondeu ${res.status}`);
+      return (await res.json()) as EvolucaoDaEquipa;
+    },
     staleTime: 5 * 60_000,
   });
 
