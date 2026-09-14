@@ -293,3 +293,46 @@ describe("derivarAgregado", () => {
     expect(a.atrasadas).toBe(0);
   });
 });
+
+/**
+ * O caso que passou nos testes e falhou em produção.
+ *
+ * A primeira versão datava o nascimento de um follow-up no fim do dia da
+ * conversa (23:59). Uma resposta enviada nessa mesma tarde é anterior a isso e
+ * era descartada, por isso nenhum follow-up fechava nunca: 710 abertos, 710 em
+ * atraso, cem por cento — que não é um número mau, é um número impossível.
+ *
+ * Nenhum teste apanhou isto porque todos os testes desta série recebem os
+ * intervalos já construídos. A regra que os constrói vive em `evolucao-query`
+ * e é a que estava errada. O que se pode fixar aqui é a leitura: uma família
+ * inteira a cem por cento, sem um único fecho, é um sintoma e não um dado.
+ */
+describe("uma família sem nenhum fecho é suspeita, não é informação", () => {
+  it("distingue 'nenhuma fechou' de 'nenhuma tinha prazo'", () => {
+    const nunca = Array.from({ length: 10 }, () =>
+      tarefa({ inicio: "2026-09-11T09:00:00+01:00", prazo: "2026-09-12T09:00:00+01:00" }),
+    );
+    const s = derivarSerie(nunca, "2026-09-11", "2026-09-12");
+    expect(s[1].percentagemAtrasada).toBe(100);
+    expect(s[0].fechadas + s[1].fechadas).toBe(0);
+    // As duas condições juntas — cem por cento e zero fechos — são o retrato
+    // de uma regra de prova partida, não de uma equipa parada.
+  });
+
+  it("com fechos reais a percentagem deixa de ser 100", () => {
+    const s = derivarSerie(
+      [
+        tarefa({
+          inicio: "2026-09-11T09:00:00+01:00",
+          fim: "2026-09-11T16:00:00+01:00",
+          prazo: "2026-09-12T09:00:00+01:00",
+        }),
+        tarefa({ inicio: "2026-09-11T09:00:00+01:00", prazo: "2026-09-12T09:00:00+01:00" }),
+      ],
+      "2026-09-11",
+      "2026-09-12",
+    );
+    expect(s[0].fechadas).toBe(1);
+    expect(s[1].percentagemAtrasada).toBe(50);
+  });
+});

@@ -181,6 +181,7 @@ async function carregarFollowUps(de: string, ate: Date): Promise<FollowUpBruto[]
       runDate: conversationsTable.runDate,
       colaboradorId: conversationsTable.colaboradorId,
       agentId: conversationsTable.agentId,
+      legsJson: conversationsTable.legsJson,
     })
     .from(conversationsTable)
     .where(
@@ -229,11 +230,7 @@ async function carregarFollowUps(de: string, ate: Date): Promise<FollowUpBruto[]
   for (const c of conversas) {
     const digitos = (c.customerPhone ?? "").replace(/\D/g, "");
     const fp = digitos.length >= 9 ? digitos.slice(-9) : null;
-    // A conversa não guarda hora de fim, só o dia. O fim desse dia é o que
-    // mais se aproxima: um follow-up nasce quando a chamada acaba, e datá-lo
-    // no início do dia dar-lhe-ia horas de vida que não teve — o que
-    // empurraria a mediana de "horas até fechar" para cima sem razão.
-    const inicio = new Date(lisbonDayBoundsISO(c.runDate)[1]);
+    const inicio = nascimentoDoFollowUp(c.legsJson, c.runDate);
     if (inicio > ate) continue;
 
     let fim: Date | null = null;
@@ -252,6 +249,40 @@ async function carregarFollowUps(de: string, ate: Date): Promise<FollowUpBruto[]
     });
   }
   return out;
+}
+
+/**
+ * Quando é que o follow-up nasceu: no fim da última chamada da conversa.
+ *
+ * A coluna `conversations` não guarda hora nenhuma, só o dia — mas guarda as
+ * pernas da conversa em `legs_json`, e cada perna tem `startTime` e
+ * `durationSec`. A última perna a acabar é o momento em que a conversa
+ * terminou, e é aí que a promessa passa a ser devida.
+ *
+ * A primeira versão disto usava o **fim do dia** da conversa, para não
+ * inflacionar a mediana de horas até fechar. Foi um erro caro e silencioso:
+ * uma resposta enviada no próprio dia, às quatro da tarde, é anterior às
+ * 23:59 e ficava de fora. O resultado em produção foram 710 follow-ups e
+ * *zero* fechos — cem por cento em atraso, o que não é um número mau, é um
+ * número impossível.
+ *
+ * Sem pernas com hora, o fim do dia continua a ser o recuo. É o mesmo erro,
+ * mas confinado às conversas a que falta o dado em vez de a todas.
+ */
+function nascimentoDoFollowUp(legsJson: unknown, runDate: string): Date {
+  let ultima: number | null = null;
+  if (Array.isArray(legsJson)) {
+    for (const perna of legsJson) {
+      if (!perna || typeof perna !== "object") continue;
+      const p = perna as { startTime?: unknown; durationSec?: unknown };
+      if (typeof p.startTime !== "string") continue;
+      const inicio = Date.parse(p.startTime);
+      if (Number.isNaN(inicio)) continue;
+      const fim = inicio + (typeof p.durationSec === "number" ? p.durationSec : 0) * 1000;
+      if (ultima === null || fim > ultima) ultima = fim;
+    }
+  }
+  return ultima !== null ? new Date(ultima) : new Date(lisbonDayBoundsISO(runDate)[1]);
 }
 
 /** `YYYY-MM-DD`, n dias antes. */
