@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, lt, ne, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, ne, or } from "drizzle-orm";
 import { db, ticketsTable } from "@workspace/db";
 
 /**
@@ -50,18 +50,40 @@ export function emailDoTicket(rawJson: unknown): string | null {
 }
 
 /**
- * Desk deep link. Built from the ticket id, which is what Desk routes on.
+ * The portal slug in a Desk URL. Zoho routes on this name, never on the
+ * numeric org id — which is the whole of the bug this replaced.
+ */
+export const PORTAL_DESK = "alfaseguros";
+
+/**
+ * Desk deep link for a ticket.
  *
  * Exported because every task with a ticket deserves one, not just the rows
  * that came *from* the ticket table: a promise made on a call carries a
  * `linked_ticket_id` and used to render without a way to reach it, which left
  * the agent knowing the ticket number and having to search for it by hand.
+ *
+ * ## Ask Zoho for the link; only build one when Zoho has not said
+ *
+ * The previous version built `/agent/{orgId}/tickets/details/{id}` and every
+ * link 404'd. The agent console routes on the **portal name**; the org id is
+ * an API identifier and means nothing to it. Guessing a second URL shape
+ * would be the same mistake with a different string.
+ *
+ * So the ticket sync now asks Desk for `webUrl` and it lands in `raw_json`.
+ * A link the other system hands us cannot be wrong about that system's own
+ * routing, and it survives Zoho changing the shape again.
+ *
+ * The fallback is for tickets synced before `webUrl` was requested, and uses
+ * the classic portal URL that the daily email has been sending for months —
+ * a shape with evidence behind it rather than a fresh guess.
  */
-export function urlDoDesk(ticketId: string, orgId: string | undefined): string {
-  // Without an org id there is no valid tenant path, so fall back to the
-  // generic agent URL rather than emitting a link that 404s.
-  if (!orgId) return `https://desk.zoho.com/agent/tickets/details/${encodeURIComponent(ticketId)}`;
-  return `https://desk.zoho.com/agent/${encodeURIComponent(orgId)}/tickets/details/${encodeURIComponent(ticketId)}`;
+export function urlDoDesk(ticketId: string, raw?: unknown): string {
+  if (raw && typeof raw === "object") {
+    const web = (raw as Record<string, unknown>).webUrl;
+    if (typeof web === "string" && web.startsWith("https://")) return web;
+  }
+  return `https://desk.zoho.com/support/${PORTAL_DESK}/ShowHomePage.do#Cases/dv/${encodeURIComponent(ticketId)}`;
 }
 
 /** Hours between `createdTime` and `now`, rounded down. */
@@ -108,11 +130,41 @@ export async function listTicketsEmRisco(params: {
         status: t.status,
         idadeHoras: idadeEmHoras(t.createdTime, now),
         criadoEm: t.createdTime.toISOString(),
-        deskUrl: urlDoDesk(t.id, params.orgId),
+        deskUrl: urlDoDesk(t.id, t.rawJson),
         contactName: t.contactName,
         contactPhone: t.contactPhone,
         contactEmail: emailDoTicket(t.rawJson),
       },
     ];
   });
+}
+
+/**
+ * Desk links for a set of ticket ids, read from what Desk itself told us.
+ *
+ * Built in one query rather than per row: a panel routinely references thirty
+ * or forty tickets, and thirty round trips to save a `WHERE id IN` is a cost
+ * with nothing bought.
+ *
+ * Ids with no row, or rows synced before `webUrl` was requested, are simply
+ * absent — the caller falls back to `urlDoDesk`, which is the point of that
+ * function having a fallback at all.
+ */
+export async function urlsDeTickets(ids: readonly string[]): Promise<Map<string, string>> {
+  const unicos = [...new Set(ids)].filter(Boolean);
+  if (unicos.length === 0) return new Map();
+
+  const rows = await db
+    .select({ id: ticketsTable.id, rawJson: ticketsTable.rawJson })
+    .from(ticketsTable)
+    .where(inArray(ticketsTable.id, unicos));
+
+  const mapa = new Map<string, string>();
+  for (const r of rows) {
+    const web = r.rawJson && typeof r.rawJson === "object"
+      ? (r.rawJson as Record<string, unknown>).webUrl
+      : null;
+    if (typeof web === "string" && web.startsWith("https://")) mapa.set(r.id, web);
+  }
+  return mapa;
 }

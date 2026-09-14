@@ -14,6 +14,13 @@ const TICKETS_PAGE_SIZE = 100; // max per Zoho Desk
 /**
  * Default field set requested from Zoho Desk. We include `cf` so all custom
  * fields come through; the outcome classifier reads these later.
+ *
+ * `webUrl` is Zoho's own link to the ticket in the agent console. Asking for
+ * it beats building a URL from parts: the panel did build one, from the
+ * numeric org id, and every one of those links landed on "the page you're
+ * trying to access doesn't exist" — the agent console routes on the portal
+ * name, not the org id. A link the other system hands us cannot be wrong
+ * about the other system's routing.
  */
 export const DEFAULT_TICKET_FIELDS = [
   "id",
@@ -30,6 +37,7 @@ export const DEFAULT_TICKET_FIELDS = [
   "createdTime",
   "modifiedTime",
   "closedTime",
+  "webUrl",
   "cf",
 ];
 
