@@ -20,6 +20,7 @@ router.post("/run", async (req, res): Promise<void> => {
     date_offset?: unknown;
     source?: unknown;
     force?: unknown;
+    retomar?: unknown;
   };
 
   // Cron path requires X-Cron-Secret if a secret is configured.
@@ -51,13 +52,33 @@ router.post("/run", async (req, res): Promise<void> => {
   }
 
   const force = body.force === true;
+  // A scheduled catch-up: analyse what is new on a day already analysed, and
+  // nothing that was analysed before. See the note on the 409 below.
+  const retomar = body.retomar === true;
 
   const existing = await db.select().from(runsTable).where(eq(runsTable.date, date));
   if (existing.length > 0) {
     const { status, updatedAt } = existing[0];
 
-    if (status === "completed" && !force) {
-      // Protect completed runs from accidental re-analysis (costs money).
+    /*
+     * Protect completed runs from accidental re-analysis, which costs money —
+     * but not from the scheduler, which is the one caller that must be able to
+     * come back to a finished day.
+     *
+     * This guard was wrong for the scheduler, and the failure was silent. The
+     * morning run analyses *yesterday*; the previous afternoon's run had
+     * already created a row for that date, so every morning the scheduler got
+     * this 409 and stopped. Nothing downstream noticed, because a day that was
+     * analysed at 16:30 looks exactly like a day that was analysed twice — the
+     * only difference is the calls made after 16:30, which nothing ever read.
+     *
+     * `retomar` is deliberately not `force`. Force nulls every cached analysis
+     * and pays for the whole day again; this takes the same path as a first
+     * run, where a conversation that already has `analysisJson` is skipped.
+     * The cost of a catch-up is therefore the new conversations plus the two
+     * summaries, which is what the morning run was always meant to cost.
+     */
+    if (status === "completed" && !force && !retomar) {
       res.status(409).json({ error: "Este dia já foi analisado. Use force=true para re-analisar." });
       return;
     }
