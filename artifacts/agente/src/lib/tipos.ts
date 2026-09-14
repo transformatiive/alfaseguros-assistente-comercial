@@ -228,6 +228,22 @@ export function coachingDisponivel(
   return !!c && !("disponivel" in c);
 }
 
+/**
+ * Os dois relógios do painel, que andam a ritmos diferentes.
+ *
+ * `sincronizacao` é a última sincronização com o Desk — de quinze em quinze
+ * minutos. É o relógio que interessa para "isto já foi tratado?".
+ *
+ * `analise` é o último dia cujas conversas foram lidas pela IA, e quando essa
+ * leitura acabou — duas vezes por dia útil. É o relógio que interessa para o
+ * coaching e para as ações do dia, e está normalmente horas ou um fim-de-semana
+ * atrás do outro.
+ */
+export interface Frescura {
+  sincronizacao: string | null;
+  analise: { data: string; quando: string } | null;
+}
+
 export interface AgentePainel {
   colaborador: { id: number; nome: string; papel: string; equipa: string };
   data: string;
@@ -240,6 +256,8 @@ export interface AgentePainel {
   /** What closed itself since the last look, and the proof that closed it. */
   fechadas: TarefaFechada[];
   coaching: Coaching | BlocoIndisponivel;
+  /** Os dois relógios. Ver `Frescura`. */
+  frescura?: Frescura;
   /** Always unavailable today — scheduling lives in the CRM, which is not connected. */
   agendamentos: BlocoIndisponivel;
   atualizadoEm: string;
