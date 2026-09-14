@@ -136,3 +136,32 @@ export function planear(agora: Date, intervaloMin = 15): Plano {
     porque: `${relogio} em Lisboa`,
   };
 }
+
+/**
+ * A day named by hand, to be re-analysed on the next tick.
+ *
+ * There is no other way to catch up a single day from outside. The API refuses
+ * a completed day unless the caller holds `CRON_WEBHOOK_SECRET`, and the only
+ * button in the UI is the one that re-analyses *everything* with `force` — it
+ * pays for the whole day again, which is the wrong tool for "this day was cut
+ * short at 16:30".
+ *
+ * So the scheduler, which already holds the secret, takes the day as an
+ * environment variable. Set `AGENDA_RETOMAR_DIA=2026-09-11`, wait for a tick,
+ * then **unset it** — left in place it would re-send the same day every
+ * fifteen minutes. That is not expensive (a retoma skips what is already
+ * analysed) but it is noise in the log, and a log nobody trusts is the reason
+ * the 409 went unnoticed for so long.
+ *
+ * Invalid text is ignored rather than guessed at: a typo must not turn into an
+ * analysis of some other day.
+ */
+export function diaAvulso(valor: string | undefined): string | null {
+  if (typeof valor !== "string") return null;
+  const limpo = valor.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(limpo)) return null;
+  // Reject 2026-02-31 and friends: the round trip only survives a real date.
+  const d = new Date(`${limpo}T12:00:00Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10) === limpo ? limpo : null;
+}

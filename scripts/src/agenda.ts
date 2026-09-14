@@ -11,7 +11,7 @@
  * in the cron expression.
  */
 
-import { planear } from "./agenda-plano.js";
+import { diaAvulso, planear } from "./agenda-plano.js";
 
 /* ── Execução ───────────────────────────────────────────────────────────── */
 
@@ -75,11 +75,24 @@ async function main(): Promise<void> {
   const intervalo = Number(process.env.AGENDA_INTERVALO_MIN ?? 15);
 
   const plano = planear(new Date(), Number.isFinite(intervalo) ? intervalo : 15);
-  const queDia =
-    plano.analise === null ? "não" : plano.analise === 0 ? "hoje" : `há ${-plano.analise} dia(s)`;
+  // A day asked for by hand wins over the schedule: it is only ever set to
+  // catch up a day the schedule already missed. See `diaAvulso`.
+  const avulso = diaAvulso(process.env.AGENDA_RETOMAR_DIA);
+  const queDia = avulso
+    ? avulso
+    : plano.analise === null
+      ? "não"
+      : plano.analise === 0
+        ? "hoje"
+        : `há ${-plano.analise} dia(s)`;
   console.log(`Tick: ${plano.porque} → refresh=${plano.refresh} análise=${queDia}`);
+  if (process.env.AGENDA_RETOMAR_DIA && !avulso) {
+    console.log(
+      `AGENDA_RETOMAR_DIA não é uma data válida (AAAA-MM-DD) — ignorada neste tick.`,
+    );
+  }
 
-  if (!plano.refresh && plano.analise === null) {
+  if (!plano.refresh && plano.analise === null && !avulso) {
     console.log("Nada a fazer neste tick.");
     return;
   }
@@ -95,7 +108,7 @@ async function main(): Promise<void> {
   // and a ticket modified inside a gap that nothing ever re-reads is a task
   // that stays wrong until somebody notices by hand. So the twice-daily slots
   // omit the window and take the endpoint's default of two days.
-  const janelaLarga = plano.analise !== null;
+  const janelaLarga = plano.analise !== null || avulso !== null;
 
   if (plano.refresh || janelaLarga) {
     const r = await pedir(
@@ -109,7 +122,7 @@ async function main(): Promise<void> {
     if (!r.ok) falhou = true;
   }
 
-  if (plano.analise !== null) {
+  if (plano.analise !== null || avulso !== null) {
     // The offset comes from the slot, not from a constant: the morning run
     // reads yesterday (the day whose calls are complete) and the afternoon one
     // reads today (which is what makes it worth paying for). The endpoint
@@ -124,7 +137,9 @@ async function main(): Promise<void> {
     // catch-up pays only for what is new.
     const r = await pedir(
       `${base}/api/run`,
-      { date_offset: plano.analise, source: "cron", retomar: true },
+      avulso
+        ? { date: avulso, source: "cron", retomar: true }
+        : { date_offset: plano.analise, source: "cron", retomar: true },
       segredo,
     );
     console.log(`análise → HTTP ${r.estado} ${r.texto.slice(0, 400)}`);

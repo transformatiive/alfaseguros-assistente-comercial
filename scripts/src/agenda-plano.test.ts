@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HORA_FIM, HORA_INICIO, planear, relogioLisboa, SLOTS_ANALISE } from "./agenda-plano.js";
+import { diaAvulso, HORA_FIM, HORA_INICIO, planear, relogioLisboa, SLOTS_ANALISE } from "./agenda-plano.js";
 
 /**
  * The point of these tests is the hour, not the arithmetic.
@@ -109,5 +109,27 @@ describe("planear — o refresh", () => {
     // nenhum dos dois — mas a análise de sábado corre, e tem o seu teste.
     expect(planear(new Date("2026-08-08T07:00:00Z")).refresh).toBe(false);
     expect(planear(new Date("2026-08-09T07:00:00Z")).refresh).toBe(false);
+  });
+});
+
+describe("diaAvulso", () => {
+  it("aceita uma data ISO", () => {
+    expect(diaAvulso("2026-09-11")).toBe("2026-09-11");
+    expect(diaAvulso("  2026-09-11  ")).toBe("2026-09-11");
+  });
+
+  it("ignora o que não é uma data", () => {
+    expect(diaAvulso(undefined)).toBeNull();
+    expect(diaAvulso("")).toBeNull();
+    expect(diaAvulso("ontem")).toBeNull();
+    expect(diaAvulso("11/09/2026")).toBeNull();
+    expect(diaAvulso("2026-9-11")).toBeNull();
+  });
+
+  it("ignora uma data que não existe, em vez de a deslizar para o mês seguinte", () => {
+    // `new Date("2026-02-31")` dá 3 de março. Analisar um dia que ninguém
+    // pediu é pior do que não analisar nenhum.
+    expect(diaAvulso("2026-02-31")).toBeNull();
+    expect(diaAvulso("2026-13-01")).toBeNull();
   });
 });
