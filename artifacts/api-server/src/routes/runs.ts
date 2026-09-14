@@ -23,9 +23,26 @@ router.post("/run", async (req, res): Promise<void> => {
     retomar?: unknown;
   };
 
-  // Cron path requires X-Cron-Secret if a secret is configured.
   const isCron = body.source === "cron";
-  if (isCron) {
+  const retomar = body.retomar === true;
+
+  /*
+   * The secret is required by the cron path, and by `retomar` whatever the
+   * caller says it is.
+   *
+   * The second half is the point, and it was missing when `retomar` was added.
+   * The check used to hang off `source === "cron"`, which is a claim the caller
+   * makes about itself — so a body with `retomar: true` and no `source` skipped
+   * it entirely and unlocked a finished day for anyone who could reach the API.
+   * The comments on this handler said `retomar` was the scheduler's alone; the
+   * code did not make that true.
+   *
+   * It is cheap to spend on somebody else's behalf: a retoma runs the two
+   * summaries and any new conversations, and repeating it costs OpenRouter
+   * every time. Tying the flag to the secret rather than to a self-declared
+   * `source` is what closes it.
+   */
+  if (isCron || retomar) {
     const cfg = env();
     if (!cfg.CRON_WEBHOOK_SECRET) {
       res.status(503).json({ error: "Cron secret not configured on server" });
@@ -52,9 +69,6 @@ router.post("/run", async (req, res): Promise<void> => {
   }
 
   const force = body.force === true;
-  // A scheduled catch-up: analyse what is new on a day already analysed, and
-  // nothing that was analysed before. See the note on the 409 below.
-  const retomar = body.retomar === true;
 
   const existing = await db.select().from(runsTable).where(eq(runsTable.date, date));
   if (existing.length > 0) {
