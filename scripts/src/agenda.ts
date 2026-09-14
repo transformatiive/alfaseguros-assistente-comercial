@@ -114,9 +114,17 @@ async function main(): Promise<void> {
     // reads yesterday (the day whose calls are complete) and the afternoon one
     // reads today (which is what makes it worth paying for). The endpoint
     // resolves the offset in Lisbon time.
+    //
+    // `retomar` is what makes the morning run do anything at all. Without it
+    // the endpoint answers 409 — "this day was already analysed" — because the
+    // previous afternoon's run had already created the row for that date. The
+    // tick fired, was refused, and exited 1, every morning; the calls made
+    // after 16:30 were never read by anything. It is not `force`: a
+    // conversation that already has an analysis is still skipped, so a
+    // catch-up pays only for what is new.
     const r = await pedir(
       `${base}/api/run`,
-      { date_offset: plano.analise, source: "cron" },
+      { date_offset: plano.analise, source: "cron", retomar: true },
       segredo,
     );
     console.log(`análise → HTTP ${r.estado} ${r.texto.slice(0, 400)}`);
