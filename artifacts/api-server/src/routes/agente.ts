@@ -17,6 +17,8 @@ import {
 
 import { buildAgentePainel } from "../painel/agente.js";
 import { buildSupervisorPainel } from "../painel/supervisor.js";
+import { carregarIntervalos } from "../painel/evolucao-query.js";
+import { derivarAgregado, derivarSerie, INICIO_DA_SERIE } from "../painel/evolucao.js";
 
 const router: IRouter = Router();
 
@@ -339,6 +341,57 @@ router.get("/supervisor/painel/:colaboradorId", requireSupervisor, resolveData, 
       logger.error({ err: erro, colaboradorId: alvo.id, data }, "painel: bloco falhou");
     }
     res.json(painel);
+  })().catch(next);
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/supervisor/evolucao — está isto a produzir efeito?
+// ---------------------------------------------------------------------------
+
+/*
+ * A vista que responde à única pergunta que justifica o painel existir.
+ *
+ * O estado de agora ("o que temos em cima da mesa") já estava na vista da
+ * equipa, em contagens. O que faltava era a direcção: as contagens de hoje não
+ * dizem se hoje é melhor do que a semana passada, e é isso que se quer saber.
+ *
+ * Três curvas, calculadas a partir do nascimento e da morte de cada tarefa em
+ * vez de acumuladas num retrato diário — as razões estão em `evolucao.ts`, e a
+ * principal é que assim a série existe já hoje em vez de daqui a duas semanas.
+ *
+ * A janela nunca vai atrás de 11/09: antes disso os dados existem mas são de
+ * um sistema que corria noutras condições, e uma curva que abre com um degrau
+ * causado por nós engana mais do que informa.
+ */
+router.get("/supervisor/evolucao", requireSupervisor, (req, res, next) => {
+  void (async () => {
+    const claims = agenteDe(req);
+    const supervisor = await loadColaboradorAtivo(Number(claims.sub));
+    if (!supervisor || supervisor.papel !== "supervisor") {
+      res.status(403).json({ error: "Acesso reservado ao supervisor" });
+      return;
+    }
+
+    const ate = typeof req.query.ate === "string" && DATA_RE.test(req.query.ate)
+      ? req.query.ate
+      : todayLisbon();
+    const de = typeof req.query.de === "string" && DATA_RE.test(req.query.de)
+      ? req.query.de
+      : INICIO_DA_SERIE;
+
+    if (de > ate) {
+      res.status(400).json({ error: "`de` é posterior a `ate`" });
+      return;
+    }
+
+    const intervalos = await carregarIntervalos({ de, ate });
+    res.json({
+      de: de < INICIO_DA_SERIE ? INICIO_DA_SERIE : de,
+      ate,
+      inicioDaSerie: INICIO_DA_SERIE,
+      agregado: derivarAgregado(intervalos),
+      serie: derivarSerie(intervalos, de, ate),
+    });
   })().catch(next);
 });
 

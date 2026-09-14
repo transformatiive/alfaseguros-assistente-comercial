@@ -6,6 +6,7 @@ import { estaSolto } from "@/lib/sessao";
 import { comDia, diaPedido } from "@/lib/dia";
 import { PainelDoAgente } from "@/pages/painel";
 import { VistaDaEquipa } from "@/pages/equipa";
+import { VistaDaEvolucao } from "@/pages/evolucao";
 import { PreVisualizacao } from "@/pages/pre-visualizacao";
 import type { AgentePainel } from "@/lib/tipos";
 
@@ -54,6 +55,7 @@ function PainelComSessao() {
               optional props of its own, which is not the shape wouter expects
               of a route component. */}
           <Route path="/equipa">{() => <VistaDaEquipa />}</Route>
+          <Route path="/evolucao">{() => <VistaDaEvolucao />}</Route>
           <Route component={PainelDoAgente} />
         </Switch>
         {estaSolto() && <NotaDeJanelaSolta />}
@@ -65,14 +67,18 @@ function PainelComSessao() {
 function Abas() {
   const [local] = useLocation();
   const naEquipa = local.startsWith("/equipa");
+  const naEvolucao = local.startsWith("/evolucao");
 
   return (
     <nav className="sticky top-0 z-10 flex gap-1 border-b border-stone-200 bg-stone-50/95 px-3 py-2 backdrop-blur">
-      <Aba para="/" activa={!naEquipa}>
+      <Aba para="/" activa={!naEquipa && !naEvolucao}>
         O meu dia
       </Aba>
       <Aba para="/equipa" activa={naEquipa}>
         A equipa
+      </Aba>
+      <Aba para="/evolucao" activa={naEvolucao}>
+        Está a resultar?
       </Aba>
     </nav>
   );
