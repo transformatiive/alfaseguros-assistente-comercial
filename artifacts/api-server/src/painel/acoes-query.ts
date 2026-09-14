@@ -1,6 +1,12 @@
 import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { inArray } from "drizzle-orm";
-import { db, conversationsTable, ticketsTable, operatorSummariesTable } from "@workspace/db";
+import {
+  db,
+  conversationsTable,
+  ticketsTable,
+  operatorSummariesTable,
+  runsTable,
+} from "@workspace/db";
 import { phoneFingerprint } from "@workspace/phone";
 import { derivarAcoes, type Acao } from "./acoes.js";
 
@@ -146,4 +152,85 @@ export async function loadCoaching(params: {
 function diasAntes(data: string, dias: number): string {
   const [y, m, d] = data.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d) - dias * 86_400_000).toISOString().slice(0, 10);
+}
+
+/* ── Frescura: o que é recente, e quão recente ──────────────────────────── */
+
+/**
+ * When the fifteen-minute sync last ran, and when conversations were last read.
+ *
+ * These are two different clocks and the panel used to show neither. It showed
+ * the moment the page was built, labelled "atualizado" — which is always "há 0
+ * min" and therefore says nothing at all. Worse, it reads as a promise: a
+ * supervisor looking at a panel that claims to be current has no way to tell
+ * that the coaching under it is from last Friday.
+ *
+ * So both are reported, separately:
+ *
+ *  - `sincronizacao` — the most recent ticket sync. Tickets carry `syncedAt`,
+ *    written on every upsert, so the newest one is when the feed behind the
+ *    task list last moved. This is the clock that matters for "has this task
+ *    already been dealt with".
+ *  - `analise` — the last day whose conversations were read, and when that
+ *    finished. This is the clock that matters for the coaching and the day's
+ *    actions, and it is normally hours or a weekend behind the other one.
+ */
+export interface Frescura {
+  /** ISO instant of the most recent Desk sync, or null if nothing ever synced. */
+  sincronizacao: string | null;
+  /** The last analysed day and when that run finished. */
+  analise: { data: string; quando: string } | null;
+}
+
+export async function loadFrescura(): Promise<Frescura> {
+  const [sync, run] = await Promise.all([
+    db
+      .select({ syncedAt: ticketsTable.syncedAt })
+      .from(ticketsTable)
+      .orderBy(desc(ticketsTable.syncedAt))
+      .limit(1),
+    db
+      .select({ date: runsTable.date, updatedAt: runsTable.updatedAt })
+      .from(runsTable)
+      .where(eq(runsTable.status, "completed"))
+      .orderBy(desc(runsTable.date))
+      .limit(1),
+  ]);
+
+  return {
+    sincronizacao: sync[0]?.syncedAt?.toISOString() ?? null,
+    analise: run[0] ? { data: run[0].date, quando: run[0].updatedAt.toISOString() } : null,
+  };
+}
+
+/**
+ * Did this agent have any analysed conversation in the coaching window?
+ *
+ * This exists to tell two very different silences apart, which the panel used
+ * to render with the same sentence:
+ *
+ *  - the analysis has not reached this week yet — a fault, or at least
+ *    something to wait for;
+ *  - the person simply took no calls — nothing is wrong and nothing is coming.
+ *
+ * Saying "ainda não há leitura" to somebody in the second case reads as a
+ * broken panel, and they will report it as one. It cost a morning of
+ * investigation to find that out.
+ */
+export async function teveConversas(params: {
+  ringoverUserId: string;
+  data: string;
+}): Promise<boolean> {
+  const [row] = await db
+    .select({ id: conversationsTable.id })
+    .from(conversationsTable)
+    .where(
+      and(
+        eq(conversationsTable.agentId, params.ringoverUserId),
+        lte(conversationsTable.runDate, params.data),
+        gte(conversationsTable.runDate, diasAntes(params.data, DIAS_DE_LEITURA)),
+      ),
+    )
+    .limit(1);
+  return row !== undefined;
 }

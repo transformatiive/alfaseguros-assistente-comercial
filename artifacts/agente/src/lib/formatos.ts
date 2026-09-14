@@ -118,3 +118,28 @@ export function haQuantoTempo(iso: string, agora: Date = new Date()): string {
   const dias = Math.floor(horas / 24);
   return dias === 1 ? "há 1 dia" : `há ${dias} dias`;
 }
+
+/**
+ * "sexta, 11/09" — o dia num espaço estreito.
+ *
+ * O dia da semana vem primeiro de propósito. Quem olha para a data da última
+ * leitura quer saber se é de ontem ou da semana passada, e "sexta" responde a
+ * isso sem obrigar a contar dias no calendário.
+ *
+ * `timeZone: "UTC"` não é detalhe: a data vem como dia de calendário
+ * (`2026-09-11`), e sem isso o formatador interpretá-la-ia como meia-noite UTC
+ * e mostraria o dia anterior em qualquer fuso a ocidente. A leitura de segunda
+ * apareceria como domingo.
+ */
+export function diaCurto(data: string): string {
+  const [y, m, d] = data.split("-").map(Number);
+  if (!y || !m || !d) return data;
+  return new Intl.DateTimeFormat("pt-PT", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  })
+    .format(new Date(Date.UTC(y, m - 1, d)))
+    .replace(/\.$/, "");
+}

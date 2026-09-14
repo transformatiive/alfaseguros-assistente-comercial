@@ -1,6 +1,13 @@
 import { BarChart3 } from "lucide-react";
 import { Indisponivel } from "@/components/Bloco";
-import { diaPorExtenso, haQuantoTempo, iniciais, primeiroNome, saudacao } from "@/lib/formatos";
+import {
+  diaCurto,
+  diaPorExtenso,
+  haQuantoTempo,
+  iniciais,
+  primeiroNome,
+  saudacao,
+} from "@/lib/formatos";
 import { BlocoCoaching } from "@/pages/blocos-acoes";
 import { FecharamSozinhas, GrupoPorPrazo, SemTarefas } from "@/pages/tarefas";
 import {
@@ -10,6 +17,7 @@ import {
   type AgentePainel,
   type Bloco,
   type Coaching,
+  type Frescura,
   type Tarefa,
 } from "@/lib/tipos";
 
@@ -68,7 +76,7 @@ export function CorpoDoPainel({
         atrasado={piles.atrasado.length}
         hoje={piles.hoje.length}
         aguardar={piles.aguardar.length}
-        atualizadoEm={painel.atualizadoEm}
+        frescura={painel.frescura}
         agora={agora}
       />
 
@@ -143,7 +151,7 @@ function Masthead({
   atrasado,
   hoje,
   aguardar,
-  atualizadoEm,
+  frescura,
   agora,
 }: {
   nome: string;
@@ -151,7 +159,7 @@ function Masthead({
   atrasado: number;
   hoje: number;
   aguardar: number;
-  atualizadoEm: string;
+  frescura?: Frescura;
   agora: Date;
 }) {
   return (
@@ -181,10 +189,7 @@ function Masthead({
           <Numero valor={aguardar} rotulo="A aguardar" cor="text-stone-500" />
         </div>
         <div className="flex items-center gap-3 border-l border-stone-200 pl-4">
-          <span className="flex items-center gap-1.5 t-meta whitespace-nowrap text-stone-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
-            Atualizado {haQuantoTempo(atualizadoEm, agora)}
-          </span>
+          <Relogios frescura={frescura} agora={agora} />
           <span
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-50 t-meta font-bold text-indigo-700"
             title={nome}
@@ -193,6 +198,42 @@ function Masthead({
           </span>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Os dois relógios, um por cima do outro.
+ *
+ * Antes havia um só, e mentia por omissão: marcava o instante em que a página
+ * foi construída, por isso dizia sempre "agora mesmo". Um painel que se diz
+ * actual não dá a ninguém maneira de perceber que o coaching por baixo é de
+ * sexta-feira.
+ *
+ * São dois porque são mesmo dois, e andam a ritmos diferentes: as tarefas
+ * seguem a sincronização de quinze em quinze minutos, a leitura do dia segue a
+ * análise de duas vezes ao dia. Juntá-los numa frase só obrigaria a escolher
+ * qual deles mentir.
+ */
+function Relogios({ frescura, agora }: { frescura?: Frescura; agora: Date }) {
+  if (!frescura) return null;
+  return (
+    <div className="flex flex-col gap-0.5 whitespace-nowrap text-right">
+      <span className="flex items-center justify-end gap-1.5 t-meta text-stone-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
+        Tarefas {frescura.sincronizacao ? haQuantoTempo(frescura.sincronizacao, agora) : "—"}
+      </span>
+      <span
+        className="t-meta text-stone-400"
+        title={
+          frescura.analise
+            ? `Conversas de ${diaPorExtenso(frescura.analise.data)}, lidas ${haQuantoTempo(frescura.analise.quando, agora)}`
+            : undefined
+        }
+      >
+        Leitura{" "}
+        {frescura.analise ? diaCurto(frescura.analise.data) : "por correr"}
+      </span>
     </div>
   );
 }

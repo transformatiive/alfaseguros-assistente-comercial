@@ -4,7 +4,14 @@ import { env } from "../lib/env.js";
 import { listDevolucoesPendentes } from "../storage/devolucoes-repo.js";
 import { listTicketsEmRisco, urlsDeTickets, type TicketEmRisco } from "./tickets-risco.js";
 import { loadPendingFollowUps, type FollowUpItem } from "./followups-query.js";
-import { listAcoesDoAgente, loadCoaching, type Coaching } from "./acoes-query.js";
+import {
+  listAcoesDoAgente,
+  loadCoaching,
+  loadFrescura,
+  teveConversas,
+  type Coaching,
+  type Frescura,
+} from "./acoes-query.js";
 import type { Acao } from "./acoes.js";
 import {
   derivarTarefas,
@@ -137,6 +144,8 @@ export interface AgentePainel {
   fechadas: TarefaFechada[];
   /** What the daily analysis wrote about this agent. Null when it has not run. */
   coaching: Coaching | BlocoIndisponivel;
+  /** Os dois relógios: a sincronização frequente e a última leitura de conversas. */
+  frescura: Frescura;
   /**
    * Always a `BlocoIndisponivel`, never an empty array. Scheduling data lives
    * in the CRM, and the CRM 360 migration has not happened — the UI must be
@@ -279,7 +288,8 @@ export async function buildAgentePainel(
 ): Promise<{ painel: AgentePainel; erros: unknown[] }> {
   const cfg = env();
 
-  const [devolucoesR, ticketsR, followUpsR, acoesR, coachingR] = await Promise.allSettled([
+  const [devolucoesR, ticketsR, followUpsR, acoesR, coachingR, frescuraR, conversasR] =
+    await Promise.allSettled([
     listDevolucoesPendentes(colaborador.id, data),
 
     colaborador.zid
@@ -306,6 +316,15 @@ export async function buildAgentePainel(
     colaborador.ringoverUserId
       ? loadCoaching({ ringoverUserId: colaborador.ringoverUserId, data })
       : Promise.resolve(null),
+
+    loadFrescura(),
+
+    // Only asked when there is no coaching to show, but asked in the same
+    // round: a second round trip after the others have settled would add a
+    // database wait to every panel to answer a question most panels never ask.
+    colaborador.ringoverUserId
+      ? teveConversas({ ringoverUserId: colaborador.ringoverUserId, data })
+      : Promise.resolve(false),
   ]);
 
   const erros: unknown[] = [];
@@ -351,13 +370,23 @@ export async function buildAgentePainel(
   if (coachingR.status === "rejected") {
     coaching = indisponivel("Não foi possível carregar o coaching.");
   } else if (!coachingR.value) {
-    // A missing row is not a failure. With the lookback in `loadCoaching`, it
-    // now means something narrower and worth saying precisely: no day in the
-    // last week was analysed for this agent. The old wording ("a análise deste
-    // dia ainda não correu") was true of every morning and therefore told
-    // nobody anything.
+    /*
+     * A missing row is not a failure, and there are two quite different
+     * reasons for it. Saying the same sentence for both is what made this
+     * read like a broken panel.
+     *
+     *  - The person had conversations and no reading exists: the analysis has
+     *    not reached them, which is worth waiting for and worth naming.
+     *  - The person had no conversations at all: nothing is wrong, nothing is
+     *    coming, and "ainda não há leitura" invites them to report a fault
+     *    that does not exist. Somebody who works tickets rather than the
+     *    phone sits in this case every single day.
+     */
+    const teve = conversasR.status === "fulfilled" && conversasR.value === true;
     coaching = indisponivel(
-      "Ainda não há leitura do dia — a análise mais recente é anterior à última semana.",
+      teve
+        ? "Ainda não há leitura — a análise mais recente é anterior à última semana."
+        : "Não houve chamadas tuas analisadas nos últimos dias, por isso não há leitura. Nada falhou.",
     );
   } else {
     coaching = coachingR.value;
@@ -393,6 +422,10 @@ export async function buildAgentePainel(
         "Os agendamentos ainda não estão disponíveis — vivem no CRM, que ainda não está ligado a este painel.",
       ),
       atualizadoEm: new Date().toISOString(),
+      frescura:
+        frescuraR.status === "fulfilled"
+          ? frescuraR.value
+          : { sincronizacao: null, analise: null },
     },
     erros,
   };
