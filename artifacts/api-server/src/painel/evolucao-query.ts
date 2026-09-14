@@ -83,6 +83,7 @@ export async function carregarIntervalos(
 
     db
       .select({
+        id: ticketsTable.id,
         assigneeId: ticketsTable.assigneeId,
         createdTime: ticketsTable.createdTime,
         closedTime: ticketsTable.closedTime,
@@ -93,6 +94,8 @@ export async function carregarIntervalos(
 
     carregarFollowUps(de, fimDaJanela),
   ]);
+
+  const primeiraRespostaPorTicket = await respostasDeAgente();
 
   // zid → colaborador, para atribuir os tickets a uma pessoa e não a um id do
   // Zoho que ninguém reconhece num gráfico.
@@ -117,6 +120,9 @@ export async function carregarIntervalos(
       colaboradorId: d.colaboradorId,
       inicio: d.horaChamada.toISOString(),
       fim: fim ? fim.toISOString() : null,
+      // Devolver a chamada é, ao mesmo tempo, responder e resolver. Não há
+      // aqui duas datas para distinguir, e fingir que há seria inventá-las.
+      primeiraResposta: fim ? fim.toISOString() : null,
       prazo: prazoDeDevolucao(d.horaChamada),
     });
   }
@@ -137,6 +143,13 @@ export async function carregarIntervalos(
       colaboradorId: t.assigneeId ? (porZid.get(t.assigneeId) ?? null) : null,
       inicio: t.createdTime.toISOString(),
       fim: fim ? fim.toISOString() : null,
+      // É aqui, e só aqui, que responder e resolver são coisas diferentes. Um
+      // pedido pode ter tido resposta em vinte minutos e ficar semanas aberto
+      // à espera da companhia; contar isso como incumprimento era o erro.
+      primeiraResposta: instanteDaPrimeiraResposta(
+        primeiraRespostaPorTicket.get(t.id),
+        t.createdTime,
+      ),
       prazo: prazoDeTicket(t.createdTime),
     });
   }
@@ -148,11 +161,62 @@ export async function carregarIntervalos(
       colaboradorId: f.colaboradorId,
       inicio: f.inicio.toISOString(),
       fim: f.fim ? f.fim.toISOString() : null,
+      // O follow-up fecha-se precisamente com a resposta ao cliente, por isso
+      // as duas datas são a mesma — como nas devoluções.
+      primeiraResposta: f.fim ? f.fim.toISOString() : null,
       prazo: prazoDeTicket(f.inicio),
     });
   }
 
   return out;
+}
+
+/**
+ * O primeiro comentário de agente em cada ticket.
+ *
+ * Uma passagem só por toda a tabela de comentários, com o mínimo por ticket
+ * calculado em memória. Em SQL daria um `DISTINCT ON`, mas isso prende a
+ * consulta ao Postgres e a diferença, com dezenas de milhares de linhas, é de
+ * milissegundos.
+ *
+ * `AGENT` e mais nada: um comentário do cliente não é uma resposta nossa, e um
+ * "Reminder for your task" gerado pelo Desk também não.
+ */
+async function respostasDeAgente(): Promise<Map<string, number>> {
+  const linhas = await db
+    .select({
+      ticketId: ticketCommentsTable.ticketId,
+      quando: ticketCommentsTable.commentedTime,
+    })
+    .from(ticketCommentsTable)
+    .where(
+      and(
+        eq(ticketCommentsTable.authorType, "AGENT"),
+        isNotNull(ticketCommentsTable.commentedTime),
+      ),
+    );
+
+  const mapa = new Map<string, number>();
+  for (const l of linhas) {
+    if (!l.quando) continue;
+    const t = l.quando.getTime();
+    const atual = mapa.get(l.ticketId);
+    if (atual === undefined || t < atual) mapa.set(l.ticketId, t);
+  }
+  return mapa;
+}
+
+/**
+ * A primeira resposta, descartada se for anterior à abertura do ticket.
+ *
+ * Parece impossível e não é: o Desk arrasta comentários quando se juntam dois
+ * tickets, e um comentário com data anterior à criação produziria horas
+ * negativas. Um valor impossível contamina uma mediana em silêncio, por isso
+ * é tratado como ausência de resposta — que é o lado seguro.
+ */
+function instanteDaPrimeiraResposta(quando: number | undefined, criadoEm: Date): string | null {
+  if (quando === undefined) return null;
+  return quando >= criadoEm.getTime() ? new Date(quando).toISOString() : null;
 }
 
 interface FollowUpBruto {

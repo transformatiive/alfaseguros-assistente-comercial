@@ -302,6 +302,10 @@ export interface PontoDaSerie {
   fechadas: number;
   /** Mediana das horas entre nascer e fechar. `null` num dia sem fechos. */
   horasAteFechar: number | null;
+  /** Mediana das horas até ao primeiro sinal de vida para o cliente. */
+  horasAtePrimeiraResposta: number | null;
+  responderam: number;
+  /** Das que venciam nesse dia, quantas ainda não tinham tido resposta. */
   transitaramParaAtrasado: number;
   comPrazoNesteDia: number;
   /** `null` num dia sem prazos — que não é o mesmo que zero por cento. */

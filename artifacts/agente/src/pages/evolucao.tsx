@@ -13,20 +13,25 @@ import type { EvolucaoDaEquipa } from "@/lib/tipos";
  * melhor do que a semana passada — e sem isso não há maneira de saber se o
  * painel mudou alguma coisa ou se é só mais um ecrã.
  *
- * Três curvas, e são deliberadamente três e não uma:
+ * Quatro curvas, em dois pares.
  *
- *  - **Horas até fechar** desce se as pessoas estão a responder mais depressa.
- *  - **Percentagem que passa do prazo** desce se estão a cumprir o combinado.
- *  - **Por fechar ao fim do dia** estabiliza se a equipa está a acompanhar o
- *    caudal.
+ * **Responder** — o que o cliente sente primeiro:
+ *  - horas até à primeira resposta;
+ *  - percentagem que passou do prazo sem resposta nenhuma.
  *
- * As três podem divergir, e é por isso que estão separadas: uma equipa pode
- * estar mais rápida (a primeira desce) e na mesma a afogar-se (a terceira
- * sobe), porque entrou mais trabalho. Um número só escondia isso.
+ * **Resolver** — o que acontece depois:
+ *  - horas até fechar;
+ *  - quanto fica por fechar ao fim do dia.
  *
- * Nunca partilham eixo nem gráfico. São medidas de grandezas diferentes —
- * horas, por cento, contagem — e sobrepô-las num só desenho seria a maneira
- * mais rápida de tornar as três ilegíveis.
+ * A separação não é arrumação: a primeira versão media o *fecho* contra o
+ * prazo de *resposta* e dava 85 % de incumprimento todos os dias, um número
+ * que não distingue um dia bom de um mau. Um pedido aberto há trinta horas
+ * pode ter tido resposta em vinte minutos e estar legitimamente à espera da
+ * companhia.
+ *
+ * Nunca partilham eixo nem gráfico. São horas, por cento e contagens, e
+ * sobrepô-las num só desenho seria a maneira mais rápida de tornar as quatro
+ * ilegíveis.
  */
 export function VistaDaEvolucao({
   origem,
@@ -84,7 +89,7 @@ export function VistaDaEvolucao({
             <Numero valor={agregado.abertas} rotulo="Por fechar agora" />
             <Numero
               valor={agregado.atrasadas}
-              rotulo="Já passaram do prazo"
+              rotulo="Sem resposta e fora do prazo"
               tom={agregado.atrasadas > 0 ? "text-red-600" : undefined}
             />
             <span className="t-meta text-stone-400">
@@ -98,26 +103,45 @@ export function VistaDaEvolucao({
 
       {serie.length > 0 && (
         <>
-          <div className="grid gap-3 md:grid-cols-3">
-            <Cartao
-              titulo="Horas até fechar"
-              explicacao="Mediana do tempo entre a tarefa nascer e haver prova de estar feita. Desce se estamos a responder mais depressa."
-              dados={serie.map((p) => ({ dia: p.dia, valor: p.horasAteFechar }))}
-              formatar={(v) => `${v} h`}
-            />
-            <Cartao
-              titulo="Passaram do prazo"
-              explicacao="Das tarefas que venciam nesse dia, quantas ainda estavam por fazer à hora combinada. Dias sem nada a vencer ficam em branco."
-              dados={serie.map((p) => ({ dia: p.dia, valor: p.percentagemAtrasada }))}
-              formatar={(v) => `${v}%`}
-            />
-            <Cartao
-              titulo="Por fechar ao fim do dia"
-              explicacao="O que ficou em cima da mesa. Estabiliza se a equipa está a acompanhar o que entra."
-              dados={serie.map((p) => ({ dia: p.dia, valor: p.abertas }))}
-              formatar={(v) => String(v)}
-            />
-          </div>
+          <section className="space-y-2">
+            <h2 className="px-0.5 t-micro text-stone-400">
+              Responder — o que o cliente sente primeiro
+            </h2>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Cartao
+                titulo="Horas até à primeira resposta"
+                explicacao="Mediana do tempo entre o pedido chegar e o cliente ter sinal de vida — uma chamada devolvida ou uma resposta no ticket."
+                dados={serie.map((p) => ({ dia: p.dia, valor: p.horasAtePrimeiraResposta }))}
+                formatar={(v) => `${v} h`}
+              />
+              <Cartao
+                titulo="Passaram do prazo sem resposta"
+                explicacao="Das tarefas cujo prazo de resposta caía nesse dia, quantas ainda não tinham tido nenhuma. Dias sem nada a vencer ficam em branco."
+                dados={serie.map((p) => ({ dia: p.dia, valor: p.percentagemAtrasada }))}
+                formatar={(v) => `${v}%`}
+              />
+            </div>
+          </section>
+
+          <section className="space-y-2">
+            <h2 className="px-0.5 t-micro text-stone-400">
+              Resolver — o que acontece depois
+            </h2>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Cartao
+                titulo="Horas até fechar"
+                explicacao="Mediana do tempo até estar resolvido. Sem prazo associado: nada promete uma hora de resolução, só de resposta."
+                dados={serie.map((p) => ({ dia: p.dia, valor: p.horasAteFechar }))}
+                formatar={(v) => `${v} h`}
+              />
+              <Cartao
+                titulo="Por fechar ao fim do dia"
+                explicacao="O que ficou em cima da mesa. Estabiliza se a equipa está a acompanhar o que entra."
+                dados={serie.map((p) => ({ dia: p.dia, valor: p.abertas }))}
+                formatar={(v) => String(v)}
+              />
+            </div>
+          </section>
 
           {/*
             Os números por extenso. Um gráfico sem os números por trás pede
@@ -134,9 +158,11 @@ export function VistaDaEvolucao({
                   <tr className="text-left text-stone-400">
                     <th className="py-1 pr-4 font-normal">Dia</th>
                     <th className="py-1 pr-4 font-normal">Nasceram</th>
+                    <th className="py-1 pr-4 font-normal">Responderam</th>
+                    <th className="py-1 pr-4 font-normal">1.ª resposta</th>
                     <th className="py-1 pr-4 font-normal">Fecharam</th>
-                    <th className="py-1 pr-4 font-normal">Horas (mediana)</th>
-                    <th className="py-1 pr-4 font-normal">Passaram do prazo</th>
+                    <th className="py-1 pr-4 font-normal">Até fechar</th>
+                    <th className="py-1 pr-4 font-normal">Sem resposta no prazo</th>
                     <th className="py-1 font-normal">Por fechar</th>
                   </tr>
                 </thead>
@@ -145,6 +171,12 @@ export function VistaDaEvolucao({
                     <tr key={p.dia} className="border-t border-stone-100 text-stone-700">
                       <td className="py-1 pr-4 whitespace-nowrap">{diaCurto(p.dia)}</td>
                       <td className="py-1 pr-4">{p.nascidas}</td>
+                      <td className="py-1 pr-4">{p.responderam}</td>
+                      <td className="py-1 pr-4">
+                        {p.horasAtePrimeiraResposta === null
+                          ? "—"
+                          : `${p.horasAtePrimeiraResposta} h`}
+                      </td>
                       <td className="py-1 pr-4">{p.fechadas}</td>
                       <td className="py-1 pr-4">
                         {p.horasAteFechar === null ? "—" : `${p.horasAteFechar} h`}
