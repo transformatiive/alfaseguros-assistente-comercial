@@ -7,6 +7,8 @@ import { todayLisbon } from "../lib/dates.js";
 import { loadColaboradorAtivo } from "../painel/identity.js";
 import { buildAgentePainel } from "../painel/agente.js";
 import { buildSupervisorPainel } from "../painel/supervisor.js";
+import { carregarIntervalos } from "../painel/evolucao-query.js";
+import { derivarAgregado, derivarSerie, INICIO_DA_SERIE } from "../painel/evolucao.js";
 
 /**
  * Read-only preview of the panel, with no token.
@@ -95,6 +97,43 @@ router.get("/agente/pre-visualizacao/painel", (req, res, next) => {
 router.get("/agente/pre-visualizacao/equipa", (req, res, next) => {
   void (async () => {
     res.json(await buildSupervisorPainel(diaPedido(req.query.data)));
+  })().catch(next);
+});
+
+/*
+ * A evolução, atrás da mesma porta.
+ *
+ * Está aqui por uma razão prática e uma de princípio. A prática: a vista vive
+ * no separador do supervisor, o separador vive no widget, e o widget é
+ * precisamente o que a equipa ainda não consegue abrir. Construir uma vista
+ * que ninguém pode olhar não é entregar nada.
+ *
+ * A de princípio: de tudo o que esta porta já expõe, isto é o menos sensível.
+ * O painel de um agente traz números de telefone e nomes de clientes; esta
+ * resposta são contagens e datas, e mais nada. Acrescentá-la não alarga o que
+ * está exposto de forma significativa — e sai com a porta, quando a porta
+ * fechar.
+ */
+router.get("/agente/pre-visualizacao/evolucao", (req, res, next) => {
+  void (async () => {
+    const ate = typeof req.query.ate === "string" && DATA_RE.test(req.query.ate)
+      ? req.query.ate
+      : todayLisbon();
+    const de = typeof req.query.de === "string" && DATA_RE.test(req.query.de)
+      ? req.query.de
+      : INICIO_DA_SERIE;
+    if (de > ate) {
+      res.status(400).json({ error: "`de` é posterior a `ate`" });
+      return;
+    }
+    const intervalos = await carregarIntervalos({ de, ate });
+    res.json({
+      de: de < INICIO_DA_SERIE ? INICIO_DA_SERIE : de,
+      ate,
+      inicioDaSerie: INICIO_DA_SERIE,
+      agregado: derivarAgregado(intervalos),
+      serie: derivarSerie(intervalos, de, ate),
+    });
   })().catch(next);
 });
 
