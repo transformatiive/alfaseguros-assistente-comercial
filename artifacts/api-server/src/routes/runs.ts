@@ -69,9 +69,6 @@ router.post("/run", async (req, res): Promise<void> => {
   }
 
   const force = body.force === true;
-  // A scheduled catch-up: analyse what is new on a day already analysed, and
-  // nothing that was analysed before. See the note on the 409 below.
-  const retomar = body.retomar === true;
 
   const existing = await db.select().from(runsTable).where(eq(runsTable.date, date));
   if (existing.length > 0) {
