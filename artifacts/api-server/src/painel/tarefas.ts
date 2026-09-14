@@ -169,9 +169,17 @@ export interface EntradaTarefas {
   chamadas: readonly ChamadaParaEvidencia[];
   /** Desk comments, for the same, and for reading when a quote went out. */
   respostas: readonly RespostaParaEvidencia[];
-  /** Zoho org id, so every row with a ticket can link straight to it. */
-  deskOrgId?: string;
+  /**
+   * Ticket id → the link Desk itself gave us, so every row with a ticket can
+   * reach it. Absent ids fall back to the built URL; see `urlDoDesk`.
+   */
+  urlPorTicket?: ReadonlyMap<string, string>;
   now: Date;
+}
+
+/** Desk's own link when we have it, a built one when we do not. */
+function linkDoTicket(ticketId: string, entrada: EntradaTarefas): string {
+  return entrada.urlPorTicket?.get(ticketId) ?? urlDoDesk(ticketId);
 }
 
 /* ── Regras de classificação ────────────────────────────────────────────── */
@@ -414,7 +422,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       esperaHoras: horasEntre(inicio, entrada.now),
       estado: null,
       ticketId: d.ticketId,
-      deskUrl: d.ticketId ? urlDoDesk(d.ticketId, entrada.deskOrgId) : null,
+      deskUrl: d.ticketId ? linkDoTicket(d.ticketId, entrada) : null,
       prioridade: "alta",
       devolucaoIds: d.ids,
       atribuicaoOrigem: d.atribuicaoOrigem,
@@ -473,7 +481,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       esperaHoras: horasEntre(detectado, entrada.now),
       estado: null,
       ticketId: f.linked_ticket_id,
-      deskUrl: f.linked_ticket_id ? urlDoDesk(f.linked_ticket_id, entrada.deskOrgId) : null,
+      deskUrl: f.linked_ticket_id ? linkDoTicket(f.linked_ticket_id, entrada) : null,
       // Past its deadline is high; still inside it is a normal day's work.
       prioridade: vencido ? "alta" : "media",
       devolucaoIds: null,
@@ -581,7 +589,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       esperaHoras: t.idadeHoras,
       estado: estado || null,
       ticketId: t.id,
-      deskUrl: t.deskUrl || urlDoDesk(t.id, entrada.deskOrgId),
+      deskUrl: t.deskUrl || linkDoTicket(t.id, entrada),
       // Waiting on someone else is never urgent to *us*, however old it is.
       prioridade: aguardaTerceiros ? "baixa" : vencido ? "alta" : "media",
       devolucaoIds: null,

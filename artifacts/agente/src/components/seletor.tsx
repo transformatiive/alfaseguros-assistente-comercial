@@ -11,10 +11,10 @@ import { cn } from "@/lib/utils";
  * On a review surface whose whole job is judging layout, a widget that looks
  * borrowed from another program is the thing the eye keeps landing on.
  *
- * Deliberately small in scope: single choice, no search, no groups. It exists
- * for the preview's agent picker and is meant to be deleted with it — building
- * a general-purpose combobox for a control that ships disabled would be paying
- * for a thing nobody asked for.
+ * Deliberately small in scope: single choice, no search, no groups. Two
+ * places use it — the preview's agent picker and the supervisor's "whose
+ * panel am I looking at" — and neither needs more. A general-purpose combobox
+ * would be paying for a thing nobody asked for.
  *
  * Keyboard and screen readers are not skipped, though: `role="listbox"`, Enter
  * and Space to open, Escape to close, arrows to move, and focus returned to

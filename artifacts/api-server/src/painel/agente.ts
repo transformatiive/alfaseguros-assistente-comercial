@@ -2,7 +2,7 @@ import type { Colaborador } from "@workspace/db";
 import { VIDA_AGENT_IDS as VIDA_CONST } from "@workspace/ringover";
 import { env } from "../lib/env.js";
 import { listDevolucoesPendentes } from "../storage/devolucoes-repo.js";
-import { listTicketsEmRisco, type TicketEmRisco } from "./tickets-risco.js";
+import { listTicketsEmRisco, urlsDeTickets, type TicketEmRisco } from "./tickets-risco.js";
 import { loadPendingFollowUps, type FollowUpItem } from "./followups-query.js";
 import { listAcoesDoAgente, loadCoaching, type Coaching } from "./acoes-query.js";
 import type { Acao } from "./acoes.js";
@@ -245,6 +245,11 @@ async function montarTarefas(b: {
     respostas: [],
   }));
 
+  // Desk's own links for every ticket this panel mentions. A failure falls back
+  // to the built URL rather than losing the rows: a link that may be stale
+  // beats no panel.
+  const urlPorTicket = await urlsDeTickets(ticketIds).catch(() => new Map<string, string>());
+
   const todas = derivarTarefas({
     devolucoes,
     followUps,
@@ -254,7 +259,7 @@ async function montarTarefas(b: {
     emailPorFingerprint: contactos.emails,
     chamadas: evidencias.chamadas,
     respostas: evidencias.respostas,
-    deskOrgId: env().ZOHO_DESK_ORG_ID,
+    urlPorTicket,
     now: new Date(),
   });
 

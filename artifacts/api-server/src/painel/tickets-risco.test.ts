@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { idadeEmHoras, RISCO_THRESHOLD_HOURS } from "./tickets-risco.js";
+import { idadeEmHoras, RISCO_THRESHOLD_HOURS, urlDoDesk } from "./tickets-risco.js";
 
 describe("idadeEmHoras", () => {
   const now = new Date("2026-08-28T12:00:00Z");
@@ -31,5 +31,30 @@ describe("idadeEmHoras", () => {
 describe("RISCO_THRESHOLD_HOURS", () => {
   it("is the 24-hour SLA the follow-up payload also reports", () => {
     expect(RISCO_THRESHOLD_HOURS).toBe(24);
+  });
+});
+
+describe("urlDoDesk", () => {
+  it("usa o link que o próprio Desk deu", () => {
+    const raw = { webUrl: "https://desk.zoho.com/agent/alfaseguros/naovida/tickets/details/123" };
+    expect(urlDoDesk("123", raw)).toBe(raw.webUrl);
+  });
+
+  it("recorre ao URL do portal quando o ticket foi sincronizado sem webUrl", () => {
+    expect(urlDoDesk("123", { subject: "x" })).toBe(
+      "https://desk.zoho.com/support/alfaseguros/ShowHomePage.do#Cases/dv/123",
+    );
+    expect(urlDoDesk("123")).toContain("/support/alfaseguros/");
+  });
+
+  it("nunca constrói o caminho com o id numérico da organização", () => {
+    // Era esta a forma anterior, e todos os links davam "a página não existe":
+    // a consola do Desk encaminha pelo nome do portal, não pelo id da org.
+    expect(urlDoDesk("123", null)).not.toContain("/agent/683863304/");
+  });
+
+  it("ignora um webUrl que não seja um endereço https", () => {
+    expect(urlDoDesk("123", { webUrl: "javascript:alert(1)" })).toContain("/support/");
+    expect(urlDoDesk("123", { webUrl: 42 })).toContain("/support/");
   });
 });

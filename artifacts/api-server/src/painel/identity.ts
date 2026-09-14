@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, eq, ne, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { db, colaboradoresTable, type Colaborador } from "@workspace/db";
 
@@ -63,4 +63,29 @@ export async function loadColaboradorAtivo(id: number): Promise<Colaborador | nu
     .where(and(eq(colaboradoresTable.id, id), eq(colaboradoresTable.ativo, true)))
     .limit(1);
   return row ?? null;
+}
+
+/**
+ * Everyone with a panel, by name.
+ *
+ * Name and role only. This list is handed to a supervisor's picker, and a
+ * picker needs no identifiers: emails, Zoho ids and Ringover ids would all
+ * travel to the browser for nothing, and "for nothing" is the whole argument
+ * against sending them.
+ *
+ * `nenhum` is excluded because a panel it cannot open has no place in a list
+ * of panels to open.
+ */
+export async function listarColaboradoresAtivos(): Promise<
+  Array<{ id: number; nome: string; papel: string }>
+> {
+  return db
+    .select({
+      id: colaboradoresTable.id,
+      nome: colaboradoresTable.nome,
+      papel: colaboradoresTable.papel,
+    })
+    .from(colaboradoresTable)
+    .where(and(eq(colaboradoresTable.ativo, true), ne(colaboradoresTable.papel, "nenhum")))
+    .orderBy(asc(colaboradoresTable.nome));
 }

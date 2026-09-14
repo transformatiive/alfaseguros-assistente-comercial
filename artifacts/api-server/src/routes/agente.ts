@@ -4,7 +4,11 @@ import { env } from "../lib/env.js";
 import { logger } from "../lib/logger.js";
 import { todayLisbon } from "../lib/dates.js";
 import { mintAgentToken } from "../painel/token.js";
-import { resolveColaborador, loadColaboradorAtivo } from "../painel/identity.js";
+import {
+  resolveColaborador,
+  loadColaboradorAtivo,
+  listarColaboradoresAtivos,
+} from "../painel/identity.js";
 import { requireAgent, requireSupervisor, agenteDe } from "../middleware/require-agent.js";
 import {
   listDevolucoesPendentes,
@@ -257,6 +261,84 @@ router.get("/supervisor/painel", requireSupervisor, resolveData, (req, res, next
     }
 
     res.json(await buildSupervisorPainel(data));
+  })().catch(next);
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/supervisor/colaboradores — who a supervisor may look at
+// GET /api/supervisor/painel/:id   — one agent's own panel, seen by a supervisor
+// ---------------------------------------------------------------------------
+
+/*
+ * A supervisor sees, for any agent, exactly what that agent sees.
+ *
+ * The team view answers "who is carrying what" in counts. It does not answer
+ * the question a supervisor actually opens the panel with — "what is going on
+ * with Tiago this week" — which needs the same rows and the same coaching the
+ * agent is reading. Rebuilding a second, supervisor-shaped version of that
+ * screen would be two screens to keep true instead of one.
+ *
+ * So this is deliberately the *same* builder, not a variant of it. If the two
+ * ever disagree, the conversation between a supervisor and an agent is about
+ * two different screens, which is worse than no screen.
+ *
+ * Three things are not conveniences and should not be simplified away:
+ *
+ *  1. **The role is re-read from the database on every request**, never taken
+ *     from the token. A token lives fifteen minutes; demoting someone must
+ *     take effect now.
+ *  2. **Every cross-view is logged with both ids.** This reads another
+ *     person's coaching — what they do badly, in writing. A trail of who
+ *     looked at whom is the least that owes.
+ *  3. **An agent gets 403, not an empty list.** Hiding the tab in the UI is a
+ *     courtesy; this is the control.
+ */
+
+router.get("/supervisor/colaboradores", requireSupervisor, (req, res, next) => {
+  void (async () => {
+    const claims = agenteDe(req);
+    const supervisor = await loadColaboradorAtivo(Number(claims.sub));
+    if (!supervisor || supervisor.papel !== "supervisor") {
+      res.status(403).json({ error: "Acesso reservado ao supervisor" });
+      return;
+    }
+    res.json({ colaboradores: await listarColaboradoresAtivos() });
+  })().catch(next);
+});
+
+router.get("/supervisor/painel/:colaboradorId", requireSupervisor, resolveData, (req, res, next) => {
+  void (async () => {
+    const claims = agenteDe(req);
+    const data = typeof req.query.data === "string" ? req.query.data : todayLisbon();
+
+    const supervisor = await loadColaboradorAtivo(Number(claims.sub));
+    if (!supervisor || supervisor.papel !== "supervisor") {
+      res.status(403).json({ error: "Acesso reservado ao supervisor" });
+      return;
+    }
+
+    const alvoId = Number(req.params.colaboradorId);
+    if (!Number.isInteger(alvoId) || alvoId <= 0) {
+      res.status(400).json({ error: "Id inválido" });
+      return;
+    }
+
+    const alvo = await loadColaboradorAtivo(alvoId);
+    if (!alvo || alvo.papel === "nenhum") {
+      res.status(404).json({ error: "Colaborador não encontrado" });
+      return;
+    }
+
+    logger.info(
+      { supervisorId: supervisor.id, colaboradorId: alvo.id, data },
+      "painel: supervisor abriu o painel de outro colaborador",
+    );
+
+    const { painel, erros } = await buildAgentePainel(alvo, data);
+    for (const erro of erros) {
+      logger.error({ err: erro, colaboradorId: alvo.id, data }, "painel: bloco falhou");
+    }
+    res.json(painel);
   })().catch(next);
 });
 
