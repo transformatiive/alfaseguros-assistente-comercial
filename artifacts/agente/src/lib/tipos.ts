@@ -290,3 +290,32 @@ export interface SupervisorPainel {
   };
   atualizadoEm: string;
 }
+
+/* ── Evolução: está isto a produzir efeito? ─────────────────────────────── */
+
+export type FamiliaDeTarefa = "devolucao" | "ticket" | "follow_up";
+
+export interface PontoDaSerie {
+  dia: string;
+  abertas: number;
+  nascidas: number;
+  fechadas: number;
+  /** Mediana das horas entre nascer e fechar. `null` num dia sem fechos. */
+  horasAteFechar: number | null;
+  transitaramParaAtrasado: number;
+  comPrazoNesteDia: number;
+  /** `null` num dia sem prazos — que não é o mesmo que zero por cento. */
+  percentagemAtrasada: number | null;
+}
+
+export interface EvolucaoDaEquipa {
+  de: string;
+  ate: string;
+  inicioDaSerie: string;
+  agregado: {
+    abertas: number;
+    atrasadas: number;
+    porFamilia: Record<FamiliaDeTarefa, { abertas: number; atrasadas: number }>;
+  };
+  serie: PontoDaSerie[];
+}
