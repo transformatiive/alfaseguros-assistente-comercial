@@ -24,18 +24,34 @@ import { lisbonDayBoundsISO, somarDias, toLisbonDate } from "../lib/dates.js";
  * fechou. Com os dois instantes, toda a série se deriva — e deriva-se outra
  * vez, corrigida, se a regra mudar.
  *
- * ## As três curvas, e o que cada uma responde
+ * ## Responder e resolver são duas perguntas, e levam curvas separadas
  *
- *  1. **Horas até fechar** — mediana, por dia de fecho. "Estamos a responder
- *     mais depressa?" É a medida mais direta do efeito pretendido.
- *  2. **Percentagem que transita para atrasado** — das tarefas cujo prazo caiu
- *     nesse dia, quantas ainda estavam por fazer. "Estamos a cumprir?"
- *  3. **Abertas ao fim do dia** — o volume acumulado. "Isto está a estabilizar
- *     ou a crescer?" Uma equipa pode estar mais rápida e na mesma a afogar-se.
+ * A primeira versão disto media o **fecho** contra o prazo de **primeira
+ * resposta**, e o resultado foi 85 % de incumprimento todos os dias — um
+ * número que não distingue um dia bom de um mau, logo não mede nada. Um
+ * pedido aberto há trinta horas pode ter tido resposta em vinte minutos e
+ * estar legitimamente à espera do cliente.
  *
- * Mediana e não média, na primeira. Duas tarefas esquecidas há três semanas
- * arrastam uma média para onde ela deixa de descrever o dia de ninguém; a
- * mediana diz o que aconteceu à tarefa do meio, que é a pergunta.
+ * São coisas diferentes e agora são medidas em separado:
+ *
+ *  1. **Horas até à primeira resposta** — mediana. "Quanto tempo o cliente
+ *     esperou por sinal de vida?"
+ *  2. **Percentagem sem resposta dentro do prazo** — das tarefas cujo prazo de
+ *     resposta caiu nesse dia, quantas ainda não tinham tido nenhuma. É contra
+ *     isto que o SLA de 24 h faz sentido, porque é isto que ele promete.
+ *  3. **Horas até fechar** — mediana. "E quanto tempo até estar resolvido?"
+ *     Sem prazo associado, porque não há nenhum prometido.
+ *  4. **Abertas ao fim do dia** — o volume acumulado. "Isto está a estabilizar
+ *     ou a crescer?" Uma equipa pode responder mais depressa e na mesma
+ *     afogar-se.
+ *
+ * Para uma devolução e para um follow-up, responder *é* fechar — devolver a
+ * chamada resolve-a. Só num ticket é que as duas divergem, e era exactamente
+ * aí que a medida anterior mentia.
+ *
+ * Mediana e não média. Duas tarefas esquecidas há três semanas arrastam uma
+ * média para onde ela deixa de descrever o dia de ninguém; a mediana diz o que
+ * aconteceu à tarefa do meio, que é a pergunta.
  */
 
 /**
@@ -60,7 +76,19 @@ export interface Intervalo {
   inicio: string;
   /** Instante ISO em que ficou provada como feita, ou `null` se continua aberta. */
   fim: string | null;
-  /** Instante ISO em que devia estar feita, ou `null` quando não tem prazo. */
+  /**
+   * Instante ISO do primeiro sinal de vida para o cliente, ou `null` se ainda
+   * não houve nenhum. Numa devolução e num follow-up coincide com `fim`;
+   * num ticket é o primeiro comentário de um agente, que costuma ser muito
+   * anterior ao fecho.
+   */
+  primeiraResposta: string | null;
+  /**
+   * Instante ISO em que a **primeira resposta** devia ter saído, ou `null`
+   * quando não há prazo. Não é um prazo de fecho: nada promete uma hora de
+   * resolução, e medir o fecho contra o SLA de resposta foi o erro que esta
+   * separação corrige.
+   */
   prazo: string | null;
 }
 
@@ -73,7 +101,11 @@ export interface PontoDaSerie {
   fechadas: number;
   /** Mediana das horas entre nascer e fechar, das que fecharam neste dia. */
   horasAteFechar: number | null;
-  /** Das que tinham prazo neste dia, quantas o passaram por fazer. */
+  /** Mediana das horas até à primeira resposta, das que a tiveram neste dia. */
+  horasAtePrimeiraResposta: number | null;
+  /** Quantas tiveram a primeira resposta neste dia. */
+  responderam: number;
+  /** Das que tinham prazo de resposta neste dia, quantas ainda não a tinham tido. */
   transitaramParaAtrasado: number;
   /** Quantas tinham prazo neste dia. Denominador da percentagem. */
   comPrazoNesteDia: number;
@@ -132,13 +164,16 @@ export function derivarSerie(
   const preparados = intervalos.map((i) => {
     const nasceu = instante(i.inicio);
     const fechou = i.fim ? instante(i.fim) : null;
+    const respondeu = i.primeiraResposta ? instante(i.primeiraResposta) : null;
     const venceu = i.prazo ? instante(i.prazo) : null;
     return {
       diaNasceu: toLisbonDate(new Date(nasceu)),
       diaFechou: fechou !== null ? toLisbonDate(new Date(fechou)) : null,
+      diaRespondeu: respondeu !== null ? toLisbonDate(new Date(respondeu)) : null,
       diaVenceu: venceu !== null ? toLisbonDate(new Date(venceu)) : null,
       nasceu,
       fechou,
+      respondeu,
       venceu,
     };
   });
@@ -155,7 +190,9 @@ export function derivarSerie(
     let fechadas = 0;
     let transitaram = 0;
     let comPrazo = 0;
+    let responderam = 0;
     const horas: number[] = [];
+    const horasResposta: number[] = [];
 
     for (const p of preparados) {
       if (p.diaNasceu === dia) nascidas++;
@@ -163,6 +200,11 @@ export function derivarSerie(
       if (p.diaFechou === dia) {
         fechadas++;
         horas.push(Math.max(0, (p.fechou! - p.nasceu) / 3_600_000));
+      }
+
+      if (p.diaRespondeu === dia) {
+        responderam++;
+        horasResposta.push(Math.max(0, (p.respondeu! - p.nasceu) / 3_600_000));
       }
 
       // Aberta ao fim do dia: já tinha nascido e ainda não tinha fechado.
@@ -174,10 +216,13 @@ export function derivarSerie(
 
       if (p.diaVenceu === dia) {
         comPrazo++;
-        // Transitou para atrasada se, no instante do prazo, ainda estava por
-        // fazer. Fechar no próprio dia mas depois da hora conta como atrasada
-        // — que é o que o cliente sentiu.
-        if (p.fechou === null || p.fechou > p.venceu!) transitaram++;
+        // Transitou para atrasada se, à hora do prazo, o cliente ainda não
+        // tinha tido resposta nenhuma. Responder no próprio dia mas depois da
+        // hora conta como atraso — é o que o cliente sentiu. O **fecho** não
+        // entra nesta conta: ninguém prometeu uma hora de resolução, e medir
+        // o fecho contra o prazo de resposta dava 85 % de incumprimento todos
+        // os dias, que é um número sem significado.
+        if (p.respondeu === null || p.respondeu > p.venceu!) transitaram++;
       }
     }
 
@@ -187,6 +232,8 @@ export function derivarSerie(
       nascidas,
       fechadas,
       horasAteFechar: mediana(horas),
+      horasAtePrimeiraResposta: mediana(horasResposta),
+      responderam,
       transitaramParaAtrasado: transitaram,
       comPrazoNesteDia: comPrazo,
       percentagemAtrasada:
@@ -220,7 +267,10 @@ export function derivarAgregado(
     if (i.fim !== null) continue;
     abertas++;
     porFamilia[i.familia].abertas++;
-    if (i.prazo !== null && instante(i.prazo) < t) {
+    // Atrasada = passou do prazo **de resposta** sem que o cliente tivesse
+    // ouvido nada. Uma tarefa por fechar mas já respondida não está em
+    // incumprimento; está em curso.
+    if (i.primeiraResposta === null && i.prazo !== null && instante(i.prazo) < t) {
       atrasadas++;
       porFamilia[i.familia].atrasadas++;
     }

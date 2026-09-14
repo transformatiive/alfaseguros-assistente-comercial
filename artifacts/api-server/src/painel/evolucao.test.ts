@@ -15,13 +15,19 @@ import {
  * descuido que estes testes existem para apanhar.
  */
 function tarefa(p: Partial<Intervalo> & { inicio: string }): Intervalo {
-  return {
+  const base: Intervalo = {
     familia: "devolucao",
     colaboradorId: 1,
     fim: null,
+    primeiraResposta: null,
     prazo: null,
     ...p,
   };
+  // Por omissão, responder é fechar — que é a verdade numa devolução e num
+  // follow-up. Um teste que queira separar as duas datas passa
+  // `primeiraResposta` explicitamente, como acontece nos tickets.
+  if (p.primeiraResposta === undefined) base.primeiraResposta = base.fim;
+  return base;
 }
 
 describe("mediana", () => {
@@ -334,5 +340,80 @@ describe("uma família sem nenhum fecho é suspeita, não é informação", () =
     );
     expect(s[0].fechadas).toBe(1);
     expect(s[1].percentagemAtrasada).toBe(50);
+  });
+});
+
+
+/**
+ * O ticket é a única família em que responder e resolver são datas diferentes,
+ * e foi por as ter confundido que a curva de incumprimento marcava 85 % todos
+ * os dias — um número que não distingue um dia bom de um mau.
+ */
+describe("responder e resolver são medidas separadas", () => {
+  const pedido = (p: Partial<Intervalo>): Intervalo =>
+    tarefa({
+      familia: "ticket",
+      inicio: "2026-09-11T09:00:00+01:00",
+      prazo: "2026-09-12T09:00:00+01:00",
+      ...p,
+    });
+
+  it("um pedido respondido depressa e fechado tarde não está em incumprimento", () => {
+    const s = derivarSerie(
+      [
+        pedido({
+          primeiraResposta: "2026-09-11T09:20:00+01:00",
+          fim: "2026-09-30T18:00:00+01:00",
+        }),
+      ],
+      "2026-09-11",
+      "2026-09-12",
+    );
+    expect(s[0].responderam).toBe(1);
+    expect(s[0].horasAtePrimeiraResposta).toBeCloseTo(0.3, 1);
+    expect(s[1].transitaramParaAtrasado).toBe(0);
+    expect(s[1].percentagemAtrasada).toBe(0);
+  });
+
+  it("um pedido sem resposta nenhuma está em incumprimento à hora do prazo", () => {
+    const s = derivarSerie([pedido({ primeiraResposta: null })], "2026-09-11", "2026-09-12");
+    expect(s[1].transitaramParaAtrasado).toBe(1);
+  });
+
+  it("responder depois da hora conta como incumprimento", () => {
+    const s = derivarSerie(
+      [pedido({ primeiraResposta: "2026-09-12T11:00:00+01:00" })],
+      "2026-09-11",
+      "2026-09-12",
+    );
+    expect(s[1].transitaramParaAtrasado).toBe(1);
+  });
+
+  it("as duas medianas são independentes uma da outra", () => {
+    const s = derivarSerie(
+      [
+        pedido({
+          primeiraResposta: "2026-09-11T10:00:00+01:00",
+          fim: "2026-09-11T19:00:00+01:00",
+        }),
+      ],
+      "2026-09-11",
+      "2026-09-11",
+    );
+    expect(s[0].horasAtePrimeiraResposta).toBe(1);
+    expect(s[0].horasAteFechar).toBe(10);
+  });
+
+  it("no agregado, uma tarefa já respondida não conta como atrasada", () => {
+    const agora = new Date("2026-09-14T12:00:00+01:00");
+    const a = derivarAgregado(
+      [
+        pedido({ primeiraResposta: "2026-09-11T09:10:00+01:00", fim: null }),
+        pedido({ primeiraResposta: null, fim: null }),
+      ],
+      agora,
+    );
+    expect(a.abertas).toBe(2);
+    expect(a.atrasadas).toBe(1);
   });
 });
