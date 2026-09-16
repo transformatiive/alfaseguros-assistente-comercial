@@ -87,6 +87,41 @@ Duas coisas no manifesto também contavam para isso, e foram corrigidas:
   configura a extensão por si. Foi retirada: no melhor caso era ruído, no pior
   fazia a instalação comportar-se como pessoal em vez de da organização.
 
+## Quem configura o quê (e porque é que ninguém devia escrever nada)
+
+Os agentes relataram que lhes era pedido o endereço e o token ao abrir o
+separador. Não devia, e a razão está na documentação do `authType`:
+
+> **org** — *"the configuration parameter needs to be set by the admin, while
+> other users using the extension may not need to configure it. The parameter
+> value is set organization-wide."*
+> **personal** — *"each user using the extension must individually configure
+> the config parameter."*
+
+Os dois parâmetros estão em `authType: "org"` desde sempre. O que estava a
+tornar a instalação pessoal era o `"type": "personal"` no topo do manifesto —
+uma chave que **não existe no manifesto do Desk**, vinda do Zoho Projects.
+Retirada. Enquanto a versão nova não estiver instalada no portal, o
+comportamento antigo mantém-se: o repositório não chega ao Desk sozinho.
+
+E há menos para escrever do que antes:
+
+| Parâmetro | Quem escreve |
+|---|---|
+| Endereço do painel | **ninguém** — `userdefined: false` com `default`, preenchido automaticamente |
+| Token do widget | **um administrador, uma vez**, na instalação |
+
+O endereço deixou de ser pedido porque nunca foi realmente configurável: está
+fixado no `whiteListedDomains` e no `cspDomains`, e um valor diferente seria
+bloqueado pelo browser antes de chegar a lado nenhum. Pedi-lo era oferecer uma
+escolha que não existe.
+
+## Como saber que versão está instalada
+
+O menu "mais" mostra um ícone ao lado de "O meu painel": um quadrado indigo com
+três barras brancas. **Se não houver ícone nenhum, o portal tem a versão
+antiga** — e nesse caso nada do que está acima se aplica ainda.
+
 ## Instalação
 
 1. `zet validate` e depois `zet pack` nesta pasta. O pacote sai em

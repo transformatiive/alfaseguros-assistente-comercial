@@ -36,17 +36,18 @@
       "displayName": "Endereço do painel",
       "name": "agenteAppUrl",
       "type": "text",
-      "description": "Base do painel, sem barra final. Ex.: https://supervisor-production-f030.up.railway.app",
-      "mandatory": true,
-      "userdefined": true,
+      "description": "Preenchido automaticamente. O dominio esta fixado no manifesto, por isso um valor diferente seria bloqueado pelo browser.",
+      "mandatory": false,
+      "userdefined": false,
       "secure": false,
-      "authType": "org"
+      "authType": "org",
+      "default": "https://supervisor-production-f030.up.railway.app"
     },
     {
       "displayName": "Token do widget",
       "name": "widgetToken",
       "type": "text",
-      "description": "O mesmo valor de PAINEL_WIDGET_TOKEN no servidor. Introduzido na instalacao para nao viver no repositorio, e para poder ser rodado sem reempacotar a extensao.",
+      "description": "O mesmo valor de PAINEL_WIDGET_TOKEN no servidor. Preenchido UMA vez por um administrador, na instalacao: authType=org faz com que valha para a organizacao inteira e que nenhum agente tenha de o escrever.",
       "mandatory": true,
       "userdefined": true,
       "secure": false,
