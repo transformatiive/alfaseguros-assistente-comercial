@@ -133,16 +133,16 @@ antiga** — e nesse caso nada do que está acima se aplica ainda.
 2. Em [sigma.zoho.com](https://sigma.zoho.com), criar uma extensão **privada**
    para o Desk e carregar o zip.
 3. Instalar no portal da Alfaseguros.
-4. **Preencher os dois parâmetros de configuração** — sem eles o widget diz que
-   não está configurada e não faz mais nada:
+4. **Preencher o token do widget** — um campo, uma vez, por um administrador.
+   O valor é o mesmo de `PAINEL_WIDGET_TOKEN` no servidor. Sem ele o widget diz
+   que não está configurado e não faz mais nada.
 
-   | Parâmetro | Valor |
-   |---|---|
-   | Endereço do painel | `https://supervisor-production-f030.up.railway.app` (sem barra final) |
-   | Token do widget | o mesmo valor de `PAINEL_WIDGET_TOKEN` no servidor |
+   O endereço do painel **já não é pedido**: é `userdefined: false` com
+   `default`, preenchido automaticamente. Ver a secção acima sobre quem
+   configura o quê.
 
-O token do widget é pedido na instalação, e não escrito no código, por duas
-razões: não vive no repositório, e pode ser rodado sem reempacotar a extensão.
+O token é pedido na instalação, e não escrito no código, por duas razões: não
+vive no repositório, e pode ser rodado sem reempacotar a extensão.
 
 ## O que aparece quando corre mal
 
