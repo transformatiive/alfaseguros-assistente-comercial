@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import {
   db,
   ticketsTable,
@@ -20,19 +20,64 @@ export interface SyncResult {
 }
 
 /**
- * Pull tickets created in `[from, to]` and their comment threads from Zoho
- * Desk, upsert them into Postgres, and return the in-memory shape for the
- * downstream case linker. Idempotent: re-running for the same window is safe.
+ * Puxa do Zoho Desk os tickets **modificados** desde `from`, com as respectivas
+ * conversas, e guarda-os. Idempotente: repetir a mesma janela é seguro.
+ *
+ * ## Modificados, e não criados
+ *
+ * Isto lia tickets *criados* na janela, e daí vinha um erro que não era óbvio:
+ * os comentários de um ticket eram lidos uma única vez, poucas horas depois de
+ * ele nascer — quando ainda não tinha resposta nenhuma. A resposta do agente
+ * chega depois e nunca era guardada.
+ *
+ * O estrago maior não era a métrica de primeira resposta. Era o painel: a
+ * prova que faz uma tarefa desaparecer *é* uma resposta no ticket. Sem ela, um
+ * agente que responde a um pedido de anteontem continua a vê-lo na lista como
+ * se nada tivesse feito — e a desconfiar do painel, com razão.
+ *
+ * Um comentário novo altera o `modifiedTime`. Perguntar pelos modificados
+ * apanha por construção tudo o que mexeu, incluindo tickets antigos que
+ * ganharam resposta hoje.
+ *
+ * O `to` deixou de servir para filtrar — um ticket modificado *agora* está
+ * sempre dentro da janela que interessa, e um limite superior só serviria para
+ * o excluir. Continua a ser gravado em `ticket_sync_state` como a ponta
+ * superior da janela que esta corrida cobriu.
  */
 export async function syncTickets(
   client: ZohoDeskClient,
   from: Date,
   to: Date,
 ): Promise<SyncResult> {
-  const tickets = await client.listTicketsCreatedBetween({
-    createdTimeFrom: from.toISOString(),
-    createdTimeTo: to.toISOString(),
+  const tickets = await client.listTicketsModifiedSince({
+    modifiedTimeFrom: from.toISOString(),
   });
+
+  /*
+   * O que já sabíamos de cada um destes tickets.
+   *
+   * Isto existe por causa da quota, e a quota passou a importar precisamente
+   * por causa da mudança acima. Antes, uma janela de duas horas trazia os
+   * poucos tickets *criados* nela. Agora traz todos os que *mexeram* — e cada
+   * um custa uma chamada à API para ir buscar os comentários.
+   *
+   * Um ticket cujo `modifiedTime` é igual ao que temos guardado não mudou
+   * desde a última vez que o lemos, por isso os comentários dele também não.
+   * Saltar essa chamada torna a janela larga de dois dias barata a partir da
+   * segunda corrida, que é quando ela seria cara.
+   *
+   * O ticket em si é sempre gravado, mesmo quando os comentários são saltados:
+   * é um upsert idempotente e custa zero chamadas à Zoho.
+   */
+  const conhecidos = new Map<string, number>();
+  if (tickets.length > 0) {
+    for (const linha of await db
+      .select({ id: ticketsTable.id, modifiedTime: ticketsTable.modifiedTime })
+      .from(ticketsTable)
+      .where(inArray(ticketsTable.id, tickets.map((t) => t.id)))) {
+      if (linha.modifiedTime) conhecidos.set(linha.id, linha.modifiedTime.getTime());
+    }
+  }
 
   const allComments: Array<ZohoComment & { ticketId: string }> = [];
 
@@ -80,6 +125,12 @@ export async function syncTickets(
       .insert(ticketsTable)
       .values(values)
       .onConflictDoUpdate({ target: ticketsTable.id, set: values });
+
+    // Inalterado desde a última leitura: os comentários também estão, e a
+    // chamada não traria nada de novo.
+    const novoInstante = t.modifiedTime ? new Date(t.modifiedTime).getTime() : null;
+    const jaVisto = conhecidos.get(t.id);
+    if (novoInstante !== null && jaVisto !== undefined && novoInstante <= jaVisto) continue;
 
     const comments = await client.listTicketComments(t.id);
     for (const c of comments) {
