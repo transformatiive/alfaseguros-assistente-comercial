@@ -151,6 +151,81 @@ export class ZohoDeskClient {
   }
 
   /**
+   * Tickets **modificados** desde `modifiedTimeFrom`, dos mais recentes para
+   * trás.
+   *
+   * ## Porque é que isto existe, e porque é que não bastava a criação
+   *
+   * A sincronização lia tickets *criados* na janela. Os comentários de um
+   * ticket eram, por isso, lidos uma única vez: poucas horas depois de ele
+   * nascer, quando ainda não tinha resposta nenhuma. A resposta de um agente
+   * vem depois — e nunca chegava à nossa base de dados.
+   *
+   * Isso não estragava só uma métrica. A prova que faz uma tarefa desaparecer
+   * do painel *é* uma resposta no ticket: sem ela, um agente que responde a um
+   * pedido de anteontem continua a vê-lo na lista como se nada tivesse feito.
+   *
+   * Um comentário novo altera o `modifiedTime` do ticket. Perguntar pelos
+   * modificados apanha, por construção, tudo o que mexeu — incluindo tickets
+   * antigos que ganharam resposta hoje.
+   *
+   * ## Porque é que isto é mais barato do que a busca por criação
+   *
+   * Não precisa da busca binária. Ordenado por `-modifiedTime`, o que
+   * interessa está nas primeiras páginas e a paginação pára assim que
+   * atravessa o limite inferior da janela. Numa corrida de quinze em quinze
+   * minutos, com janela de duas horas, isso é tipicamente uma página.
+   *
+   * Um ticket sem `modifiedTime` é saltado sem parar a paginação: é um dado em
+   * falta, não um sinal de que se chegou ao fim da janela.
+   */
+  async listTicketsModifiedSince(params: {
+    modifiedTimeFrom: string;
+    fields?: string[];
+    include?: string;
+    departmentId?: string;
+    /** Tecto de segurança. 50 páginas são 5000 tickets. */
+    maxPages?: number;
+  }): Promise<ZohoTicket[]> {
+    const include = params.include ?? "contacts,assignee";
+    const fields = (params.fields ?? DEFAULT_TICKET_FIELDS).join(",");
+    const desde = new Date(params.modifiedTimeFrom).getTime();
+    const maxPages = params.maxPages ?? 50;
+
+    const all: ZohoTicket[] = [];
+    let from = 0;
+
+    for (let page = 0; page < maxPages; page++) {
+      const json = await this.request("/tickets", {
+        from: String(from),
+        limit: String(TICKETS_PAGE_SIZE),
+        include,
+        fields,
+        sortBy: "-modifiedTime",
+        ...(params.departmentId ? { departmentId: params.departmentId } : {}),
+      });
+      const parsed = ticketsListResponseSchema.parse(json);
+      const batch = parsed.data ?? [];
+      if (batch.length === 0) break;
+
+      let saiuDaJanela = false;
+      for (const t of batch) {
+        if (!t.modifiedTime) continue;
+        if (new Date(t.modifiedTime).getTime() < desde) {
+          saiuDaJanela = true;
+          break;
+        }
+        all.push(t);
+      }
+
+      if (saiuDaJanela || batch.length < TICKETS_PAGE_SIZE) break;
+      from += TICKETS_PAGE_SIZE;
+    }
+
+    return all;
+  }
+
+  /**
    * Page through tickets created in `[createdTimeFrom, createdTimeTo]`.
    *
    * The Zoho Desk v1 API does not support date-range query parameters — only
