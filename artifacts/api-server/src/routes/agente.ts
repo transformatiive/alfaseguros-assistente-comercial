@@ -448,6 +448,9 @@ router.get("/supervisor/evolucao", requireSupervisor, (req, res, next) => {
  * `X-Robots-Tag` mantém-no fora dos motores de busca, mas isso é obscuridade,
  * não é uma tranca. Se um dia isto passar a ser lido por mais gente do que a
  * direcção, volta a pedir token.
+ *
+ * O que **não** é aceitável, e quase passou: ser legível por qualquer site que
+ * um colaborador tenha aberto. Ver `semLeituraCruzada`.
  */
 
 const JANELA_POR_OMISSAO: Record<Granularidade, number> = {
@@ -460,7 +463,36 @@ function granularidadeDe(raw: unknown): Granularidade {
   return raw === "semana" || raw === "mes" ? raw : "dia";
 }
 
-router.get("/adopcao", (req, res, next) => {
+/**
+ * Fecha esta resposta à leitura por outra origem.
+ *
+ * A app inteira corre com `cors({ origin: true })`, que devolve o cabeçalho de
+ * permissão para **qualquer** site que peça. Nas rotas com token isso é
+ * inofensivo: um site terceiro não tem o token e leva 401. Aqui não há token,
+ * e sem isto qualquer página que um colaborador tivesse aberta noutro
+ * separador podia ler a lista de colegas em silêncio, sem ninguém carregar em
+ * nada.
+ *
+ * "Sem token" era o pedido; "legível por qualquer site que a equipa visite"
+ * não era, e foi uma consequência que eu não vi — foi o revisor de segurança
+ * que a apanhou.
+ *
+ * Retirar o cabeçalho não fecha a porta, fecha só esta janela: quem escrever o
+ * endereço no browser continua a ver a página, e a própria página continua a
+ * lê-la porque é servida da mesma origem. O que deixa de ser possível é outro
+ * site lê-la por baixo do pano.
+ *
+ * `Vary: Origin` fica porque a resposta passa a depender da origem do pedido,
+ * e uma cache pela frente não deve servir a mesma cópia a toda a gente.
+ */
+const semLeituraCruzada: RequestHandler = (_req, res, next) => {
+  res.removeHeader("Access-Control-Allow-Origin");
+  res.removeHeader("Access-Control-Allow-Credentials");
+  res.setHeader("Vary", "Origin");
+  next();
+};
+
+router.get("/adopcao", semLeituraCruzada, (req, res, next) => {
   void (async () => {
     const granularidade = granularidadeDe(req.query.granularidade);
     const ate =
