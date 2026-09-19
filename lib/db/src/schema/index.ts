@@ -11,3 +11,4 @@ export * from "./colaboradores";
 export * from "./checklist";
 export * from "./checklist_results";
 export * from "./devolucoes";
+export * from "./painel_acessos";

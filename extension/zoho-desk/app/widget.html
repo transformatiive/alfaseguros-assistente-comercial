@@ -43,6 +43,10 @@
         padding: 1px 4px;
         border-radius: 3px;
       }
+      .aviso a {
+        color: #b45309;
+        font-weight: 600;
+      }
       [hidden] { display: none !important; }
     </style>
   </head>
@@ -293,9 +297,51 @@
        * nowhere else.
        */
       function desenharPainel(cfg, token) {
-        el.quadro.src = cfg.base + "/agente#token=" + encodeURIComponent(token);
+        var endereco = cfg.base + "/agente#token=" + encodeURIComponent(token);
+        el.quadro.src = endereco;
         el.quadro.hidden = false;
         el.aviso.hidden = true;
+        vigiar(endereco);
+      }
+
+      /*
+       * The watchdog for the one failure an iframe does not report.
+       *
+       * `cspDomains` only accepts `connect-src` — Sigma rejects `frame-src` and
+       * `child-src` outright — so nothing in the manifest can promise the
+       * portal will let us frame the panel. If its CSP refuses, the frame
+       * renders as a blank white box and fires `load` exactly as a working one
+       * does. There is no error, no event, nothing to catch.
+       *
+       * So the panel announces itself instead (`painel-agente:pronto`, posted
+       * from `main.tsx` before the first render). If that announcement does not
+       * arrive, the frame is not showing anything, and the agent gets a link
+       * that opens the panel in a tab — which is where it ran before this
+       * became a band, and works regardless of any framing policy.
+       *
+       * Generous on purpose: a cold Railway container plus a first paint can
+       * take several seconds, and an accusation of failure that turns out to be
+       * slowness is worse than a few seconds of white.
+       */
+      var ESPERA_PELO_PAINEL_MS = 12000;
+      var vigia = null;
+      var jaSeAnunciou = false;
+
+      function vigiar(endereco) {
+        if (jaSeAnunciou) return;
+        if (vigia) clearTimeout(vigia);
+        vigia = setTimeout(function () {
+          if (jaSeAnunciou) return;
+          el.quadro.hidden = true;
+          mostrarAviso(
+            "O Zoho Desk não está a deixar mostrar o painel aqui dentro. " +
+              '<a href="' +
+              endereco.replace(/"/g, "&quot;") +
+              '" target="_blank" rel="noopener">Abrir o painel num separador ' +
+              "novo</a> — funciona exactamente da mesma maneira. Avisa o Nuno, " +
+              "para ficar resolvido de vez."
+          );
+        }, ESPERA_PELO_PAINEL_MS);
       }
 
       /*
@@ -413,7 +459,17 @@
             window.addEventListener("message", function (evento) {
               if (evento.origin !== cfg.base) return;
               var dados = evento.data;
-              if (!dados || dados.tipo !== "painel-agente:token-expirado") return;
+              if (!dados) return;
+              if (dados.tipo === "painel-agente:pronto") {
+                // It is on screen. Call off the watchdog for good: a later
+                // token swap reloads the same panel in the same frame, and
+                // re-arming would turn a normal renewal into a false alarm.
+                jaSeAnunciou = true;
+                if (vigia) clearTimeout(vigia);
+                el.aviso.hidden = true;
+                return;
+              }
+              if (dados.tipo !== "painel-agente:token-expirado") return;
               renovar();
             });
 

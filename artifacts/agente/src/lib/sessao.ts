@@ -25,6 +25,20 @@ let token: string | null = null;
 export const PEDIDO_DE_TOKEN = "painel-agente:token-expirado";
 
 /**
+ * The message that says "I am on screen".
+ *
+ * The widget draws us inside an iframe, and an iframe that a Content Security
+ * Policy refuses to load renders as a blank white box with no error the host
+ * page can see — `load` fires either way. Blank is the one outcome we cannot
+ * ship: the agent has no way to tell a blocked panel from an empty one.
+ *
+ * So the panel says it is here. The widget waits a few seconds for this, and
+ * if it never arrives, offers to open the panel in a tab instead. It is a
+ * liveness signal, not a credential, and carries nothing.
+ */
+export const ESTOU_AQUI = "painel-agente:pronto";
+
+/**
  * Take the token out of the URL fragment and keep it in memory.
  *
  * Call once, before the first request. Safe to call again: after the first call
@@ -61,6 +75,18 @@ export function pedirTokenNovo(): void {
   token = null;
   if (window.parent !== window) {
     window.parent.postMessage({ tipo: PEDIDO_DE_TOKEN }, "*");
+  }
+}
+
+/**
+ * Tell the widget above us that we rendered.
+ *
+ * Silent when there is no widget — a panel opened directly in a tab has
+ * nobody to tell, and posting to itself would only confuse a future listener.
+ */
+export function anunciarPresenca(): void {
+  if (window.parent !== window) {
+    window.parent.postMessage({ tipo: ESTOU_AQUI }, "*");
   }
 }
 
