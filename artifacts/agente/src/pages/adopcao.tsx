@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Indisponivel } from "@/components/Bloco";
 import { Barras } from "@/components/barras";
-import { obter } from "@/lib/api";
 import { diaCurto, haQuantoTempo, primeiroNome } from "@/lib/formatos";
 import type { Adopcao, Granularidade, LinhaDeAdopcao } from "@/lib/tipos";
 
@@ -31,29 +30,25 @@ import type { Adopcao, Granularidade, LinhaDeAdopcao } from "@/lib/tipos";
  * diz que o dia foi fraco para toda a gente, que é outra história (uma quinta
  * cheia de reuniões, não um painel abandonado).
  */
-export function VistaDaAdopcao({
-  origem,
-  chave,
-}: {
-  /**
-   * Igual às outras vistas: a pré-visualização passa a sua origem, que não
-   * precisa de token. É uma função e não um texto porque a escala é escolhida
-   * aqui dentro — com um endereço fixo, os botões Dia/Semana/Mês mudariam o
-   * título e não os dados, que é pior do que não os ter.
-   */
-  origem?: (granularidade: Granularidade) => string;
-  chave?: unknown[];
-} = {}) {
+export function VistaDaAdopcao() {
   const [granularidade, setGranularidade] = useState<Granularidade>("dia");
-  const semToken = origem !== undefined;
 
+  /*
+   * Lê sem token, ao contrário de todas as outras vistas.
+   *
+   * O endpoint é aberto por pedido expresso, e a razão é prática: esta é a
+   * vista que diz se o painel está a ser aberto, e enquanto o widget do Desk
+   * não funcionar para toda a gente é precisamente a que mais precisa de ser
+   * consultada — por quem não consegue entrar pelo Desk.
+   *
+   * Isso faz dela o único ecrã com um caminho de leitura só: dentro do Desk,
+   * na pré-visualização e num separador solto, é sempre este pedido. Um ecrã
+   * com dois caminhos é dois ecrãs à espera de discordarem um do outro.
+   */
   const { data, isLoading, error } = useQuery<Adopcao>({
-    queryKey: chave ? [...chave, granularidade] : ["adopcao", granularidade],
+    queryKey: ["adopcao", granularidade],
     queryFn: async () => {
-      if (!semToken) {
-        return obter<Adopcao>(`/api/supervisor/adopcao?granularidade=${granularidade}`);
-      }
-      const res = await fetch(origem(granularidade));
+      const res = await fetch(`/api/adopcao?granularidade=${granularidade}`);
       if (!res.ok) throw new Error(`O servidor respondeu ${res.status}`);
       return (await res.json()) as Adopcao;
     },
@@ -154,6 +149,16 @@ export function VistaDaAdopcao({
         hora entre elas — quem deixa o separador aberto não conta dez vezes por
         isso. Não fica registado o que cada pessoa viu, só que abriu, qual das
         abas e a que horas.
+      </p>
+      {/*
+        Dito na própria página, e não só num comentário no código: quem a tem
+        aberta tem de saber que o endereço não está trancado. Esconder isso de
+        quem usa o ecrã seria a única parte desagradável deste desenho.
+      */}
+      <p className="px-0.5 t-meta text-stone-400">
+        Esta página abre-se sem palavra-passe, a quem souber o endereço. Não
+        mostra nada de clientes — só nomes de colegas e contagens — mas o
+        endereço não deve andar a circular fora da direcção.
       </p>
     </div>
   );

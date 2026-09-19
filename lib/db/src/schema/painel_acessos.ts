@@ -33,9 +33,16 @@ export const painelAcessosTable = pgTable(
     colaboradorId: integer("colaborador_id")
       .notNull()
       .references(() => colaboradoresTable.id, { onDelete: "cascade" }),
-    /** Qual das abas: `meu-dia`, `equipa`, `evolucao`, `adopcao`. */
+    /**
+     * Qual das abas: `meu-dia`, `equipa`, `evolucao`.
+     *
+     * A vista "quem usa" não está na lista e isso é consequência, não
+     * esquecimento: ela lê-se sem token, por isso não há identidade nenhuma
+     * para registar. Uma vista que não se consegue contar a si própria é o
+     * preço de ser aberta.
+     */
     vista: text("vista", {
-      enum: ["meu-dia", "equipa", "evolucao", "adopcao"],
+      enum: ["meu-dia", "equipa", "evolucao"],
     }).notNull(),
     criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
   },

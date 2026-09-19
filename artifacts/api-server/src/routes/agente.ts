@@ -408,7 +408,7 @@ router.get("/supervisor/evolucao", requireSupervisor, (req, res, next) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /api/supervisor/adopcao — e isto, alguém abre?
+// GET /api/adopcao — e isto, alguém abre? (sem token, de propósito)
 // ---------------------------------------------------------------------------
 
 /*
@@ -428,6 +428,26 @@ router.get("/supervisor/evolucao", requireSupervisor, (req, res, next) => {
  * A janela por omissão acompanha a granularidade: catorze dias, doze semanas,
  * seis meses. Uma janela fixa daria seis pontos ou duzentos consoante o botão
  * escolhido, e nenhum dos dois se lê.
+ *
+ * ## Porque é que esta não pede token — e o que isso custa
+ *
+ * Todas as outras vistas do painel pedem um token de quinze minutos que só o
+ * widget do Zoho Desk sabe emitir. Esta não, por pedido expresso, e a razão é
+ * prática: é a vista que diz se o painel está a ser aberto, e enquanto o
+ * widget não estiver a funcionar para toda a gente ela é precisamente a que
+ * mais precisa de ser consultada — por quem não consegue entrar pelo Desk.
+ *
+ * O que fica exposto a quem souber o endereço, dito sem rodeios: **nomes de
+ * colaboradores, a equipa e o papel de cada um, e quantas vezes abriram o
+ * painel**. Não há um único dado de cliente — nem números, nem nomes, nem
+ * assuntos de tickets — porque esta resposta é construída a partir de
+ * contagens e datas e de mais nada.
+ *
+ * Não é inofensivo à mesma: são dados sobre pessoas identificadas, no trabalho
+ * delas. O endereço não está ligado a partir de lado nenhum e o cabeçalho
+ * `X-Robots-Tag` mantém-no fora dos motores de busca, mas isso é obscuridade,
+ * não é uma tranca. Se um dia isto passar a ser lido por mais gente do que a
+ * direcção, volta a pedir token.
  */
 
 const JANELA_POR_OMISSAO: Record<Granularidade, number> = {
@@ -440,15 +460,8 @@ function granularidadeDe(raw: unknown): Granularidade {
   return raw === "semana" || raw === "mes" ? raw : "dia";
 }
 
-router.get("/supervisor/adopcao", requireSupervisor, (req, res, next) => {
+router.get("/adopcao", (req, res, next) => {
   void (async () => {
-    const claims = agenteDe(req);
-    const supervisor = await loadColaboradorAtivo(Number(claims.sub));
-    if (!supervisor || supervisor.papel !== "supervisor") {
-      res.status(403).json({ error: "Acesso reservado ao supervisor" });
-      return;
-    }
-
     const granularidade = granularidadeDe(req.query.granularidade);
     const ate =
       typeof req.query.ate === "string" && DATA_RE.test(req.query.ate)
@@ -464,7 +477,10 @@ router.get("/supervisor/adopcao", requireSupervisor, (req, res, next) => {
       return;
     }
 
-    registarAcesso(supervisor.id, "adopcao");
+    // Fora dos motores de busca. Não substitui uma tranca — nada aqui
+    // substitui uma tranca — mas um endereço que ninguém publicou também não
+    // tem de aparecer numa pesquisa pelo nome de um colaborador.
+    res.setHeader("X-Robots-Tag", "noindex, nofollow");
 
     // A janela lida é a do *período* e não a dos dias pedidos: com a vista
     // mensal, `de` cai a meio de um mês, e ler só a partir daí mostraria a
