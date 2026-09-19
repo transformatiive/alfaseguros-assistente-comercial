@@ -5,6 +5,7 @@ import { Seletor } from "@/components/seletor";
 import { CorpoDoPainel } from "@/pages/painel-corpo";
 import { VistaDaEquipa } from "@/pages/equipa";
 import { VistaDaEvolucao } from "@/pages/evolucao";
+import { VistaDaAdopcao } from "@/pages/adopcao";
 import type { AgentePainel } from "@/lib/tipos";
 
 /**
@@ -49,7 +50,7 @@ export function PreVisualizacao() {
   // Defaults to yesterday, not today: today has no computed missed calls until
   // the scheduled refresh runs, and an empty screen reviews nothing.
   const [data, setData] = useState(ontemLisboa());
-  const [quem, setQuem] = useState<number | "equipa" | "evolucao" | null>(null);
+  const [quem, setQuem] = useState<number | "equipa" | "evolucao" | "adopcao" | null>(null);
 
   const equipaQ = useQuery<{ colaboradores: Colaborador[] }>({
     queryKey: ["pv-colaboradores"],
@@ -74,7 +75,7 @@ export function PreVisualizacao() {
           etiqueta="Ver o painel de"
           valor={escolhido === null ? "" : String(escolhido)}
           aoMudar={(v) =>
-            setQuem(v === "equipa" || v === "evolucao" ? v : Number(v))
+            setQuem(v === "equipa" || v === "evolucao" || v === "adopcao" ? v : Number(v))
           }
           opcoes={[
             ...colaboradores.map((c) => ({
@@ -84,6 +85,7 @@ export function PreVisualizacao() {
             })),
             { valor: "equipa", rotulo: "Vista da equipa", nota: "todos os agentes" },
             { valor: "evolucao", rotulo: "Está a resultar?", nota: "evolução desde 11/09" },
+            { valor: "adopcao", rotulo: "Quem usa", nota: "quem abre o painel" },
           ]}
         />
 
@@ -99,7 +101,12 @@ export function PreVisualizacao() {
         )}
       </div>
 
-      {escolhido === "evolucao" ? (
+      {escolhido === "adopcao" ? (
+        <VistaDaAdopcao
+          origem={(g) => `/api/agente/pre-visualizacao/adopcao?granularidade=${g}`}
+          chave={["pv-adopcao"]}
+        />
+      ) : escolhido === "evolucao" ? (
         <VistaDaEvolucao origem="/api/agente/pre-visualizacao/evolucao" chave={["pv-evolucao"]} />
       ) : escolhido === "equipa" ? (
         <VistaDaEquipa

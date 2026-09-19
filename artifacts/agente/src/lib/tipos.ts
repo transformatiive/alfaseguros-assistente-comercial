@@ -323,3 +323,37 @@ export interface EvolucaoDaEquipa {
   };
   serie: PontoDaSerie[];
 }
+
+// ---------------------------------------------------------------------------
+// Adopção — quem é que abre isto
+// ---------------------------------------------------------------------------
+
+export type Granularidade = "dia" | "semana" | "mes";
+
+export interface PeriodoDeAdopcao {
+  chave: string;
+  inicio: string;
+  fim: string;
+}
+
+export interface LinhaDeAdopcao {
+  colaboradorId: number;
+  nome: string;
+  papel: string;
+  equipa: string;
+  porPeriodo: number[];
+  total: number;
+  diasComUso: number;
+  ultimaVisita: string | null;
+  vistas: string[];
+}
+
+export interface Adopcao {
+  granularidade: Granularidade;
+  de: string;
+  ate: string;
+  periodos: PeriodoDeAdopcao[];
+  linhas: LinhaDeAdopcao[];
+  pessoasPorPeriodo: number[];
+  visitasPorPeriodo: number[];
+}

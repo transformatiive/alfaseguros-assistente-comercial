@@ -7,6 +7,7 @@ import { comDia, diaPedido } from "@/lib/dia";
 import { PainelDoAgente } from "@/pages/painel";
 import { VistaDaEquipa } from "@/pages/equipa";
 import { VistaDaEvolucao } from "@/pages/evolucao";
+import { VistaDaAdopcao } from "@/pages/adopcao";
 import { PreVisualizacao } from "@/pages/pre-visualizacao";
 import type { AgentePainel } from "@/lib/tipos";
 
@@ -56,6 +57,7 @@ function PainelComSessao() {
               of a route component. */}
           <Route path="/equipa">{() => <VistaDaEquipa />}</Route>
           <Route path="/evolucao">{() => <VistaDaEvolucao />}</Route>
+          <Route path="/adopcao">{() => <VistaDaAdopcao />}</Route>
           <Route component={PainelDoAgente} />
         </Switch>
         {estaSolto() && <NotaDeJanelaSolta />}
@@ -68,10 +70,11 @@ function Abas() {
   const [local] = useLocation();
   const naEquipa = local.startsWith("/equipa");
   const naEvolucao = local.startsWith("/evolucao");
+  const naAdopcao = local.startsWith("/adopcao");
 
   return (
     <nav className="sticky top-0 z-10 flex gap-1 border-b border-stone-200 bg-stone-50/95 px-3 py-2 backdrop-blur">
-      <Aba para="/" activa={!naEquipa && !naEvolucao}>
+      <Aba para="/" activa={!naEquipa && !naEvolucao && !naAdopcao}>
         O meu dia
       </Aba>
       <Aba para="/equipa" activa={naEquipa}>
@@ -79,6 +82,9 @@ function Abas() {
       </Aba>
       <Aba para="/evolucao" activa={naEvolucao}>
         Está a resultar?
+      </Aba>
+      <Aba para="/adopcao" activa={naAdopcao}>
+        Quem usa
       </Aba>
     </nav>
   );

@@ -9,6 +9,10 @@ import { buildAgentePainel } from "../painel/agente.js";
 import { buildSupervisorPainel } from "../painel/supervisor.js";
 import { carregarIntervalos } from "../painel/evolucao-query.js";
 import { derivarAgregado, derivarSerie, INICIO_DA_SERIE } from "../painel/evolucao.js";
+import { derivarAdopcao, type Granularidade } from "../painel/adopcao.js";
+import { carregarAcessos } from "../storage/acessos-repo.js";
+import { listarPessoasComAcesso } from "../painel/identity.js";
+import { lisbonDayBoundsISO, somarDias } from "../lib/dates.js";
 
 /**
  * Read-only preview of the panel, with no token.
@@ -134,6 +138,54 @@ router.get("/agente/pre-visualizacao/evolucao", (req, res, next) => {
       agregado: derivarAgregado(intervalos),
       serie: derivarSerie(intervalos, de, ate),
     });
+  })().catch(next);
+});
+
+/**
+ * A vista de adopção, sem token — pelas mesmas duas razões que a evolução.
+ *
+ * E por uma terceira, própria desta: é a vista que diz se o painel está a ser
+ * aberto, e enquanto o widget não funcionar a resposta vem quase toda daqui.
+ * Não a expor seria ficar sem saber justamente no período em que é mais
+ * preciso saber.
+ *
+ * Destas respostas todas é a menos sensível de longe: nomes de colegas e
+ * contagens, nenhum dado de cliente. Sai com a porta, quando a porta fechar.
+ */
+
+const JANELA_DE_PRE_VISUALIZACAO: Record<Granularidade, number> = {
+  dia: 14,
+  semana: 7 * 12,
+  mes: 30 * 6,
+};
+
+router.get("/agente/pre-visualizacao/adopcao", (req, res, next) => {
+  void (async () => {
+    const g = req.query.granularidade;
+    const granularidade: Granularidade = g === "semana" || g === "mes" ? g : "dia";
+    const ate = todayLisbon();
+    const de = somarDias(ate, -JANELA_DE_PRE_VISUALIZACAO[granularidade]);
+
+    // Lida pelo período inteiro e não pelos dias pedidos: com a vista mensal
+    // `de` cai a meio de um mês, e ler só a partir daí mostraria a primeira
+    // coluna cortada — um mês que parece fraco só por ter sido lido a meio.
+    const periodos = derivarAdopcao({
+      acessos: [],
+      pessoas: [],
+      de,
+      ate,
+      granularidade,
+    }).periodos;
+
+    const [acessos, pessoas] = await Promise.all([
+      carregarAcessos(
+        lisbonDayBoundsISO(periodos[0]?.inicio ?? de)[0],
+        lisbonDayBoundsISO(periodos.at(-1)?.fim ?? ate)[1],
+      ),
+      listarPessoasComAcesso(),
+    ]);
+
+    res.json(derivarAdopcao({ acessos, pessoas, de, ate, granularidade }));
   })().catch(next);
 });
 

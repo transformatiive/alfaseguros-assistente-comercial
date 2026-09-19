@@ -2,12 +2,13 @@ import { Router, type IRouter, type RequestHandler } from "express";
 import { z } from "zod";
 import { env } from "../lib/env.js";
 import { logger } from "../lib/logger.js";
-import { todayLisbon } from "../lib/dates.js";
+import { lisbonDayBoundsISO, somarDias, todayLisbon } from "../lib/dates.js";
 import { mintAgentToken } from "../painel/token.js";
 import {
   resolveColaborador,
   loadColaboradorAtivo,
   listarColaboradoresAtivos,
+  listarPessoasComAcesso,
 } from "../painel/identity.js";
 import { requireAgent, requireSupervisor, agenteDe } from "../middleware/require-agent.js";
 import {
@@ -19,6 +20,8 @@ import { buildAgentePainel } from "../painel/agente.js";
 import { buildSupervisorPainel } from "../painel/supervisor.js";
 import { carregarIntervalos } from "../painel/evolucao-query.js";
 import { derivarAgregado, derivarSerie, INICIO_DA_SERIE } from "../painel/evolucao.js";
+import { carregarAcessos, registarAcesso } from "../storage/acessos-repo.js";
+import { derivarAdopcao, type Granularidade } from "../painel/adopcao.js";
 
 const router: IRouter = Router();
 
@@ -237,6 +240,8 @@ router.get("/agente/painel", requireAgent, resolveData, (req, res, next) => {
       return;
     }
 
+    registarAcesso(colaborador.id, "meu-dia");
+
     const { painel, erros } = await buildAgentePainel(colaborador, data);
     for (const erro of erros) {
       logger.error({ err: erro, colaboradorId: colaborador.id, data }, "painel: bloco falhou");
@@ -262,6 +267,7 @@ router.get("/supervisor/painel", requireSupervisor, resolveData, (req, res, next
       return;
     }
 
+    registarAcesso(colaborador.id, "equipa");
     res.json(await buildSupervisorPainel(data));
   })().catch(next);
 });
@@ -335,6 +341,10 @@ router.get("/supervisor/painel/:colaboradorId", requireSupervisor, resolveData, 
       { supervisorId: supervisor.id, colaboradorId: alvo.id, data },
       "painel: supervisor abriu o painel de outro colaborador",
     );
+    // Contado ao supervisor, não ao agente: quem abriu o painel foi ele. Somar
+    // isto ao alvo diria que o Tiago anda a usar o painel quando na verdade
+    // quem anda a olhar para o do Tiago é o Rui — exactamente ao contrário.
+    registarAcesso(supervisor.id, "equipa");
 
     const { painel, erros } = await buildAgentePainel(alvo, data);
     for (const erro of erros) {
@@ -384,6 +394,8 @@ router.get("/supervisor/evolucao", requireSupervisor, (req, res, next) => {
       return;
     }
 
+    registarAcesso(supervisor.id, "evolucao");
+
     const intervalos = await carregarIntervalos({ de, ate });
     res.json({
       de: de < INICIO_DA_SERIE ? INICIO_DA_SERIE : de,
@@ -392,6 +404,88 @@ router.get("/supervisor/evolucao", requireSupervisor, (req, res, next) => {
       agregado: derivarAgregado(intervalos),
       serie: derivarSerie(intervalos, de, ate),
     });
+  })().catch(next);
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/supervisor/adopcao — e isto, alguém abre?
+// ---------------------------------------------------------------------------
+
+/*
+ * A pergunta que o painel não fazia sobre si próprio.
+ *
+ * Todas as outras vistas medem o trabalho da equipa. Esta mede o nosso: um
+ * painel com os números todos certos que ninguém abre não vale nada, e é uma
+ * falha silenciosa — não dá erro, não aparece em log nenhum, e do lado de cá
+ * parece tudo bem. A única maneira de a ver é contá-la.
+ *
+ * Três janelas porque respondem a três perguntas diferentes. O **dia** diz
+ * quem entrou hoje, e é o que serve para ir falar com alguém agora. A
+ * **semana** absorve as férias, as folgas e o dia em que o portátil não
+ * arrancou — é onde se vê um hábito a formar-se ou a desfazer-se. O **mês** diz
+ * se isto pegou, e é a única escala em que essa pergunta tem resposta.
+ *
+ * A janela por omissão acompanha a granularidade: catorze dias, doze semanas,
+ * seis meses. Uma janela fixa daria seis pontos ou duzentos consoante o botão
+ * escolhido, e nenhum dos dois se lê.
+ */
+
+const JANELA_POR_OMISSAO: Record<Granularidade, number> = {
+  dia: 14,
+  semana: 7 * 12,
+  mes: 30 * 6,
+};
+
+function granularidadeDe(raw: unknown): Granularidade {
+  return raw === "semana" || raw === "mes" ? raw : "dia";
+}
+
+router.get("/supervisor/adopcao", requireSupervisor, (req, res, next) => {
+  void (async () => {
+    const claims = agenteDe(req);
+    const supervisor = await loadColaboradorAtivo(Number(claims.sub));
+    if (!supervisor || supervisor.papel !== "supervisor") {
+      res.status(403).json({ error: "Acesso reservado ao supervisor" });
+      return;
+    }
+
+    const granularidade = granularidadeDe(req.query.granularidade);
+    const ate =
+      typeof req.query.ate === "string" && DATA_RE.test(req.query.ate)
+        ? req.query.ate
+        : todayLisbon();
+    const de =
+      typeof req.query.de === "string" && DATA_RE.test(req.query.de)
+        ? req.query.de
+        : somarDias(ate, -JANELA_POR_OMISSAO[granularidade]);
+
+    if (de > ate) {
+      res.status(400).json({ error: "`de` é posterior a `ate`" });
+      return;
+    }
+
+    registarAcesso(supervisor.id, "adopcao");
+
+    // A janela lida é a do *período* e não a dos dias pedidos: com a vista
+    // mensal, `de` cai a meio de um mês, e ler só a partir daí mostraria a
+    // primeira coluna cortada — um mês que parece fraco só porque foi lido
+    // pela metade.
+    const periodos = derivarAdopcao({
+      acessos: [],
+      pessoas: [],
+      de,
+      ate,
+      granularidade,
+    }).periodos;
+    const primeiroDia = periodos[0]?.inicio ?? de;
+    const ultimoDia = periodos.at(-1)?.fim ?? ate;
+
+    const [acessos, pessoas] = await Promise.all([
+      carregarAcessos(lisbonDayBoundsISO(primeiroDia)[0], lisbonDayBoundsISO(ultimoDia)[1]),
+      listarPessoasComAcesso(),
+    ]);
+
+    res.json(derivarAdopcao({ acessos, pessoas, de, ate, granularidade }));
   })().catch(next);
 });
 
