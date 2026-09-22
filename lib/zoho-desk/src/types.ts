@@ -114,3 +114,118 @@ export const agentsListResponseSchema = z.object({
 
 export type ZohoAgent = z.infer<typeof zohoAgentSchema>;
 export type AgentsListResponse = z.infer<typeof agentsListResponseSchema>;
+
+// ---------------------------------------------------------------------------
+// Conversas: threads **e** comentários
+// ---------------------------------------------------------------------------
+
+/**
+ * O Desk guarda duas coisas diferentes dentro de um ticket, e durante meses
+ * lemos só uma.
+ *
+ * **Comentários** são notas internas — o que a equipa escreve para si própria.
+ * **Threads** são os emails trocados com o cliente. O email que um agente
+ * envia a responder a um pedido é um thread, nunca um comentário.
+ *
+ * Lemos `/comments`, por isso **todas as respostas enviadas aos clientes eram
+ * invisíveis para nós**. O painel dizia "sem resposta tua no ticket" a quem
+ * tinha respondido nesse dia, e a métrica de primeira resposta media quase
+ * nada. Foi o Tiago Paiva que deu por isso, com três casos em que tinha
+ * respondido e o painel insistia que não.
+ *
+ * O `/conversations` devolve as duas coisas numa chamada, ao mesmo custo de
+ * quota do `/comments` (3 créditos) e com o scope que já temos
+ * (`Desk.tickets.READ`). Por isso isto não é uma chamada a mais: é a mesma
+ * chamada, no sítio certo.
+ *
+ * As duas formas distinguem-se pelo campo `type`, e quase não partilham
+ * nomes — o comentário tem `commenter`/`commentedTime`/`content`, o thread
+ * tem `author`/`createdTime`/`summary`. Daí a normalização.
+ */
+export const zohoConversaSchema = z
+  .object({
+    id: z.string(),
+    type: z.string().nullable().optional(),
+    channel: z.string().nullable().optional(),
+    direction: z.string().nullable().optional(),
+
+    // Forma de comentário
+    commentedTime: z.string().nullable().optional(),
+    content: z.string().nullable().optional(),
+    commenter: zohoCommentAuthorSchema.nullable().optional(),
+    isPublic: z.boolean().optional(),
+
+    // Forma de thread
+    createdTime: z.string().nullable().optional(),
+    summary: z.string().nullable().optional(),
+    author: zohoCommentAuthorSchema.extend({ name: z.string().nullable().optional() })
+      .nullable()
+      .optional(),
+    isDescriptionThread: z.boolean().optional(),
+    visibility: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+export type ZohoConversa = z.infer<typeof zohoConversaSchema>;
+
+export const conversasListResponseSchema = z.object({
+  data: z.array(zohoConversaSchema).optional(),
+});
+
+/** Uma entrada da conversa, já reduzida ao que guardamos. */
+export interface ConversaNormalizada {
+  id: string;
+  /** `thread` (email com o cliente) ou `comment` (nota interna). */
+  tipo: "thread" | "comment";
+  /** Instante ISO, ou `null` quando o Desk não o deu. */
+  quando: string | null;
+  canal: string | null;
+  /** `in` / `out` num thread; quase sempre ausente num comentário. */
+  direcao: string | null;
+  /** `AGENT` | `END_USER` | `SYSTEM`. */
+  autorTipo: string | null;
+  autorNome: string | null;
+  /**
+   * O texto.
+   *
+   * Num comentário é o conteúdo inteiro. **Num thread é o `summary`, que é um
+   * resumo e não o email completo** — o corpo exige uma chamada por thread
+   * (`/threads/{id}?include=plainText`), e isso multiplicaria a quota por
+   * dezenas. Chega para o que o painel precisa hoje: saber que houve resposta
+   * e quando. Não chega para classificar o *conteúdo* da resposta, que é
+   * trabalho de IA e uma decisão à parte.
+   */
+  texto: string | null;
+}
+
+function nomeDe(a: { firstName?: string | null; lastName?: string | null; name?: string | null } | null | undefined): string | null {
+  if (!a) return null;
+  if (a.name && a.name.trim()) return a.name.trim();
+  const composto = `${a.firstName ?? ""} ${a.lastName ?? ""}`.trim();
+  return composto || null;
+}
+
+/**
+ * Reduz qualquer das duas formas à mesma linha.
+ *
+ * O `type` decide, e não a presença dos campos: uma forma que ganhe um campo
+ * novo amanhã continua a ser lida pelo que ela diz ser. Quando falta — e a
+ * documentação não promete que venha sempre — a presença de `commenter`
+ * desempata, porque é o campo que só o comentário tem.
+ */
+export function normalizarConversa(c: ZohoConversa): ConversaNormalizada {
+  const tipo: "thread" | "comment" =
+    c.type === "comment" ? "comment" : c.type === "thread" ? "thread" : c.commenter ? "comment" : "thread";
+
+  const autor = tipo === "comment" ? c.commenter : c.author;
+  return {
+    id: c.id,
+    tipo,
+    quando: (tipo === "comment" ? c.commentedTime : c.createdTime) ?? c.commentedTime ?? c.createdTime ?? null,
+    canal: c.channel ?? null,
+    direcao: c.direction ?? null,
+    autorTipo: autor?.type ?? null,
+    autorNome: nomeDe(autor),
+    texto: (tipo === "comment" ? c.content : c.summary) ?? null,
+  };
+}

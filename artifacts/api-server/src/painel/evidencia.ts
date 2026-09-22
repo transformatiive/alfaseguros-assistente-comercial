@@ -71,6 +71,16 @@ export interface RespostaParaEvidencia {
   quando: string;
   /** Zoho's `authorType`: AGENT | END_USER | SYSTEM. */
   autorTipo: string | null;
+  /**
+   * `in` / `out` num email, ausente numa nota interna.
+   *
+   * Passou a existir quando começámos a ler threads além de comentários. Um
+   * thread **recebido** pode vir atribuído a um agente — um reencaminhamento,
+   * um colega a escrever para o ticket — e sem esta distinção passaria por
+   * resposta nossa. Uma tarefa fechada por um email que *entrou* é
+   * exactamente o erro que a regra da prova existe para impedir.
+   */
+  direcao: string | null;
   ticketNumber: string | null;
 }
 
@@ -141,6 +151,9 @@ export function procurarProva(
       // END_USER is the customer answering us — that is not us doing the work.
       // SYSTEM is Desk talking to itself. Only AGENT is a reply.
       if ((r.autorTipo ?? "").toUpperCase() !== "AGENT") continue;
+      // E tem de ter saído. Um email recebido não é uma resposta nossa, por
+      // muito que o Desk o atribua a um agente.
+      if ((r.direcao ?? "").toLowerCase() === "in") continue;
       const onde = r.ticketNumber ? `no ticket #${r.ticketNumber}` : "no ticket";
       return {
         tipo: "resposta",
