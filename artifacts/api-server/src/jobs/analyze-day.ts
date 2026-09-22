@@ -270,6 +270,25 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
     > = [];
     let totalCost = 0;
     let analyzedCount = 0;
+    /**
+     * Quanto da entrada veio da cache, e quanto a pagámos a escrever.
+     *
+     * O `estimateCost` já separa as duas coisas para calcular o preço, mas
+     * ninguém as guardava — só o total em euros chegava à base de dados. Com
+     * isso é impossível responder à única pergunta que interessa sobre a
+     * cache: **está a acertar?**
+     *
+     * A pergunta não é académica. A escrita da cache custa $2,50/M e a
+     * entrada normal $2,00/M, por isso uma cache que nunca acerta é mais cara
+     * do que não ter cache. Sem este contador, essa avaria é invisível: a
+     * factura sobe e tudo o resto parece bem.
+     */
+    const cache = { lidos: 0, escritos: 0, entradaNormal: 0 };
+    const somarCache = (c: { cachedInputTokens: number; cacheWriteTokens: number; inputTokens: number }) => {
+      cache.lidos += c.cachedInputTokens;
+      cache.escritos += c.cacheWriteTokens;
+      cache.entradaNormal += c.inputTokens;
+    };
 
     await mapWithConcurrency(groups, cfg.ANALYSIS_CONCURRENCY, async (conv) => {
       const rowId = rowIdByPhone.get(conv.customerPhone);
@@ -322,6 +341,7 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
         });
         if (outcome.ok) {
           totalCost += outcome.cost.costUsd;
+          somarCache(outcome.cost);
           analyzedCount += 1;
           await db
             .update(conversationsTable)
@@ -351,6 +371,7 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
           });
         } else {
           totalCost += outcome.cost.costUsd;
+          somarCache(outcome.cost);
           await db
             .update(conversationsTable)
             .set({ analysisError: outcome.error })
@@ -561,6 +582,7 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
             const outcome = await analyzeCase(c, { client: openrouter, model });
             if (outcome.ok) {
               totalCost += outcome.cost.costUsd;
+          somarCache(outcome.cost);
               await db
                 .update(casesTable)
                 .set({
@@ -606,6 +628,7 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
       }
       if (summaryOutcome.ok) {
         totalCost += summaryOutcome.cost.costUsd;
+        somarCache(summaryOutcome.cost);
         await db
           .insert(dailySummariesTable)
           .values({
@@ -651,6 +674,7 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
         if (outcome.ok) {
           agentsCost += outcome.cost.costUsd;
           totalCost += outcome.cost.costUsd;
+          somarCache(outcome.cost);
           await db.insert(operatorSummariesTable).values({
             date,
             operatorId: bucket.agentId,
@@ -680,6 +704,25 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
         totalCostUsd: totalCost.toFixed(6),
       })
       .where(eq(runsTable.date, date));
+
+    const entradaTotal = cache.lidos + cache.escritos + cache.entradaNormal;
+    logger.info(
+      {
+        date,
+        analisadas: analyzedCount,
+        custoUsd: Number(totalCost.toFixed(4)),
+        cacheLidos: cache.lidos,
+        cacheEscritos: cache.escritos,
+        entradaNormal: cache.entradaNormal,
+        // A percentagem é a leitura de um relance. Abaixo de metade, a cache
+        // está a ser escrita mais do que lida e vale a pena perceber porquê —
+        // o suspeito do costume é o pedido ter ido parar a fornecedores
+        // diferentes, porque a cache é de cada um deles.
+        cacheAcertoPct:
+          entradaTotal === 0 ? null : Math.round((cache.lidos / entradaTotal) * 100),
+      },
+      "analyze-day: corrida terminada",
+    );
 
     publishRunEvent({ type: "run:done", date, analyzed: analyzedCount, costUsd: totalCost });
   } catch (err) {
