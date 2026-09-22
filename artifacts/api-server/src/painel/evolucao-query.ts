@@ -1,4 +1,4 @@
-import { and, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
+import { and, eq, gte, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
 import {
   db,
   colaboradoresTable,
@@ -10,6 +10,20 @@ import {
 import { lisbonDayBoundsISO, somarDiasUteis } from "../lib/dates.js";
 import { INICIO_DA_SERIE, type Intervalo } from "./evolucao.js";
 import { RISCO_THRESHOLD_HOURS } from "./tickets-risco.js";
+
+/**
+ * "Não entrou": saiu, ou não tem direcção nenhuma.
+ *
+ * Os comentários do Desk não trazem `direction` — são notas internas, não
+ * têm sentido — e sempre contaram como resposta. Exigir `out` à letra
+ * apagaria de um dia para o outro todo o histórico anterior a passarmos a ler
+ * threads. O que se quer excluir é só o caso novo: um email de entrada que o
+ * Desk atribui a um agente.
+ */
+function naoEntrou() {
+  return or(isNull(ticketCommentsTable.direction), ne(ticketCommentsTable.direction, "in"));
+}
+
 
 /**
  * Os intervalos de que a série vive: quando cada tarefa nasceu e quando
@@ -192,11 +206,16 @@ async function respostasDeAgente(): Promise<Map<string, number>> {
     .where(
       and(
         eq(ticketCommentsTable.authorType, "AGENT"),
+        // Saiu, ou é uma nota interna sem direcção. Um email **recebido**
+        // atribuído a um agente não é uma resposta nossa, e contá-lo daria
+        // por respondido um pedido a que ainda ninguém respondeu.
+        naoEntrou(),
         isNotNull(ticketCommentsTable.commentedTime),
       ),
     );
 
-  const mapa = new Map<string, number>();
+  
+const mapa = new Map<string, number>();
   for (const l of linhas) {
     if (!l.quando) continue;
     const t = l.quando.getTime();
@@ -276,6 +295,10 @@ async function carregarFollowUps(de: string, ate: Date): Promise<FollowUpBruto[]
     .where(
       and(
         eq(ticketCommentsTable.authorType, "AGENT"),
+        // Saiu, ou é uma nota interna sem direcção. Um email **recebido**
+        // atribuído a um agente não é uma resposta nossa, e contá-lo daria
+        // por respondido um pedido a que ainda ninguém respondeu.
+        naoEntrou(),
         isNotNull(ticketCommentsTable.commentedTime),
         isNotNull(ticketsTable.phoneFingerprint),
       ),

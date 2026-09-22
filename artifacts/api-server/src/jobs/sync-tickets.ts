@@ -9,6 +9,7 @@ import { ZohoDeskClient, type ZohoComment, type ZohoTicket } from "@workspace/zo
 import { phoneFingerprint } from "@workspace/phone";
 import { classifyOutcome } from "../analysis/outcome.js";
 import { sanitizeCommentContent } from "../cases/linker.js";
+import { logger } from "../lib/logger.js";
 
 export interface SyncResult {
   ticketCount: number;
@@ -44,6 +45,25 @@ export interface SyncResult {
  * o excluir. Continua a ser gravado em `ticket_sync_state` como a ponta
  * superior da janela que esta corrida cobriu.
  */
+/**
+ * Uma corrida que ignora o "já vi este ticket" e relê tudo.
+ *
+ * Serve uma vez só, e por uma razão precisa: a sincronização passou a ler
+ * `/conversations` em vez de `/comments`, ou seja, passou a ver os emails
+ * enviados aos clientes, que antes eram invisíveis. Mas o salto por
+ * `modifiedTime` está desenhado para não repetir trabalho — e de um ticket já
+ * sincronizado ele acha que já sabe tudo. **Sem isto, a correcção só apanha
+ * tickets que voltem a mexer**, e os pedidos que o Tiago reportou podiam nunca
+ * mais mexer.
+ *
+ * `SYNC_RELER_CONVERSAS=1`, esperar uma corrida, e **retirar a variável**.
+ * Deixada lá, relê tudo de quinze em quinze minutos e queima a quota da Zoho
+ * sem necessidade — é o mesmo cuidado que o `AGENDA_RETOMAR_DIA` pede.
+ */
+export function releituraPedida(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.SYNC_RELER_CONVERSAS === "1";
+}
+
 export async function syncTickets(
   client: ZohoDeskClient,
   from: Date,
@@ -70,7 +90,14 @@ export async function syncTickets(
    * é um upsert idempotente e custa zero chamadas à Zoho.
    */
   const conhecidos = new Map<string, number>();
-  if (tickets.length > 0) {
+  const reler = releituraPedida();
+  if (reler) {
+    logger.warn(
+      { tickets: tickets.length },
+      "sync-tickets: SYNC_RELER_CONVERSAS está ligado — a reler as conversas todas. Retirar a variável depois desta corrida.",
+    );
+  }
+  if (!reler && tickets.length > 0) {
     for (const linha of await db
       .select({ id: ticketsTable.id, modifiedTime: ticketsTable.modifiedTime })
       .from(ticketsTable)
@@ -130,23 +157,22 @@ export async function syncTickets(
     // chamada não traria nada de novo.
     const novoInstante = t.modifiedTime ? new Date(t.modifiedTime).getTime() : null;
     const jaVisto = conhecidos.get(t.id);
-    if (novoInstante !== null && jaVisto !== undefined && novoInstante <= jaVisto) continue;
+    if (!reler && novoInstante !== null && jaVisto !== undefined && novoInstante <= jaVisto) continue;
 
-    const comments = await client.listTicketComments(t.id);
+    // Threads **e** comentários. Ler só `/comments` deixava de fora todos os
+    // emails que a equipa envia aos clientes — ver `normalizarConversa`.
+    const comments = await client.listTicketConversations(t.id);
     for (const c of comments) {
       allComments.push({ ...c, ticketId: t.id });
-      const author = c.commenter
-        ? `${c.commenter.firstName ?? ""} ${c.commenter.lastName ?? ""}`.trim() || null
-        : null;
       const cValues = {
         id: c.id,
         ticketId: t.id,
-        commentedTime: c.commentedTime ? new Date(c.commentedTime) : null,
-        channel: c.channel ?? null,
-        direction: c.direction ?? null,
-        authorType: c.authorType ?? c.commenter?.type ?? null,
-        authorName: author,
-        contentSanitized: sanitizeCommentContent(c.content),
+        commentedTime: c.quando ? new Date(c.quando) : null,
+        channel: c.canal ?? null,
+        direction: c.direcao ?? null,
+        authorType: c.autorTipo ?? null,
+        authorName: c.autorNome ?? null,
+        contentSanitized: sanitizeCommentContent(c.texto),
         rawJson: c as unknown as Record<string, unknown>,
         syncedAt: new Date(),
       };

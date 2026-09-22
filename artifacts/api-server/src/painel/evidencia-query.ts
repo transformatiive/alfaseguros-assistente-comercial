@@ -71,6 +71,7 @@ export async function carregarEvidencias(
             ticketId: ticketCommentsTable.ticketId,
             commentedTime: ticketCommentsTable.commentedTime,
             authorType: ticketCommentsTable.authorType,
+            direction: ticketCommentsTable.direction,
             ticketNumber: ticketsTable.ticketNumber,
           })
           .from(ticketCommentsTable)
@@ -105,6 +106,7 @@ export async function carregarEvidencias(
       ticketId: r.ticketId,
       quando: r.commentedTime.toISOString(),
       autorTipo: r.authorType,
+      direcao: r.direction ?? null,
       ticketNumber: r.ticketNumber ?? null,
     });
   }

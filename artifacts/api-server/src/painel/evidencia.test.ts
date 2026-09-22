@@ -31,6 +31,7 @@ const resposta = (p: Partial<RespostaParaEvidencia> = {}): RespostaParaEvidencia
   ticketId: "tkt-1",
   quando: "2026-09-05T09:07:00.000Z",
   autorTipo: "AGENT",
+  direcao: "out",
   ticketNumber: "172063",
   ...p,
 });
@@ -191,11 +192,65 @@ describe("derivarCadeia", () => {
  * prova-se com uma chamada — e um comentário pode até dizer "o cliente não
  * atendeu", que é o contrário de resolvido.
  */
+describe("um email recebido não é uma resposta nossa", () => {
+  // Passou a ser possível confundir os dois quando começámos a ler threads
+  // além de comentários: um thread de entrada pode vir atribuído a um agente.
+  // Fechar uma tarefa com um email que *entrou* seria dar por feito o que o
+  // cliente fez, não o que nós fizemos.
+  it("um thread com direcao=in de um AGENT não fecha a tarefa", () => {
+    const prova = procurarProva(
+      {
+        aceita: ["resposta"],
+        diaDoCompromisso: null,
+        desde: "2026-09-05T08:00:00.000Z",
+        fingerprint: null,
+        ticketId: "tkt-1",
+      },
+      [],
+      [resposta({ direcao: "in" })],
+    );
+    expect(prova).toBeNull();
+  });
+
+  it("o mesmo thread com direcao=out fecha", () => {
+    const prova = procurarProva(
+      {
+        aceita: ["resposta"],
+        diaDoCompromisso: null,
+        desde: "2026-09-05T08:00:00.000Z",
+        fingerprint: null,
+        ticketId: "tkt-1",
+      },
+      [],
+      [resposta({ direcao: "out" })],
+    );
+    expect(prova?.tipo).toBe("resposta");
+  });
+
+  it("uma nota interna sem direcao continua a contar", () => {
+    // Os comentários do Desk não trazem `direction`, e sempre contaram.
+    // Exigir "out" à letra apagaria todas as provas anteriores a esta mudança.
+    const prova = procurarProva(
+      {
+        aceita: ["resposta"],
+        diaDoCompromisso: null,
+        desde: "2026-09-05T08:00:00.000Z",
+        fingerprint: null,
+        ticketId: "tkt-1",
+      },
+      [],
+      [resposta({ direcao: null })],
+    );
+    expect(prova?.tipo).toBe("resposta");
+  });
+});
+
 describe("a prova tem de corresponder à promessa", () => {
   const respostaDepois = (): RespostaParaEvidencia => ({
     ticketId: "tkt-1",
     quando: "2026-09-04T09:00:00.000Z",
     autorTipo: "AGENT",
+    direcao: "out",
     ticketNumber: "1234",
   });
 

@@ -2,9 +2,12 @@ import { ZohoAuth } from "./auth.js";
 import {
   agentsListResponseSchema,
   commentsListResponseSchema,
+  conversasListResponseSchema,
+  normalizarConversa,
   ticketsListResponseSchema,
   type ZohoAgent,
   type ZohoComment,
+  type ConversaNormalizada,
   type ZohoTicket,
 } from "./types.js";
 
@@ -334,6 +337,37 @@ export class ZohoDeskClient {
       const batch = parsed.data ?? [];
       if (batch.length === 0) break;
       all.push(...batch);
+      if (batch.length < 100) break;
+      from += 100;
+    }
+    return all;
+  }
+
+  /**
+   * Tudo o que se passou num ticket: **threads e comentários**.
+   *
+   * Substitui o `listTicketComments`, que só via metade. Os emails que um
+   * agente envia ao cliente são threads, não comentários — ver
+   * `normalizarConversa` para a história completa.
+   *
+   * Mesmo custo de quota que a chamada que substitui (3 créditos) e o mesmo
+   * scope (`Desk.tickets.READ`). Pagina a 100 apesar de o Desk aceitar 200,
+   * para manter a paginação igual à do resto do cliente: um ticket com mais
+   * de 200 entradas existe, e um limite que coincide com o máximo esconde o
+   * caso em que a última página vem cheia.
+   */
+  async listTicketConversations(ticketId: string): Promise<ConversaNormalizada[]> {
+    const all: ConversaNormalizada[] = [];
+    let from = 0;
+    for (let page = 0; page < 200; page++) {
+      const json = await this.request(`/tickets/${encodeURIComponent(ticketId)}/conversations`, {
+        from: String(from),
+        limit: "100",
+      });
+      const parsed = conversasListResponseSchema.parse(json);
+      const batch = parsed.data ?? [];
+      if (batch.length === 0) break;
+      all.push(...batch.map(normalizarConversa));
       if (batch.length < 100) break;
       from += 100;
     }
