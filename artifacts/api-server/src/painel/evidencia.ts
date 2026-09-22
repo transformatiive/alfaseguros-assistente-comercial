@@ -16,6 +16,23 @@
  *   - a comment on the linked ticket, *after* the commitment, written by an
  *     **agent**.
  *
+ * ## A prova tem de ser do mesmo género que a promessa
+ *
+ * As duas provas não são intermutáveis, e tratá-las como se fossem foi um erro
+ * caro: num dia real, **as oito tarefas dadas como feitas eram todas
+ * "devolver chamada", e todas fechadas por um comentário no ticket**. Devolver
+ * uma chamada prova-se com uma chamada. Um comentário até pode dizer "o
+ * cliente não atendeu", que é o contrário de resolvido.
+ *
+ * Pior: o caminho certo já existia. `computeDevolucoes` marca a devolução como
+ * feita quando há uma chamada de saída atendida para o mesmo número, e corre
+ * de quinze em quinze minutos. O comentário era um atalho mais fraco por cima
+ * do mecanismo correcto.
+ *
+ * Por isso quem pede a prova declara o que aceita. `aceita` não tem valor por
+ * omissão de propósito: um caso novo tem de decidir, e decidir mal é mais
+ * difícil quando é preciso escrever a decisão.
+ *
  * ## Both thresholds are the point, not detail
  *
  * A ringing call that goes to voicemail after eight seconds is a record, not a
@@ -57,7 +74,14 @@ export interface RespostaParaEvidencia {
   ticketNumber: string | null;
 }
 
+export type TipoDeProva = "chamada" | "resposta";
+
 export interface PedidoDeProva {
+  /**
+   * Que género de prova fecha esta promessa concreta. Ver a nota acima: uma
+   * devolução só se prova com uma chamada, um envio prova-se com uma resposta.
+   */
+  aceita: readonly TipoDeProva[];
   /** Lisbon day the obligation was taken on. Same-day activity is the cause,
    *  not the cure, so only *later* days count as proof. */
   diaDoCompromisso: string | null;
@@ -68,7 +92,7 @@ export interface PedidoDeProva {
 }
 
 export interface Prova {
-  tipo: "chamada" | "resposta";
+  tipo: TipoDeProva;
   /** What to print: "chamada atendida de 6 min a 05/09". */
   descricao: string;
 }
@@ -94,7 +118,7 @@ export function procurarProva(
   chamadas: readonly ChamadaParaEvidencia[],
   respostas: readonly RespostaParaEvidencia[],
 ): Prova | null {
-  if (p.fingerprint && p.diaDoCompromisso) {
+  if (p.aceita.includes("chamada") && p.fingerprint && p.diaDoCompromisso) {
     for (const c of chamadas) {
       if (c.fingerprint !== p.fingerprint) continue;
       if (c.dia <= p.diaDoCompromisso) continue;
@@ -109,7 +133,7 @@ export function procurarProva(
     }
   }
 
-  if (p.ticketId && p.desde) {
+  if (p.aceita.includes("resposta") && p.ticketId && p.desde) {
     const limite = Date.parse(p.desde);
     for (const r of respostas) {
       if (r.ticketId !== p.ticketId) continue;
@@ -138,10 +162,10 @@ export function procurarProva(
  */
 export function porqueContinuaAberta(p: PedidoDeProva): string | null {
   const partes: string[] = [];
-  if (p.fingerprint && p.diaDoCompromisso) {
+  if (p.aceita.includes("chamada") && p.fingerprint && p.diaDoCompromisso) {
     partes.push(`sem chamada atendida para este número desde ${diaCurto(p.diaDoCompromisso)}`);
   }
-  if (p.ticketId) partes.push("sem resposta tua no ticket");
+  if (p.aceita.includes("resposta") && p.ticketId) partes.push("sem resposta tua no ticket");
   if (partes.length === 0) return null;
   const frase = partes.join(" e ");
   return frase.charAt(0).toUpperCase() + frase.slice(1) + ".";

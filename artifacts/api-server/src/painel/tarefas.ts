@@ -36,6 +36,7 @@ import {
   type PedidoDeProva,
   type Prova,
   type RespostaParaEvidencia,
+  type TipoDeProva,
 } from "./evidencia.js";
 import { derivarPrazo, type OrigemPrazo, type TipoDeEspera } from "./prazos.js";
 import { urlDoDesk } from "./tickets-risco.js";
@@ -456,7 +457,12 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       simulacaoEnviadaEm: nosso?.primeiro ?? null,
       ultimoContactoNosso: nosso?.ultimo ?? null,
     });
+    const categoria: CategoriaTarefa = simulacao ? "enviar_simulacao" : "cumprir_compromisso";
     const prova: PedidoDeProva = {
+      // A mesma regra que fecha a tarefa decide o que a linha cinzenta diz que
+      // procurou. Duas listas diferentes dariam um rodapé a falar de uma prova
+      // que já não conta.
+      aceita: PROVAS_ACEITES[categoria],
       diaDoCompromisso: toLisbonDate(detectado),
       desde: f.detected_at,
       fingerprint: impressaoDigital(f.contact_phone),
@@ -466,7 +472,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
 
     out.push({
       id: f.id,
-      categoria: simulacao ? "enviar_simulacao" : "cumprir_compromisso",
+      categoria,
       titulo: simulacao
         ? `Enviar simulação${f.product ? ` — ${f.product}` : ""}`
         : resumirPromessa(f.follow_up_descricao),
@@ -556,7 +562,13 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       tipo,
       agora: entrada.now,
     });
+    const categoriaDoTicket: CategoriaTarefa = aguardaTerceiros
+      ? "espera_cliente"
+      : simulacao
+        ? "enviar_simulacao"
+        : "espera_alfa";
     const prova: PedidoDeProva = {
+      aceita: PROVAS_ACEITES[categoriaDoTicket],
       diaDoCompromisso: toLisbonDate(desde),
       desde: desde.toISOString(),
       fingerprint: impressaoDigital(t.contactPhone),
@@ -566,11 +578,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
 
     out.push({
       id: `tkt_${t.id}`,
-      categoria: aguardaTerceiros
-        ? "espera_cliente"
-        : simulacao
-          ? "enviar_simulacao"
-          : "espera_alfa",
+      categoria: categoriaDoTicket,
       titulo: assunto,
       porque: null,
       contacto: {
@@ -675,6 +683,35 @@ export interface ResultadoDeProva {
  * them on our own reply would delete the row for doing the thing that put it
  * there.
  */
+/**
+ * Que género de prova fecha cada género de promessa.
+ *
+ * Um comentário no ticket não devolve uma chamada, e uma chamada atendida não
+ * envia uma simulação. Tratar as duas provas como intermutáveis fazia oito em
+ * oito tarefas de "devolver chamada" desaparecerem por causa de um comentário
+ * — e o mecanismo correcto para essas já existe noutro sítio
+ * (`computeDevolucoes`, que as resolve com uma chamada de saída atendida).
+ *
+ * `cumprir_compromisso` e `retomar_conversa` aceitam as duas porque a promessa
+ * é genuinamente ambígua: "eu depois digo alguma coisa" cumpre-se por telefone
+ * ou por escrito, e escolher uma delas seria inventar uma precisão que a
+ * promessa não tem.
+ *
+ * `espera_alfa` é um ticket aberto há mais de um dia: o que se lhe pede é uma
+ * resposta.
+ */
+const PROVAS_ACEITES: Record<CategoriaTarefa, readonly TipoDeProva[]> = {
+  devolver_chamada: ["chamada"],
+  enviar_simulacao: ["resposta"],
+  cumprir_compromisso: ["chamada", "resposta"],
+  retomar_conversa: ["chamada", "resposta"],
+  espera_alfa: ["resposta"],
+  // Nunca chega aqui — sai antes, por estar à espera de terceiros — mas o
+  // tipo exige a entrada, e deixá-la vazia diz o que é verdade: nada do nosso
+  // lado a fecha.
+  espera_cliente: [],
+};
+
 export function separarPorProva(
   tarefas: readonly Tarefa[],
   chamadas: readonly ChamadaParaEvidencia[],
@@ -690,6 +727,7 @@ export function separarPorProva(
     }
     const prova = procurarProva(
       {
+        aceita: PROVAS_ACEITES[t.categoria],
         diaDoCompromisso: toLisbonDate(new Date(t.desde)),
         desde: t.desde,
         fingerprint: impressaoDigital(t.contacto.telefone),

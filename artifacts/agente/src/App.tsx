@@ -7,6 +7,7 @@ import { comDia, diaPedido } from "@/lib/dia";
 import { PainelDoAgente } from "@/pages/painel";
 import { VistaDaEquipa } from "@/pages/equipa";
 import { VistaDaEvolucao } from "@/pages/evolucao";
+import { VistaDaAdopcao } from "@/pages/adopcao";
 import { PreVisualizacao } from "@/pages/pre-visualizacao";
 import type { AgentePainel } from "@/lib/tipos";
 
@@ -24,12 +25,37 @@ import type { AgentePainel } from "@/lib/tipos";
  * on screen.
  */
 export function App() {
+  const caminho = window.location.pathname.replace(/\/+$/, "");
+
   // The preview short-circuits everything below it. It has no token, so the
   // role query would fail, the tabs would never appear, and the "opened outside
   // Desk" note would be technically true and completely unhelpful.
-  if (window.location.pathname.replace(/\/+$/, "").endsWith("/pre-visualizacao")) {
+  if (caminho.endsWith("/pre-visualizacao")) {
     return <PreVisualizacao />;
   }
+
+  /*
+   * "Quem usa" aberta directamente, sem o widget.
+   *
+   * Lê um endpoint que não pede token, por isso funciona num separador
+   * qualquer — e chegar aqui por `PainelComSessao` estragaria isso de duas
+   * maneiras: a leitura do papel falharia (o que é inofensivo) e a nota do
+   * rodapé prometeria uma sessão de quinze minutos que esta página não tem
+   * nem precisa.
+   *
+   * Isto só corre quando a página é carregada neste endereço. Clicar no
+   * separador dentro do Desk é navegação do wouter, não recarrega nada, e cai
+   * no `Switch` lá abaixo — que desenha exactamente a mesma vista. Dois
+   * caminhos até ao mesmo ecrã, e é mesmo o mesmo ecrã.
+   */
+  if (caminho.endsWith("/adopcao")) {
+    return (
+      <div className="min-h-screen bg-stone-50 text-stone-900">
+        <VistaDaAdopcao />
+      </div>
+    );
+  }
+
   return <PainelComSessao />;
 }
 
@@ -56,6 +82,7 @@ function PainelComSessao() {
               of a route component. */}
           <Route path="/equipa">{() => <VistaDaEquipa />}</Route>
           <Route path="/evolucao">{() => <VistaDaEvolucao />}</Route>
+          <Route path="/adopcao">{() => <VistaDaAdopcao />}</Route>
           <Route component={PainelDoAgente} />
         </Switch>
         {estaSolto() && <NotaDeJanelaSolta />}
@@ -68,10 +95,11 @@ function Abas() {
   const [local] = useLocation();
   const naEquipa = local.startsWith("/equipa");
   const naEvolucao = local.startsWith("/evolucao");
+  const naAdopcao = local.startsWith("/adopcao");
 
   return (
     <nav className="sticky top-0 z-10 flex gap-1 border-b border-stone-200 bg-stone-50/95 px-3 py-2 backdrop-blur">
-      <Aba para="/" activa={!naEquipa && !naEvolucao}>
+      <Aba para="/" activa={!naEquipa && !naEvolucao && !naAdopcao}>
         O meu dia
       </Aba>
       <Aba para="/equipa" activa={naEquipa}>
@@ -79,6 +107,9 @@ function Abas() {
       </Aba>
       <Aba para="/evolucao" activa={naEvolucao}>
         Está a resultar?
+      </Aba>
+      <Aba para="/adopcao" activa={naAdopcao}>
+        Quem usa
       </Aba>
     </nav>
   );

@@ -89,3 +89,26 @@ export async function listarColaboradoresAtivos(): Promise<
     .where(and(eq(colaboradoresTable.ativo, true), ne(colaboradoresTable.papel, "nenhum")))
     .orderBy(asc(colaboradoresTable.nome));
 }
+
+/**
+ * Toda a gente que pode abrir o painel hoje — o denominador da adopção.
+ *
+ * Separado de `listarColaboradoresAtivos` por causa da `equipa`, e não por
+ * capricho: aquela função é a resposta de `/api/supervisor/colaboradores`, e
+ * acrescentar-lhe um campo mudaria a forma de um endpoint que já está a ser
+ * consumido. Duas perguntas parecidas, dois contratos.
+ */
+export async function listarPessoasComAcesso(): Promise<
+  Array<{ id: number; nome: string; papel: string; equipa: string }>
+> {
+  return db
+    .select({
+      id: colaboradoresTable.id,
+      nome: colaboradoresTable.nome,
+      papel: colaboradoresTable.papel,
+      equipa: colaboradoresTable.equipa,
+    })
+    .from(colaboradoresTable)
+    .where(and(eq(colaboradoresTable.ativo, true), ne(colaboradoresTable.papel, "nenhum")))
+    .orderBy(asc(colaboradoresTable.nome));
+}
