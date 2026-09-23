@@ -64,6 +64,28 @@ export function releituraPedida(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.SYNC_RELER_CONVERSAS === "1";
 }
 
+/**
+ * Tickets a reler por inteiro, pelo número que se vê no Desk.
+ *
+ * É a versão estreita do `SYNC_RELER_CONVERSAS`. Esse relê a janela toda, e
+ * a janela larga chegou a trazer 5000 tickets: o custo de corrigir três. Isto
+ * relê só os números indicados, fora da janela — que é o que importa para um
+ * pedido parado, porque um pedido parado é precisamente o que a janela não
+ * traz.
+ *
+ * `SYNC_RELER_TICKETS=176152,176592`, esperar uma corrida, **retirar**.
+ * Só números; o resto é ignorado. No máximo 20, para que um engano não se
+ * torne numa releitura grande.
+ */
+export function ticketsAReler(env: NodeJS.ProcessEnv = process.env): string[] {
+  const bruto = env.SYNC_RELER_TICKETS ?? "";
+  const numeros = bruto
+    .split(/[\s,;]+/)
+    .map((n) => n.replace(/^#/, ""))
+    .filter((n) => /^\d{1,12}$/.test(n));
+  return [...new Set(numeros)].slice(0, 20);
+}
+
 export async function syncTickets(
   client: ZohoDeskClient,
   from: Date,
@@ -109,77 +131,35 @@ export async function syncTickets(
   const allComments: Array<ZohoComment & { ticketId: string }> = [];
 
   for (const t of tickets) {
-    const phone =
-      (t.contact?.phone as string | null | undefined) ??
-      (t.contact?.mobile as string | null | undefined) ??
-      null;
-    const fingerprint = phoneFingerprint(phone);
-    const outcome = classifyOutcome(t);
-    const contactName = t.contact
-      ? `${t.contact.firstName ?? ""} ${t.contact.lastName ?? ""}`.trim() || null
-      : null;
-    const assigneeName = t.assignee
-      ? `${t.assignee.firstName ?? ""} ${t.assignee.lastName ?? ""}`.trim() || null
-      : null;
-
-    const values = {
-      id: t.id,
-      ticketNumber: t.ticketNumber != null ? String(t.ticketNumber) : null,
-      subject: t.subject ?? null,
-      status: t.status ?? null,
-      statusType: t.statusType ?? null,
-      channel: t.channel ?? null,
-      category: t.category ?? null,
-      productName: t.productName ?? null,
-      resolution: t.resolution ?? null,
-      contactId: t.contactId ?? t.contact?.id ?? null,
-      contactName,
-      contactPhone: phone,
-      phoneFingerprint: fingerprint || null,
-      assigneeId: t.assigneeId ?? t.assignee?.id ?? null,
-      assigneeName,
-      customFieldsJson: (t.cf as Record<string, unknown>) ?? null,
-      rawJson: t as unknown as Record<string, unknown>,
-      outcomeStatus: outcome.status,
-      outcomeReason: outcome.reason,
-      createdTime: t.createdTime ? new Date(t.createdTime) : null,
-      modifiedTime: t.modifiedTime ? new Date(t.modifiedTime) : null,
-      closedTime: t.closedTime ? new Date(t.closedTime) : null,
-      syncedAt: new Date(),
-    };
-
-    await db
-      .insert(ticketsTable)
-      .values(values)
-      .onConflictDoUpdate({ target: ticketsTable.id, set: values });
-
-    // Inalterado desde a última leitura: os comentários também estão, e a
-    // chamada não traria nada de novo.
     const novoInstante = t.modifiedTime ? new Date(t.modifiedTime).getTime() : null;
     const jaVisto = conhecidos.get(t.id);
-    if (!reler && novoInstante !== null && jaVisto !== undefined && novoInstante <= jaVisto) continue;
+    // Inalterado desde a última leitura: as conversas também estão, e a
+    // chamada não traria nada de novo.
+    const inalterado = !reler && novoInstante !== null && jaVisto !== undefined && novoInstante <= jaVisto;
+    await gravarTicket(client, t, !inalterado, allComments);
+  }
 
-    // Threads **e** comentários. Ler só `/comments` deixava de fora todos os
-    // emails que a equipa envia aos clientes — ver `normalizarConversa`.
-    const comments = await client.listTicketConversations(t.id);
-    for (const c of comments) {
-      allComments.push({ ...c, ticketId: t.id });
-      const cValues = {
-        id: c.id,
-        ticketId: t.id,
-        commentedTime: c.quando ? new Date(c.quando) : null,
-        channel: c.canal ?? null,
-        direction: c.direcao ?? null,
-        authorType: c.autorTipo ?? null,
-        authorName: c.autorNome ?? null,
-        contentSanitized: sanitizeCommentContent(c.texto),
-        rawJson: c as unknown as Record<string, unknown>,
-        syncedAt: new Date(),
-      };
-      await db
-        .insert(ticketCommentsTable)
-        .values(cValues)
-        .onConflictDoUpdate({ target: ticketCommentsTable.id, set: cValues });
+  /*
+   * Os tickets pedidos pelo número, lidos por inteiro. Ficam fora da janela
+   * de propósito: são pedidos parados, que é exactamente o caso em que a
+   * janela não os traz. Um que falhe não derruba a corrida — é um extra
+   * pedido à mão, e a sincronização normal já está feita e gravada acima.
+   */
+  for (const numero of ticketsAReler()) {
+    try {
+      const t = await client.getTicketByNumber(numero);
+      if (!t) {
+        logger.warn({ numero }, "sync-tickets: ticket pedido em SYNC_RELER_TICKETS não existe");
+        continue;
+      }
+      const antes = allComments.length;
+      await gravarTicket(client, t, true, allComments);
+      logger.warn(
+        { numero, conversas: allComments.length - antes },
+        "sync-tickets: ticket relido a pedido (SYNC_RELER_TICKETS). Retirar a variável depois desta corrida.",
+      );
+    } catch (err) {
+      logger.warn({ err, numero }, "sync-tickets: releitura do ticket falhou");
     }
   }
 
@@ -203,3 +183,80 @@ export async function syncTickets(
 // Drizzle's `eq` is imported above to keep the type-checker happy when
 // extending this file with selective updates later.
 void eq;
+
+/** Grava um ticket e, quando pedido, as conversas dele. */
+async function gravarTicket(
+  client: ZohoDeskClient,
+  t: ZohoTicket,
+  lerConversas: boolean,
+  allComments: Array<ZohoComment & { ticketId: string }>,
+): Promise<void> {
+  const phone =
+    (t.contact?.phone as string | null | undefined) ??
+    (t.contact?.mobile as string | null | undefined) ??
+    null;
+  const fingerprint = phoneFingerprint(phone);
+  const outcome = classifyOutcome(t);
+  const contactName = t.contact
+    ? `${t.contact.firstName ?? ""} ${t.contact.lastName ?? ""}`.trim() || null
+    : null;
+  const assigneeName = t.assignee
+    ? `${t.assignee.firstName ?? ""} ${t.assignee.lastName ?? ""}`.trim() || null
+    : null;
+
+  const values = {
+    id: t.id,
+    ticketNumber: t.ticketNumber != null ? String(t.ticketNumber) : null,
+    subject: t.subject ?? null,
+    status: t.status ?? null,
+    statusType: t.statusType ?? null,
+    channel: t.channel ?? null,
+    category: t.category ?? null,
+    productName: t.productName ?? null,
+    resolution: t.resolution ?? null,
+    contactId: t.contactId ?? t.contact?.id ?? null,
+    contactName,
+    contactPhone: phone,
+    phoneFingerprint: fingerprint || null,
+    assigneeId: t.assigneeId ?? t.assignee?.id ?? null,
+    assigneeName,
+    customFieldsJson: (t.cf as Record<string, unknown>) ?? null,
+    rawJson: t as unknown as Record<string, unknown>,
+    outcomeStatus: outcome.status,
+    outcomeReason: outcome.reason,
+    createdTime: t.createdTime ? new Date(t.createdTime) : null,
+    modifiedTime: t.modifiedTime ? new Date(t.modifiedTime) : null,
+    closedTime: t.closedTime ? new Date(t.closedTime) : null,
+    syncedAt: new Date(),
+  };
+
+  await db
+    .insert(ticketsTable)
+    .values(values)
+    .onConflictDoUpdate({ target: ticketsTable.id, set: values });
+
+  if (!lerConversas) return;
+
+  // Threads **e** comentários. Ler só `/comments` deixava de fora todos os
+  // emails que a equipa envia aos clientes — ver `normalizarConversa`.
+  const comments = await client.listTicketConversations(t.id);
+  for (const c of comments) {
+    allComments.push({ ...c, ticketId: t.id });
+    const cValues = {
+      id: c.id,
+      ticketId: t.id,
+      commentedTime: c.quando ? new Date(c.quando) : null,
+      channel: c.canal ?? null,
+      direction: c.direcao ?? null,
+      authorType: c.autorTipo ?? null,
+      authorName: c.autorNome ?? null,
+      contentSanitized: sanitizeCommentContent(c.texto),
+      rawJson: c as unknown as Record<string, unknown>,
+      syncedAt: new Date(),
+    };
+    await db
+      .insert(ticketCommentsTable)
+      .values(cValues)
+      .onConflictDoUpdate({ target: ticketCommentsTable.id, set: cValues });
+  }
+}
