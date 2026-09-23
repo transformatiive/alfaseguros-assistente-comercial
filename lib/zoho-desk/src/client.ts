@@ -5,6 +5,7 @@ import {
   conversasListResponseSchema,
   normalizarConversa,
   ticketsListResponseSchema,
+  zohoTicketSchema,
   type ZohoAgent,
   type ZohoComment,
   type ConversaNormalizada,
@@ -151,6 +152,24 @@ export class ZohoDeskClient {
       from += 100;
     }
     return all;
+  }
+
+  /**
+   * Um ticket pelo número que as pessoas vêem no Desk (`#176152`), completo.
+   *
+   * Duas chamadas: a busca devolve o id, e o ticket é depois lido por id com o
+   * contacto e o responsável. A busca sozinha não chega porque não promete os
+   * mesmos campos que a listagem — e gravar um ticket sem o telefone do
+   * contacto apagaria o que já tínhamos dele.
+   *
+   * `null` quando o número não existe.
+   */
+  async getTicketByNumber(numero: string): Promise<ZohoTicket | null> {
+    const json = await this.request("/tickets/search", { ticketNumber: numero, limit: "1" });
+    const id = ticketsListResponseSchema.parse(json).data?.[0]?.id;
+    if (!id) return null;
+    const ticket = await this.request(`/tickets/${id}`, { include: "contacts,assignee" });
+    return zohoTicketSchema.parse(ticket);
   }
 
   /**

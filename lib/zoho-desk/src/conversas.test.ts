@@ -156,3 +156,45 @@ describe("listTicketConversations", () => {
     expect(chamadas).toHaveLength(1);
   });
 });
+
+describe("getTicketByNumber", () => {
+  function cliente(respostas: Record<string, unknown>) {
+    const chamadas: URL[] = [];
+    const fetchFalso = vi.fn(async (url: string | URL) => {
+      const u = new URL(String(url));
+      chamadas.push(u);
+      const corpo = respostas[u.pathname.replace(/^.*\/api\/v1/, "")];
+      if (corpo === undefined) return new Response(null, { status: 204 });
+      return new Response(JSON.stringify(corpo), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const client = new ZohoDeskClient({
+      auth: { getAccessToken: async () => "t", invalidate: () => {} } as unknown as ZohoAuth,
+      orgId: "683863304",
+      fetch: fetchFalso as unknown as typeof fetch,
+    });
+    return { client, chamadas };
+  }
+
+  it("procura pelo número e lê o ticket completo pelo id", async () => {
+    // A busca sozinha não promete o contacto — gravar sem ele apagava o
+    // telefone que já tínhamos. Por isso a segunda chamada.
+    const { client, chamadas } = cliente({
+      "/tickets/search": { data: [{ id: "900" }] },
+      "/tickets/900": { id: "900", ticketNumber: "176592", contact: { phone: "351912345678" } },
+    });
+    const t = await client.getTicketByNumber("176592");
+    expect(t?.id).toBe("900");
+    expect(chamadas[0].searchParams.get("ticketNumber")).toBe("176592");
+    expect(chamadas[1].pathname).toContain("/tickets/900");
+    expect(chamadas[1].searchParams.get("include")).toBe("contacts,assignee");
+  });
+
+  it("devolve null quando o número não existe", async () => {
+    const { client, chamadas } = cliente({});
+    expect(await client.getTicketByNumber("1")).toBeNull();
+    expect(chamadas).toHaveLength(1);
+  });
+});
