@@ -62,7 +62,11 @@ export type TicketsListResponse = z.infer<typeof ticketsListResponseSchema>;
 
 export const zohoCommentAuthorSchema = z
   .object({
-    id: z.string().optional(),
+    // O Desk manda `id: null` nos autores de threads que não são pessoas da
+    // organização (encaminhamentos, remetentes desconhecidos). Não o usamos, e
+    // exigir texto aqui derrubava a sincronização inteira por causa de um só
+    // thread: foi o que aconteceu na primeira releitura, a 23/09.
+    id: z.string().nullable().optional(),
     firstName: z.string().nullable().optional(),
     lastName: z.string().nullable().optional(),
     email: z.string().nullable().optional(),
@@ -153,7 +157,7 @@ export const zohoConversaSchema = z
     commentedTime: z.string().nullable().optional(),
     content: z.string().nullable().optional(),
     commenter: zohoCommentAuthorSchema.nullable().optional(),
-    isPublic: z.boolean().optional(),
+    isPublic: z.boolean().nullable().optional(),
 
     // Forma de thread
     createdTime: z.string().nullable().optional(),
@@ -161,7 +165,7 @@ export const zohoConversaSchema = z
     author: zohoCommentAuthorSchema.extend({ name: z.string().nullable().optional() })
       .nullable()
       .optional(),
-    isDescriptionThread: z.boolean().optional(),
+    isDescriptionThread: z.boolean().nullable().optional(),
     visibility: z.string().nullable().optional(),
   })
   .passthrough();
