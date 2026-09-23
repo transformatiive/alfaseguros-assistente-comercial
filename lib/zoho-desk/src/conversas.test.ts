@@ -135,6 +135,21 @@ describe("listTicketConversations", () => {
     expect(chamadas[1].searchParams.get("from")).toBe("100");
   });
 
+  it("um autor com `id: null` não derruba a leitura", async () => {
+    // Visto em produção a 23/09: dois threads assim na mesma página fizeram
+    // falhar a sincronização de todos os tickets.
+    const semId = {
+      ...THREAD_ENTRADA,
+      id: "t-null",
+      author: { id: null, name: "Encaminhado", type: "END_USER", email: null },
+      isDescriptionThread: null,
+    };
+    const { client } = clienteCom([[semId, THREAD_SAIDA]]);
+    const r = await client.listTicketConversations("1");
+    expect(r.map((c) => c.id)).toEqual(["t-null", THREAD_SAIDA.id]);
+    expect(r[0].autorTipo).toBe("END_USER");
+  });
+
   it("pára numa página vazia", async () => {
     const { client, chamadas } = clienteCom([[]]);
     expect(await client.listTicketConversations("1")).toEqual([]);
