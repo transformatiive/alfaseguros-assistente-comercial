@@ -1,15 +1,10 @@
-import { BarChart3 } from "lucide-react";
+import { useState } from "react";
 import { Indisponivel } from "@/components/Bloco";
-import {
-  diaCurto,
-  diaPorExtenso,
-  haQuantoTempo,
-  iniciais,
-  primeiroNome,
-  saudacao,
-} from "@/lib/formatos";
+import { diaPorExtenso, haQuantoTempo, hora, primeiroNome, saudacao } from "@/lib/formatos";
+import { leituraCurta, posicaoNaFaixa, primeiraTarefa, resumoDoDia, semMarcas } from "@/lib/leitura";
+import { cn } from "@/lib/utils";
 import { BlocoCoaching } from "@/pages/blocos-acoes";
-import { FecharamSozinhas, GrupoPorPrazo, SemTarefas } from "@/pages/tarefas";
+import { AEspera, ComecaPorAqui, Feitas, GrupoPorPrazo, SemTarefas } from "@/pages/tarefas";
 import {
   agruparPorPrazo,
   coachingDisponivel,
@@ -19,6 +14,7 @@ import {
   type Coaching,
   type Frescura,
   type Tarefa,
+  type TarefasPorPrazo,
 } from "@/lib/tipos";
 
 /**
@@ -30,15 +26,14 @@ import {
  * decides to "do calls now", they do whatever is latest first. Two columns
  * sorted by type made that decision again on every scan.
  *
- * So the left column is an agenda: **Atrasado**, then **Hoje**, then **Esta
- * semana** — read top to bottom, and nothing is decided. The category is still
- * there, as the icon on each row, which is where it earns its keep.
+ * So the left column is an agenda: the one task to start with, then
+ * **Atrasadas**, **Hoje** and **Esta semana** — read top to bottom, and
+ * nothing is decided. The category is still there, as the small line above
+ * each title, which is where it earns its keep.
  *
- * **The right column is context, not work.** The day's reading, how tasks
- * close themselves, and the count of what is parked. Everything there is read
- * once in the morning; nothing there is a thing to do.
- *
- * The masthead carries the three numbers that decide whether today is heavy.
+ * Above it, the day at a glance (the band) and yesterday's reading in three
+ * sentences. **The right column is what is done or parked**, not work: what
+ * closed itself and why, and who is waiting on the customer.
  */
 
 export function CorpoDoPainel({
@@ -67,18 +62,27 @@ export function CorpoDoPainel({
   if (aCarregar || !painel) return <Esqueleto />;
 
   const total = piles.atrasado.length + piles.hoje.length + piles.semana.length;
+  const primeira = primeiraTarefa(piles);
+  // A primeira sai do seu grupo: está lá em cima, em destaque, e repeti-la
+  // logo a seguir seria contá-la duas vezes.
+  const semAPrimeira = (lista: Tarefa[]) =>
+    primeira ? lista.filter((t) => t.id !== primeira.tarefa.id) : lista;
+  const atrasadas = semAPrimeira(piles.atrasado);
+  const hoje = semAPrimeira(piles.hoje);
+  const feitas = painel.fechadas ?? [];
 
   return (
     <div className="space-y-4">
-      <Masthead
+      <Faixa
         nome={painel.colaborador.nome}
         data={painel.data}
-        atrasado={piles.atrasado.length}
-        hoje={piles.hoje.length}
-        aguardar={piles.aguardar.length}
+        piles={piles}
+        feitas={feitas.length}
         frescura={painel.frescura}
         agora={agora}
       />
+
+      <LeituraCurta c={coaching} motivo={semCoaching?.motivo} />
 
       {falhas.length > 0 && (
         <div className="space-y-1.5">
@@ -88,23 +92,33 @@ export function CorpoDoPainel({
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
-        <div className="min-w-0 space-y-4">
+      <div className="grid grid-cols-1 gap-6 pt-2 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start">
+        <div className="min-w-0 space-y-5">
           {total === 0 && falhas.length === 0 ? (
             <SemTarefas />
           ) : (
             <>
+              {primeira && (
+                <ComecaPorAqui
+                  t={primeira.tarefa}
+                  balde={primeira.balde}
+                  agora={agora}
+                  somenteLeitura={somenteLeitura}
+                />
+              )}
               <GrupoPorPrazo
                 balde="atrasado"
-                tarefas={piles.atrasado}
+                tarefas={atrasadas}
                 agora={agora}
                 somenteLeitura={somenteLeitura}
+                nota={primeira?.balde === "atrasado" ? `mais ${atrasadas.length}` : undefined}
               />
               <GrupoPorPrazo
                 balde="hoje"
-                tarefas={piles.hoje}
+                tarefas={hoje}
                 agora={agora}
                 somenteLeitura={somenteLeitura}
+                nota={primeira?.balde === "hoje" ? `mais ${hoje.length}` : undefined}
               />
               <GrupoPorPrazo
                 balde="semana"
@@ -116,224 +130,274 @@ export function CorpoDoPainel({
           )}
         </div>
 
-        <aside className="min-w-0 space-y-3">
-          <LeituraDoDia c={coaching} motivo={semCoaching?.motivo} dia={painel.data} />
-          <FecharamSozinhas fechadas={painel.fechadas ?? []} />
-          <AAguardar tarefas={piles.aguardar} />
+        <aside className="min-w-0 space-y-5 rounded-md bg-white px-5 py-5 shadow-[0_1px_2px_rgba(20,32,43,.06)] [&>section+section]:border-t [&>section+section]:border-stone-200 [&>section+section]:pt-5">
+          <Feitas fechadas={feitas} />
+          <AEspera tarefas={piles.aguardar} />
         </aside>
       </div>
 
-      {coaching && <BlocoCoaching c={coaching} />}
-
-      <p className="t-micro px-0.5 font-normal text-stone-400">
-        Análise e prazos às 08:00 e 16:30 · verificação de evidência de 15 em 15 minutos ·
-        {" "}
-        {painel.tarefas.length} tarefas
+      <p className="border-t border-stone-200 pt-3 t-meta text-stone-400">
+        As tarefas saem da lista sozinhas quando o telefone ou o Desk mostram que foram feitas.
+        Prazos e leitura das chamadas às 08:00 e às 16:30.
       </p>
     </div>
   );
 }
 
 /**
- * Who, when, and how heavy — the three things read before any scrolling.
+ * O dia de relance: quem, que dia, quanto já se fez e quanto falta.
  *
- * The greeting is not decoration. This panel tells somebody what they failed
- * to do yet; opening on their own name, in their own language, is the
- * difference between a colleague's note and an audit. The date beside it is
- * what stops a preview of last Thursday being mistaken for this morning.
+ * A saudação não é decoração. Este painel diz a alguém o que ainda não fez;
+ * abrir com o nome da pessoa é a diferença entre o recado de um colega e uma
+ * auditoria.
  *
- * Only the overdue count is coloured. Three red numbers is no number in red at
- * all, and this is the one that means a person is waiting.
+ * A faixa por baixo desenha o dia: as atrasadas num bloco à esquerda, a linha
+ * do "agora", as tarefas de hoje na hora do prazo, as da semana à direita.
+ * Três números soltos (2 · 2 · 2) obrigavam a ler três rótulos para perceber
+ * o que isto desenha de uma vez.
  */
-function Masthead({
+function Faixa({
   nome,
   data,
-  atrasado,
-  hoje,
-  aguardar,
+  piles,
+  feitas,
   frescura,
   agora,
 }: {
   nome: string;
   data: string;
-  atrasado: number;
-  hoje: number;
-  aguardar: number;
+  piles: TarefasPorPrazo;
+  feitas: number;
   frescura?: Frescura;
   agora: Date;
 }) {
+  const porFazer = piles.atrasado.length + piles.hoje.length + piles.semana.length;
+  const total = feitas + porFazer;
+  const doDia = data === hojeEmLisboa(agora);
+  const agoraX = doDia ? posicaoNaFaixa(agora.toISOString()) : null;
+  const pontos = piles.hoje
+    .map((t) => ({ t, x: t.prazo ? posicaoNaFaixa(t.prazo) : null }))
+    .filter((p): p is { t: Tarefa; x: number } => p.x !== null);
+
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-stone-200 bg-white px-4 py-3">
-      <div className="flex min-w-0 items-center gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white">
-          <BarChart3 className="h-4.5 w-4.5" aria-hidden />
-        </span>
+    <section className="rounded-md bg-[#14202B] px-5 py-6 text-[#F3F5F6] sm:px-7">
+      <div className="flex flex-wrap items-end justify-between gap-5">
         <div className="min-w-0">
-          <div className="t-micro truncate text-stone-400">
-            {diaPorExtenso(data)} · Agenda do dia
-          </div>
-          <h1 className="t-pagina truncate text-stone-900">
-            {saudacao(agora)}, {primeiroNome(nome)}
+          <div className="t-micro text-[#9FB0BC]">{diaPorExtenso(data)}</div>
+          <h1 className="t-saudacao mt-2">
+            {saudacao(agora)}, {primeiroNome(nome)}.
           </h1>
+          <p className="mt-2 max-w-[52ch] text-[17px] leading-snug text-[#9FB0BC]">
+            <Resumo atrasado={piles.atrasado.length} hoje={piles.hoje.length} />
+          </p>
+        </div>
+        <Anel feitas={feitas} total={total} />
+      </div>
+
+      <div className="mt-5 grid grid-cols-[5rem_minmax(0,1fr)_5rem] gap-2.5 sm:grid-cols-[6.5rem_minmax(0,1fr)_6.5rem]">
+        <div
+          className={cn(
+            "flex flex-col justify-center rounded px-3 py-2",
+            piles.atrasado.length > 0 ? "bg-[#C8372D] text-white" : "bg-white/5 text-[#9FB0BC]",
+          )}
+        >
+          <b className="font-mono text-2xl leading-none">{piles.atrasado.length}</b>
+          <span className="mt-1 t-micro">atrasadas</span>
+        </div>
+
+        <div className="relative h-[74px] rounded bg-white/5" aria-label="Tarefas de hoje por hora do prazo">
+          {[9, 11, 13, 15, 17, 19].map((h) => {
+            const x = ((h - 8) / 12) * 100;
+            return (
+              <span key={h}>
+                <span className="absolute bottom-[22px] top-0 w-px bg-white/10" style={{ left: `${x}%` }} />
+                <span
+                  className="absolute bottom-1.5 hidden -translate-x-1/2 font-mono text-[11px] text-[#9FB0BC] sm:block"
+                  style={{ left: `${x}%` }}
+                >
+                  {h}h
+                </span>
+              </span>
+            );
+          })}
+          {agoraX !== null && (
+            <>
+              <span className="absolute inset-y-0 left-0 rounded-l bg-white/5" style={{ width: `${agoraX}%` }} />
+              <span className="absolute bottom-[18px] top-0 w-0.5 bg-[#FFD166]" style={{ left: `${agoraX}%` }}>
+                <span className="absolute -top-0.5 left-1.5 text-[11px] font-bold text-[#FFD166]">agora</span>
+              </span>
+            </>
+          )}
+          {pontos.map(({ t, x }) => (
+            <span
+              key={t.id}
+              className="absolute top-6 flex -translate-x-1/2 flex-col items-center gap-0.5"
+              style={{ left: `${x}%` }}
+            >
+              <i className="h-3.5 w-3.5 rounded-full border-2 border-[#14202B] bg-[#6FD0D8]" />
+              <small className="hidden whitespace-nowrap text-[11.5px] font-semibold sm:block">
+                {hora(t.prazo!)}
+                {t.contacto.nome ? ` ${primeiroNome(t.contacto.nome)}` : ""}
+              </small>
+            </span>
+          ))}
+        </div>
+
+        <div className="flex flex-col justify-center rounded bg-white/5 px-3 py-2">
+          <b className="font-mono text-2xl leading-none">{piles.semana.length}</b>
+          <span className="mt-1 t-micro text-[#9FB0BC]">esta semana</span>
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="flex gap-5">
-          <Numero
-            valor={atrasado}
-            rotulo="Atrasado"
-            cor={atrasado > 0 ? "text-red-600" : undefined}
-          />
-          <Numero valor={hoje} rotulo="Hoje" />
-          <Numero valor={aguardar} rotulo="A aguardar" cor="text-stone-500" />
-        </div>
-        <div className="flex items-center gap-3 border-l border-stone-200 pl-4">
-          <Relogios frescura={frescura} agora={agora} />
-          <span
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-50 t-meta font-bold text-indigo-700"
-            title={nome}
-          >
-            {iniciais(nome)}
-          </span>
-        </div>
+      <Relogios frescura={frescura} agora={agora} />
+    </section>
+  );
+}
+
+function Resumo({ atrasado, hoje }: { atrasado: number; hoje: number }) {
+  // A frase vem de `resumoDoDia`; aqui só se pintam os dois números que a
+  // decidem. O vermelho é só para as atrasadas: é o único que quer dizer que
+  // alguém está à espera.
+  const frase = resumoDoDia(atrasado, hoje);
+  const partes = frase.split(/(\d+ tarefas? atrasadas?|\d+ para hoje)/);
+  return (
+    <>
+      {partes.map((p, i) =>
+        /atrasad/.test(p) ? (
+          <b key={i} className="font-bold text-[#FF8A80]">{p}</b>
+        ) : /para hoje/.test(p) ? (
+          <b key={i} className="font-bold text-white">{p}</b>
+        ) : (
+          <span key={i}>{p}</span>
+        ),
+      )}
+      {(atrasado > 0 || hoje > 0) && " Começa pela primeira; o resto está por ordem de prazo."}
+    </>
+  );
+}
+
+/**
+ * Quantas já saíram da lista, num anel que enche.
+ *
+ * "Já feitas" e não "feitas hoje": são as tarefas que o painel teria mostrado
+ * mas que já têm prova — uma chamada atendida, uma resposta no ticket —, e a
+ * prova pode ser de ontem ou de há dias.
+ */
+function Anel({ feitas, total }: { feitas: number; total: number }) {
+  const C = 97.4; // 2πr com r = 15.5
+  const cheio = total > 0 ? (feitas / total) * C : 0;
+  return (
+    <div className="flex items-center gap-3.5" aria-label={`${feitas} de ${total} feitas`}>
+      <svg viewBox="0 0 36 36" className="h-[72px] w-[72px]" aria-hidden>
+        <circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(255,255,255,.12)" strokeWidth="4" />
+        <circle
+          cx="18"
+          cy="18"
+          r="15.5"
+          fill="none"
+          stroke="#5FD39A"
+          strokeWidth="4"
+          strokeLinecap="round"
+          strokeDasharray={`${cheio.toFixed(1)} ${C}`}
+          transform="rotate(-90 18 18)"
+        />
+      </svg>
+      <div>
+        <b className="block font-mono text-[22px]">
+          {feitas} de {total}
+        </b>
+        <span className="text-[13px] text-[#9FB0BC]">já feitas</span>
       </div>
     </div>
   );
 }
 
 /**
- * Os dois relógios, um por cima do outro.
- *
- * Antes havia um só, e mentia por omissão: marcava o instante em que a página
- * foi construída, por isso dizia sempre "agora mesmo". Um painel que se diz
- * actual não dá a ninguém maneira de perceber que o coaching por baixo é de
- * sexta-feira.
+ * Os dois relógios, numa linha por baixo da faixa.
  *
  * São dois porque são mesmo dois, e andam a ritmos diferentes: as tarefas
- * seguem a sincronização de quinze em quinze minutos, a leitura do dia segue a
+ * seguem a sincronização de quinze em quinze minutos, a leitura segue a
  * análise de duas vezes ao dia. Juntá-los numa frase só obrigaria a escolher
  * qual deles mentir.
  */
 function Relogios({ frescura, agora }: { frescura?: Frescura; agora: Date }) {
   if (!frescura) return null;
   return (
-    <div className="flex flex-col gap-0.5 whitespace-nowrap text-right">
-      <span className="flex items-center justify-end gap-1.5 t-meta text-stone-400">
-        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
-        Tarefas {frescura.sincronizacao ? haQuantoTempo(frescura.sincronizacao, agora) : "—"}
-      </span>
-      <span
-        className="t-meta text-stone-400"
-        title={
-          frescura.analise
-            ? `Conversas de ${diaPorExtenso(frescura.analise.data)}, lidas ${haQuantoTempo(frescura.analise.quando, agora)}`
-            : undefined
-        }
-      >
-        Leitura{" "}
-        {frescura.analise ? diaCurto(frescura.analise.data) : "por correr"}
-      </span>
-    </div>
-  );
-}
-
-function Numero({ valor, rotulo, cor }: { valor: number; rotulo: string; cor?: string }) {
-  return (
-    <div className="text-center">
-      <div className={`t-pagina tabular-nums ${cor ?? "text-stone-900"}`}>{valor}</div>
-      <div className="t-micro whitespace-nowrap text-stone-400">{rotulo}</div>
-    </div>
+    <p className="mt-3 t-meta text-[#9FB0BC]">
+      <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 align-middle" aria-hidden />
+      Tarefas atualizadas {frescura.sincronizacao ? haQuantoTempo(frescura.sincronizacao, agora) : "—"}
+      {" · "}a lista atualiza-se de 15 em 15 minutos
+    </p>
   );
 }
 
 /**
- * The day's one sentence, at the top of the rail — and *which* day it is about.
+ * A leitura das chamadas em três frases: correu bem, pode ser melhor, foco de
+ * hoje. É o que se lê em cinco segundos antes de pegar no telefone.
  *
- * The panel shows today; a reading of the day is written once the day is over.
- * Those are two different clocks, and pretending they are one produced a card
- * that every morning said the analysis had not run — true, and useless, since
- * what somebody wants at nine o'clock is yesterday's reading. So the reading
- * falls back to the most recent one and says so out loud: "Leitura de segunda,
- * 7 de setembro" is honest and still useful; the same words presented as
- * today's would be neither.
+ * Antes havia duas leituras — um parágrafo à direita e três listas no fundo —
+ * e nenhuma das duas se lia de relance. O resto continua a um clique.
+ *
+ * Diz sempre de que dia é: a leitura é escrita depois de o dia acabar, e a de
+ * sexta lida numa segunda tem de dizer que é de sexta.
  */
-function LeituraDoDia({
-  c,
-  motivo,
-  dia,
-}: {
-  c: Coaching | null;
-  motivo?: string;
-  /** The day the panel itself is showing. */
-  dia: string;
-}) {
-  if (c?.paragraphOverview) {
-    const doProprioDia = c.data === dia;
-    return (
-      <section className="rounded-xl border border-indigo-200 bg-indigo-50/60 px-4 py-3">
-        <h2 className="t-micro mb-1.5 text-indigo-700">
-          {doProprioDia ? "Uma sugestão para hoje" : `Leitura de ${diaPorExtenso(c.data)}`}
-        </h2>
-        <p className="t-narrativa text-stone-700">{c.paragraphOverview}</p>
-      </section>
-    );
+function LeituraCurta({ c, motivo }: { c: Coaching | null; motivo?: string }) {
+  const [tudo, setTudo] = useState(false);
+  if (!c) {
+    return motivo ? <p className="px-0.5 t-meta text-stone-500">{motivo}</p> : null;
   }
-  if (!motivo) return null;
-  return <p className="px-0.5 t-meta text-stone-400">{motivo}</p>;
-}
+  const { bem, melhor, foco } = leituraCurta(c);
+  if (!bem && !melhor && !foco) return null;
 
-/**
- * What is parked, split by whose move it is.
- *
- * Deliberately a count and not a list. Nothing here is work for today — the
- * whole reason it is out of the agenda is that there is nothing to do about it
- * — and a list would put sixty rows of not-work under five rows of work.
- */
-function AAguardar({ tarefas }: { tarefas: Tarefa[] }) {
-  if (tarefas.length === 0) return null;
-  const cliente = tarefas.filter((t) => t.categoria === "espera_cliente").length;
-  const nosso = tarefas.length - cliente;
+  const colunas = [
+    { titulo: "Correu bem", texto: bem, cor: "text-emerald-700", ponto: "bg-emerald-700" },
+    { titulo: "Pode ser melhor", texto: melhor, cor: "text-amber-700", ponto: "bg-amber-600" },
+    { titulo: "Foco de hoje", texto: foco, cor: "text-teal-700", ponto: "bg-teal-700" },
+  ].filter((x) => x.texto);
 
   return (
-    <section className="rounded-xl border border-stone-200 bg-white px-4 py-3">
-      <h2 className="t-micro mb-2 text-stone-500">
-        A aguardar
-        <span className="ml-1.5 tabular-nums opacity-60">{tarefas.length}</span>
-      </h2>
-      <div className="flex gap-2">
-        <Balde valor={nosso} titulo="Contigo" nota="A bola está do lado da Alfa" tom="amber" />
-        <Balde
-          valor={cliente}
-          titulo="Com o cliente"
-          nota="Só relembrar se passar do prazo"
-          tom="stone"
-        />
+    <section className="rounded-md bg-white shadow-[0_1px_2px_rgba(20,32,43,.06)]" aria-label="A tua leitura">
+      <div className="grid md:grid-cols-3">
+        {colunas.map((x, i) => (
+          <div
+            key={x.titulo}
+            className={cn("px-5 py-4", i > 0 && "border-t border-stone-200 md:border-l md:border-t-0")}
+          >
+            <h2 className={cn("flex items-center gap-2 t-micro", x.cor)}>
+              <span className={cn("h-2 w-2 rounded-full", x.ponto)} aria-hidden />
+              {x.titulo}
+            </h2>
+            <p className="mt-1.5 text-[15px] leading-snug text-stone-800">{semMarcas(x.texto!)}</p>
+          </div>
+        ))}
       </div>
+      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-1 border-t border-stone-200 px-5 py-2.5 t-meta text-stone-500">
+        <span>Leitura das tuas chamadas de {diaPorExtenso(c.data)}</span>
+        <span className="flex flex-wrap items-center gap-x-4">
+          {c.closingRateObservations && <span>{semMarcas(c.closingRateObservations)}</span>}
+          <button
+            type="button"
+            aria-expanded={tudo}
+            onClick={() => setTudo((v) => !v)}
+            className="font-semibold text-teal-800 underline underline-offset-[3px]"
+          >
+            {tudo ? "Esconder" : "Ver a leitura completa"}
+          </button>
+        </span>
+      </div>
+      {tudo && (
+        <div className="space-y-3 border-t border-stone-200 px-5 py-4">
+          {c.paragraphOverview && <p className="t-narrativa text-stone-700">{c.paragraphOverview}</p>}
+          <BlocoCoaching c={c} semTitulo />
+        </div>
+      )}
     </section>
   );
 }
 
-function Balde({
-  valor,
-  titulo,
-  nota,
-  tom,
-}: {
-  valor: number;
-  titulo: string;
-  nota: string;
-  tom: "amber" | "stone";
-}) {
-  const cores =
-    tom === "amber" ? "bg-amber-50 text-amber-700" : "bg-stone-100 text-stone-500";
-  return (
-    <div className={`flex-1 rounded-lg px-3 py-2 ${cores}`}>
-      <div className="t-titulo tabular-nums">{valor}</div>
-      <div className="t-meta font-semibold text-stone-700">{titulo}</div>
-      <div className="t-meta text-stone-400">{nota}</div>
-    </div>
-  );
+/** `YYYY-MM-DD` de hoje, no calendário de Lisboa. */
+function hojeEmLisboa(d: Date): string {
+  return d.toLocaleDateString("en-CA", { timeZone: "Europe/Lisbon" });
 }
 
 /** The `motivo` of every block that could not be built. */

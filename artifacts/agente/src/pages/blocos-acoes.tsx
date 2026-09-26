@@ -10,7 +10,7 @@ import type { Coaching } from "@/lib/tipos";
  * prompt were written so this reads as an ally, and a wall of bullets reads as
  * an audit.
  */
-export function BlocoCoaching({ c }: { c: Coaching }) {
+export function BlocoCoaching({ c, semTitulo }: { c: Coaching; semTitulo?: boolean }) {
   const nada =
     !c.closingRateObservations &&
     c.strengths.length === 0 &&
@@ -20,7 +20,7 @@ export function BlocoCoaching({ c }: { c: Coaching }) {
 
   return (
     <section className="space-y-2">
-      <Cabecalho titulo="Leitura do dia" cor="text-stone-500" />
+      {!semTitulo && <Cabecalho titulo="Leitura do dia" cor="text-stone-500" />}
 
       {c.closingRateObservations && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
