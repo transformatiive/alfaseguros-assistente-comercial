@@ -131,8 +131,12 @@ export function espera(horas: number): string {
 export function prazoTexto(prazo: string, agora: Date): { texto: string; tarde: boolean } {
   const d = new Date(prazo);
   const horas = Math.round((d.getTime() - agora.getTime()) / 3_600_000);
-  if (horas < 0) {
-    const atraso = Math.abs(horas);
+  if (d.getTime() < agora.getTime()) {
+    // Arredondado a partir do atraso, e não do negativo: Math.round(-16.5) dá
+    // -16 e Math.round(16.5) dá 17, e a coluna de prazos (`colunaDoPrazo`)
+    // conta do segundo modo. Duas contas diferentes punham "17 h de atraso" e
+    // "atrasada 16 h" na mesma tarefa.
+    const atraso = Math.max(1, Math.round((agora.getTime() - d.getTime()) / 3_600_000));
     return {
       texto:
         atraso < 24
