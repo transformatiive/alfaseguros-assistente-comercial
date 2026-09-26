@@ -114,8 +114,8 @@
      Desk, where a webfont can fail to load, and falling back to whatever the
      platform calls "sans-serif" is how a design starts looking like two
      designs. */
-  --app-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --app-font-mono: Menlo, monospace;
+  --app-font-sans: 'Public Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --app-font-mono: 'IBM Plex Mono', Menlo, monospace;
   --radius: .5rem;
   --shadow-2xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
   --shadow-xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
@@ -276,6 +276,27 @@
   }
   /* Prose. Same family and size as .t-body — it is set apart by a looser
      line height and, at the call site, by a quieter colour. */
+  /* O "Bom dia" da faixa. O único texto grande do ecrã. */
+  .t-saudacao {
+    font-size: 34px;
+    line-height: 1.1;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+  }
+  /* O título da tarefa em destaque ("Começa por aqui"). */
+  .t-destaque {
+    font-size: 22px;
+    line-height: 1.25;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+  }
+  /* Cabeçalho de um grupo da agenda: Atrasadas, Hoje, Esta semana. */
+  .t-grupo {
+    font-size: 18px;
+    line-height: 1.3;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
   .t-narrativa {
     font-size: 13px;
     line-height: 1.6;

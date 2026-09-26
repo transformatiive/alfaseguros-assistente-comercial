@@ -6,19 +6,19 @@ import {
   CircleCheck,
   Handshake,
   Hourglass,
-  CalendarDays,
   Check,
   Circle,
   Clock,
   Inbox,
+  Phone,
   PhoneIncoming,
-  Search,
   TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { enviar } from "@/lib/api";
-import { porqueMe, telefone } from "@/lib/formatos";
+import { idade, iniciais, porqueMe, telefone } from "@/lib/formatos";
+import { colunaDoPrazo, comoSai, corDoCliente, TIPO_DE_TAREFA } from "@/lib/leitura";
 import type {
   BaldeDePrazo,
   Cadeia,
@@ -134,7 +134,12 @@ export function prazoTexto(prazo: string, agora: Date): { texto: string; tarde: 
   if (horas < 0) {
     const atraso = Math.abs(horas);
     return {
-      texto: atraso < 24 ? `atrasado ${atraso} h` : `atrasado ${Math.floor(atraso / 24)} dias`,
+      texto:
+        atraso < 24
+          ? `atrasada ${atraso} h`
+          : Math.floor(atraso / 24) === 1
+            ? "atrasada 1 dia"
+            : `atrasada ${Math.floor(atraso / 24)} dias`,
       tarde: true,
     };
   }
@@ -213,56 +218,46 @@ function CadeiaDaTarefa({ cadeia }: { cadeia: Cadeia }) {
   );
 }
 
-/**
- * Why the task is still here, said as the thing that was looked for and not
- * found.
- *
- * A panel that decides what you owe without showing its working asks to be
- * believed. This line is what makes it arguable instead: an agent who knows
- * they called yesterday can see that the lookup missed, and say so.
- */
-function PorqueAberta({ texto }: { texto: string }) {
-  return (
-    <p className="mt-1 flex items-start gap-1 t-meta text-stone-400">
-      <Search className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
-      <span>{texto}</span>
-    </p>
-  );
-}
-
 /* ── Componentes ────────────────────────────────────────────────────────── */
 
 /**
- * The three piles that have a clock on them, and their headings.
+ * O layout de agenda.
  *
- * "Atrasado" earns red; the other two do not. Three coloured headings is no
- * heading coloured at all, and the whole point of this grouping is that the
- * top of the page is the part you cannot leave until tomorrow.
+ * Cada tarefa lê-se da esquerda para a direita, sempre nos mesmos sítios:
+ *
+ *     QUANDO   (iniciais)  TIPO DE TAREFA                      telefone
+ *     16 h                 O que fazer                          [Abrir no Desk]
+ *     de atraso            Porquê, nas palavras da conversa
+ *                          Sai da lista com … — Porque está aqui?
+ *
+ * O prazo tem coluna própria porque é ele que decide a ordem. Antes estava
+ * numa etiqueta pequena no fundo do cartão, depois do resto todo, e o
+ * "há 4 dias" do canto — que é há quanto tempo espera, não o prazo — era lido
+ * como se fosse.
+ *
+ * Só o que ajuda a agir fica à vista. O resto (a etapa do negócio quando não é
+ * a tarefa em destaque, o estado do Desk, o email, porque é que a chamada veio
+ * para ti) está em "Porque está aqui?", a um clique.
  */
+
 const ASPETO_PRAZO: Record<
   Exclude<BaldeDePrazo, "aguardar">,
-  { titulo: string; legenda: string; icone: LucideIcon; cor: string; fundo: string }
+  { titulo: string; cabecalho: string; coluna: string }
 > = {
   atrasado: {
-    titulo: "Atrasado",
-    legenda: "o prazo passou e nada mostra que ficou feito",
-    icone: Clock,
-    cor: "text-red-700",
-    fundo: "bg-red-100",
+    titulo: "Atrasadas",
+    cabecalho: "border-red-700 text-red-700",
+    coluna: "bg-red-50 text-red-700",
   },
   hoje: {
     titulo: "Hoje",
-    legenda: "prometido ao cliente, ou o prazo é hoje",
-    icone: CalendarDays,
-    cor: "text-indigo-700",
-    fundo: "bg-indigo-100",
+    cabecalho: "border-teal-700 text-teal-700",
+    coluna: "bg-teal-50 text-teal-700",
   },
   semana: {
     titulo: "Esta semana",
-    legenda: "há tempo, mas já tem data",
-    icone: CalendarDays,
-    cor: "text-stone-600",
-    fundo: "bg-stone-100",
+    cabecalho: "border-stone-800 text-stone-900",
+    coluna: "bg-stone-100 text-stone-800",
   },
 };
 
@@ -278,181 +273,328 @@ export function GrupoPorPrazo({
   tarefas,
   agora,
   somenteLeitura,
+  nota,
 }: {
   balde: Exclude<BaldeDePrazo, "aguardar">;
   tarefas: Tarefa[];
   agora: Date;
   /** The preview renders the same panel with nothing that writes. */
   somenteLeitura?: boolean;
+  /** Ao lado do título — "mais 1" quando a primeira foi para o destaque. */
+  nota?: string;
 }) {
   const a = ASPETO_PRAZO[balde];
   const [tudo, setTudo] = useState(false);
   const mostradas = tudo ? tarefas : tarefas.slice(0, VISIVEIS[balde]);
   const escondidas = tarefas.length - mostradas.length;
-  const Icone = a.icone;
 
   if (tarefas.length === 0) return null;
 
   return (
-    <section>
-      <header className="mb-2 flex items-center gap-2 px-0.5">
-        <span
-          className={cn(
-            "flex h-6 w-6 shrink-0 items-center justify-center rounded-md",
-            a.fundo,
-            a.cor,
-          )}
-        >
-          <Icone className="h-3.5 w-3.5" aria-hidden />
+    <section className="rounded-md bg-white px-5 pt-4 shadow-[0_1px_2px_rgba(20,32,43,.06)]">
+      <h2 className={cn("flex items-baseline gap-2.5 border-b pb-2.5 t-grupo", a.cabecalho)}>
+        {a.titulo}
+        <span className="t-body font-medium text-stone-400 tabular-nums">
+          {nota ?? tarefas.length}
         </span>
-        <h2 className="t-titulo text-stone-900">{a.titulo}</h2>
-        <span
-          className={cn(
-            "rounded-full px-2 py-0.5 t-meta font-semibold tabular-nums text-white",
-            balde === "atrasado" ? "bg-red-600" : "bg-stone-400",
-          )}
-        >
-          {tarefas.length}
-        </span>
-        <span className="t-meta truncate text-stone-400">{a.legenda}</span>
-      </header>
+      </h2>
 
-      <div className="space-y-1.5">
+      <div className="divide-y divide-stone-200">
         {mostradas.map((t) => (
           <LinhaTarefa
             key={t.id}
             t={t}
+            balde={balde}
             agora={agora}
-            atrasada={balde === "atrasado"}
             somenteLeitura={somenteLeitura}
           />
         ))}
       </div>
 
-      {escondidas > 0 && (
+      {escondidas > 0 ? (
         <button
-          className="t-meta mt-1.5 w-full rounded-lg border border-stone-200 bg-white py-1.5 text-stone-500 transition-colors hover:bg-stone-50 hover:text-stone-900"
+          className="t-meta mb-3 w-full rounded border border-stone-200 py-1.5 text-stone-500 transition-colors hover:bg-stone-50 hover:text-stone-900"
           onClick={() => setTudo(true)}
         >
           mostrar mais {escondidas}
         </button>
+      ) : (
+        <div className="h-1" />
       )}
     </section>
   );
 }
 
+/** Iniciais do cliente, numa cor que é sempre a mesma para a mesma pessoa. */
+export function Iniciais({ t, grande }: { t: Tarefa; grande?: boolean }) {
+  const chave = t.contacto.nome ?? t.contacto.telefone ?? t.contacto.email ?? t.id;
+  const texto = t.contacto.nome ? iniciais(t.contacto.nome) : "?";
+  return (
+    <span
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-full font-bold text-white",
+        grande ? "h-12 w-12 text-base" : "h-9 w-9 text-[13px]",
+      )}
+      style={{ background: corDoCliente(chave) }}
+      aria-hidden
+    >
+      {texto}
+    </span>
+  );
+}
+
+/**
+ * O telefone, à vista e sem ser botão.
+ *
+ * Dentro do Desk, um `tel:` abre o que o sistema quiser — muitas vezes nada.
+ * O número serve para marcar no Ringover; o que importa é estar sempre no
+ * mesmo sítio e legível, não ser clicável.
+ */
+export function Telefone({ numero, grande }: { numero: string; grande?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-2 whitespace-nowrap font-mono text-stone-700 tabular-nums",
+        grande ? "text-[15px]" : "text-[13.5px]",
+      )}
+    >
+      <Phone className="h-3.5 w-3.5 text-stone-400" aria-hidden />
+      {telefone(numero)}
+    </span>
+  );
+}
+
+export function BotaoDesk({ url, principal }: { url: string; principal?: boolean }) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      // `noopener` as well as `noreferrer`: the panel runs inside a Zoho
+      // widget, and a tab opened from it must not keep a handle back to the
+      // window it came from.
+      rel="noopener noreferrer"
+      className={cn(
+        "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-[3px] border font-semibold transition-colors",
+        principal
+          ? "border-stone-900 bg-stone-900 px-4 py-2.5 text-[14.5px] text-stone-50 hover:bg-stone-700"
+          : "border-stone-800 px-3 py-1.5 t-body text-stone-900 hover:bg-stone-900 hover:text-stone-50",
+      )}
+    >
+      {principal ? "Abrir o ticket no Desk" : "Abrir no Desk"}
+      <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
+    </a>
+  );
+}
+
+/** A linha "tipo de tarefa", com o ícone e a cor da categoria. */
+function TipoDeTarefa({ t }: { t: Tarefa }) {
+  const marca = ASPETO[t.categoria];
+  const Icone = marca.icone;
+  const tentativas = t.devolucaoIds && t.devolucaoIds.length > 1 ? ` · ligou ${t.devolucaoIds.length} vezes` : "";
+  return (
+    <span className={cn("flex items-center gap-1.5 t-micro", marca.cor)}>
+      <Icone className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      {TIPO_DE_TAREFA[t.categoria]}
+      {tentativas}
+    </span>
+  );
+}
+
+function SaiDaLista({ t }: { t: Tarefa }) {
+  const como = comoSai(t.categoria);
+  if (!como) return null;
+  return (
+    <p className="mt-1.5 t-meta text-stone-500">
+      <b className="font-semibold text-emerald-700">Sai da lista</b> com {como}.
+    </p>
+  );
+}
+
+/**
+ * O que sustenta a tarefa, para quem quiser confirmar: o que foi procurado e
+ * não se encontrou, porque é que a chamada veio para ti, a etapa do negócio,
+ * de onde vem o prazo, o estado no Desk e o email.
+ *
+ * Fica fechado por omissão. Um painel que decide o que se deve sem mostrar as
+ * contas pede para ser acreditado — mas mostrar as contas em todas as linhas,
+ * sempre, fazia de cada cartão sete linhas.
+ */
+function PorqueEstaAqui({ t, agora, semCadeia }: { t: Tarefa; agora: Date; semCadeia?: boolean }) {
+  const [aberto, setAberto] = useState(false);
+  const razao = porqueMe(t.atribuicaoOrigem);
+  const prazo = t.prazo ? prazoTexto(t.prazo, agora) : null;
+  const linhas: string[] = [];
+  if (t.porqueAberta) linhas.push(t.porqueAberta);
+  if (razao) linhas.push(`Veio para ti: ${razao}.`);
+  if (prazo && t.prazoPorque) linhas.push(`Prazo: ${prazo.texto} · ${t.prazoPorque}.`);
+  if (t.estado) linhas.push(`Estado no Desk: ${t.estado}.`);
+  if (t.contacto.email) linhas.push(`Email: ${t.contacto.email}`);
+  const temCadeia = !semCadeia && t.cadeia && t.cadeia.passos.filter((p) => p.estado !== "nao_aplicavel").length >= 2;
+  if (linhas.length === 0 && !temCadeia) return null;
+
+  return (
+    <div className="mt-1.5">
+      <button
+        type="button"
+        aria-expanded={aberto}
+        onClick={() => setAberto((v) => !v)}
+        className="t-meta font-semibold text-teal-800 underline underline-offset-[3px]"
+      >
+        {aberto ? "Esconder" : "Porque está aqui?"}
+      </button>
+      {aberto && (
+        <div className="mt-1.5 space-y-1 t-meta text-stone-600">
+          {temCadeia && t.cadeia && <CadeiaDaTarefa cadeia={t.cadeia} />}
+          {linhas.map((l) => (
+            <p key={l}>{l}</p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LinhaTarefa({
   t,
+  balde,
   agora,
-  atrasada,
   somenteLeitura,
 }: {
   t: Tarefa;
+  balde: Exclude<BaldeDePrazo, "aguardar">;
   agora: Date;
-  /** Whether it sits in the overdue pile — which is what earns the red edge. */
-  atrasada?: boolean;
+  somenteLeitura?: boolean;
+}) {
+  const coluna = t.prazo ? colunaDoPrazo(t.prazo, balde, agora) : null;
+  const a = ASPETO_PRAZO[balde];
+
+  return (
+    <article className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-4 gap-y-2 py-4 sm:grid-cols-[5.25rem_2.25rem_minmax(0,1fr)_auto]">
+      <div className={cn("self-start rounded px-1 py-2 text-center leading-tight", a.coluna)}>
+        {coluna && (
+          <>
+            <div className="font-mono text-[16px] font-semibold tabular-nums">{coluna.grande}</div>
+            <div className="mt-0.5 t-micro opacity-90">{coluna.pequeno}</div>
+          </>
+        )}
+      </div>
+
+      <div className="hidden sm:block">
+        <Iniciais t={t} />
+      </div>
+
+      <div className="min-w-0">
+        <TipoDeTarefa t={t} />
+        <h3 className="t-titulo mt-1 text-stone-900">{t.titulo}</h3>
+        {t.contacto.nome && <p className="t-body font-semibold text-stone-600">{t.contacto.nome}</p>}
+        {t.porque && <p className="t-narrativa mt-1 text-stone-600">{t.porque}</p>}
+        <SaiDaLista t={t} />
+        <PorqueEstaAqui t={t} agora={agora} />
+      </div>
+
+      <div className="col-start-2 flex flex-wrap items-start gap-2 sm:col-start-auto sm:flex-col sm:items-end">
+        {t.contacto.telefone && <Telefone numero={t.contacto.telefone} />}
+        {t.deskUrl && <BotaoDesk url={t.deskUrl} />}
+        {t.devolucaoIds && !somenteLeitura && <Fechar ids={t.devolucaoIds} />}
+      </div>
+    </article>
+  );
+}
+
+/**
+ * Começa por aqui: a tarefa que abre o dia, em destaque.
+ *
+ * Decidir por onde começar é trabalho, e é trabalho repetido todas as manhãs
+ * por cada agente. A ordem já está decidida — o painel só a mostra.
+ */
+export function ComecaPorAqui({
+  t,
+  balde,
+  agora,
+  somenteLeitura,
+}: {
+  t: Tarefa;
+  balde: "atrasado" | "hoje";
+  agora: Date;
   somenteLeitura?: boolean;
 }) {
   const prazo = t.prazo ? prazoTexto(t.prazo, agora) : null;
-  const razao = porqueMe(t.atribuicaoOrigem);
-  // The category no longer groups the page, so it lives here: an icon the eye
-  // reads without stopping, next to the row it describes.
-  const marca = ASPETO[t.categoria];
-  const Icone = marca.icone;
+  const como = comoSai(t.categoria);
+  const passos = t.cadeia?.passos.filter((p) => p.estado !== "nao_aplicavel") ?? [];
+  const tarde = balde === "atrasado";
 
   return (
     <article
       className={cn(
-        "flex gap-3 rounded-xl border border-stone-200 bg-white px-3 py-2.5",
-        // A left rule rather than a red background: on a list of thirty rows a
-        // tinted background is a wall, a rule is a scannable edge.
-        atrasada && "border-l-[3px] border-l-red-600 pl-[9px]",
+        "border-t-[5px] bg-white px-6 pb-6 pt-5 shadow-[0_1px_2px_rgba(20,32,43,.06),0_10px_30px_rgba(20,32,43,.06)]",
+        tarde ? "border-red-700" : "border-teal-700",
       )}
     >
-      <span
-        className={cn(
-          "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
-          marca.fundo,
-          marca.cor,
-        )}
-        title={marca.titulo}
-      >
-        <Icone className="h-4 w-4" aria-hidden />
-      </span>
-
-      <div className="min-w-0 flex-1">
-      <div className="flex items-baseline justify-between gap-3">
-        <h3 className="t-titulo min-w-0 flex-1 text-stone-900">{t.titulo}</h3>
-        {t.esperaHoras != null && (
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className={cn("t-micro", tarde ? "text-red-700" : "text-teal-700")}>Começa por aqui</span>
+        {prazo && (
           <span
             className={cn(
-              "t-meta shrink-0 tabular-nums",
-              atrasada ? "text-red-600" : "text-stone-400",
+              "inline-flex items-center gap-1.5 rounded-[3px] px-2.5 py-1 font-mono text-[13px] font-semibold text-white",
+              tarde ? "bg-red-700" : "bg-teal-700",
             )}
           >
-            {espera(t.esperaHoras)}
+            <Clock className="h-3.5 w-3.5" aria-hidden />
+            {prazo.texto}
           </span>
         )}
       </div>
 
-      <Contacto t={t} />
-
-      {/* The call's own sentence. Without it the row is a label; with it the
-          agent knows what the conversation was about without opening a thing. */}
-      {t.porque && <p className="t-narrativa mt-1 text-stone-600">{t.porque}</p>}
-
-      {t.cadeia && <CadeiaDaTarefa cadeia={t.cadeia} />}
-
-      {/* Why this landed on this agent. Only the missed calls have it, and only
-          they need it: a call attributed by history rather than by a ticket is
-          an inference, and an agent double-checking one is right to. */}
-      {razao && <p className="mt-1 t-meta text-stone-400">{razao}</p>}
-
-      {t.porqueAberta && <PorqueAberta texto={t.porqueAberta} />}
-
-      {(prazo || t.estado || t.deskUrl) && (
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-          {prazo && (
-            <span
-              className={cn(
-                "t-meta rounded px-1.5 py-0.5",
-                prazo.tarde ? "bg-red-50 text-red-700" : "bg-stone-100 text-stone-600",
-              )}
-              // The reason belongs next to the date, not in a legend: an agent
-              // argues with "we think two days is fair" and does not argue with
-              // "you told the customer Monday morning".
-              title={t.prazoPorque ?? undefined}
-            >
-              {prazo.texto}
-              {t.prazoPorque && (
-                <span className="ml-1 font-normal opacity-60">· {t.prazoPorque}</span>
-              )}
-            </span>
-          )}
-          {t.estado && (
-            <span className="t-meta rounded bg-stone-100 px-1.5 py-0.5 text-stone-500">
-              {t.estado}
-            </span>
-          )}
-          {t.deskUrl && (
-            <a
-              href={t.deskUrl}
-              target="_blank"
-              // `noopener` as well as `noreferrer`: the panel runs inside a
-              // Zoho widget, and a tab opened from it must not keep a handle
-              // back to the window it came from.
-              rel="noopener noreferrer"
-              className="t-meta inline-flex items-center gap-0.5 text-stone-400 transition-colors hover:text-stone-900"
-            >
-              abrir no Desk
-              <ArrowUpRight className="h-3 w-3" aria-hidden />
-            </a>
-          )}
+      <div className="mt-3 flex items-center gap-3.5">
+        <Iniciais t={t} grande />
+        <div className="min-w-0">
+          <TipoDeTarefa t={t} />
+          <h2 className="t-destaque mt-0.5 text-stone-900">{t.titulo}</h2>
+          {t.contacto.nome && <p className="t-body font-semibold text-stone-600">{t.contacto.nome}</p>}
         </div>
+      </div>
+
+      {t.prazoPorque && <p className="mt-3 t-body text-stone-600">Prazo: {t.prazoPorque}.</p>}
+      {t.porque && (
+        <p className="mt-3 border-l-[3px] border-stone-200 pl-3 text-[15px] leading-relaxed text-stone-700">
+          {t.porque}
+        </p>
       )}
 
-      {t.devolucaoIds && !somenteLeitura && <Fechar ids={t.devolucaoIds} />}
+      {passos.length >= 2 && (
+        <ol className="mt-4 flex flex-wrap t-body" aria-label="Em que passo está o negócio">
+          {passos.map((p, i) => (
+            <li
+              key={p.passo}
+              className={cn(
+                "border-stone-200 py-1 pr-3.5",
+                i < passos.length - 1 && "mr-3.5 border-r",
+                p.estado === "feito" ? "text-emerald-700" : p.estado === "em_falta" && p.passo === t.cadeia?.emFalta ? "font-bold text-red-700" : "text-stone-400",
+              )}
+            >
+              {p.estado === "feito" ? "✓ " : ""}
+              {NOME_DO_PASSO[p.passo]}
+              {p.quando ? ` · ${diaCurto(p.quando)}` : p.estado === "em_falta" && p.passo === t.cadeia?.emFalta ? " · falta" : ""}
+            </li>
+          ))}
+        </ol>
+      )}
+
+      {como && (
+        <p className="mt-4 flex gap-2.5 border-t border-stone-200 pt-3.5 t-body text-stone-600">
+          <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" aria-hidden />
+          <span>
+            Sai da lista sozinha com {como}. Não precisas de marcar nada.
+          </span>
+        </p>
+      )}
+
+      <div className="mt-4 flex flex-wrap items-center gap-4">
+        {t.deskUrl && <BotaoDesk url={t.deskUrl} principal />}
+        {t.contacto.telefone && <Telefone numero={t.contacto.telefone} grande />}
+        {t.devolucaoIds && !somenteLeitura && <Fechar ids={t.devolucaoIds} />}
       </div>
+      <PorqueEstaAqui t={t} agora={agora} semCadeia />
     </article>
   );
 }
@@ -475,17 +617,17 @@ function Fechar({ ids }: { ids: number[] }) {
   });
 
   return (
-    <>
-      <div className="mt-2.5 flex gap-1.5">
+    <div>
+      <div className="flex gap-1.5">
         <button
-          className="rounded-md bg-stone-900 px-3 py-1.5 t-body font-medium text-stone-50 transition-opacity disabled:opacity-50"
+          className="rounded-[3px] border border-stone-800 px-3 py-1.5 t-body font-semibold text-stone-900 transition-colors hover:bg-stone-900 hover:text-stone-50 disabled:opacity-50"
           disabled={concluir.isPending}
           onClick={() => concluir.mutate("devolvida")}
         >
           Devolvida
         </button>
         <button
-          className="rounded-md border border-stone-200 px-3 py-1.5 t-body font-medium text-stone-600 transition-colors hover:bg-stone-50 disabled:opacity-50"
+          className="rounded-[3px] border border-stone-200 px-3 py-1.5 t-body font-medium text-stone-600 transition-colors hover:bg-stone-50 disabled:opacity-50"
           disabled={concluir.isPending}
           onClick={() => concluir.mutate("dispensada")}
         >
@@ -497,89 +639,52 @@ function Fechar({ ids }: { ids: number[] }) {
           Não foi possível fechar esta chamada. Tenta outra vez.
         </p>
       )}
-    </>
+    </div>
   );
 }
 
 /**
- * Who the task is with, and how to reach them.
+ * O que já saiu da lista, e a prova que a fez sair.
  *
- * The name comes from whichever Desk ticket saw this number last; a number
- * Desk has never seen shows as a number, which is honestly all anybody knows
- * about that caller yet. Both the phone and the email are rendered when both
- * exist — "para quem" is not answered by a name alone if you then have to go
- * looking for the address.
+ * Existe por causa de uma coisa que o painel tira. Fechar por prova em vez de
+ * por clique é mais honesto — decide o registo, não uma declaração —, mas tira
+ * ao agente o recibo de ter feito. Uma lista que perde linhas em silêncio
+ * parece esquecida, não atenta. O recibo vem para aqui, e melhor: não diz
+ * "disseste que fizeste", diz "chamada atendida de 6 min a 05/09".
  */
-function Contacto({ t }: { t: Tarefa }) {
-  const { nome, telefone: tel, email } = t.contacto;
-  if (!nome && !tel && !email) return null;
-
-  return (
-    <p className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 t-meta text-stone-500">
-      {nome && <span className="font-semibold text-stone-700">{nome}</span>}
-      {tel && (
-        <a href={`tel:${tel}`} className="tabular-nums hover:text-stone-900">
-          {telefone(tel)}
-        </a>
-      )}
-      {email && (
-        <a href={`mailto:${email}`} className="truncate hover:text-stone-900">
-          {email}
-        </a>
-      )}
-    </p>
-  );
-}
-
-/**
- * What closed itself, and the proof that closed it.
- *
- * This card exists because of something the panel takes away. A "Devolvida"
- * button gives the agent a receipt: they press it, the row goes, the system
- * clearly noticed. Closing tasks by evidence instead is more honest — the
- * record decides, not a claim — but it removes that receipt, and a list that
- * silently loses rows reads as forgetful rather than as attentive.
- *
- * So the receipt moves here, and gets better in the process: it no longer says
- * "you said you did this", it says *"chamada atendida de 6 min a 05/09"*.
- */
-export function FecharamSozinhas({ fechadas }: { fechadas: TarefaFechada[] }) {
+export function Feitas({ fechadas }: { fechadas: TarefaFechada[] }) {
   const [tudo, setTudo] = useState(false);
-  if (fechadas.length === 0) return null;
-  const mostradas = tudo ? fechadas : fechadas.slice(0, 4);
+  const mostradas = tudo ? fechadas : fechadas.slice(0, 5);
 
   return (
-    <section className="overflow-hidden rounded-xl border border-stone-200 bg-white">
-      <header className="flex items-start gap-2.5 bg-emerald-50 px-3 py-2.5">
-        <span className="mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white/70 text-emerald-700">
-          <CircleCheck className="h-3.5 w-3.5" aria-hidden />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h2 className="t-micro text-emerald-800">
-            Fecharam-se sozinhas
-            <span className="ml-1.5 tabular-nums opacity-60">{fechadas.length}</span>
-          </h2>
-          <p className="t-meta mt-0.5 text-stone-500">
-            Nada para marcar — saíram da lista porque o registo mostra que foram feitas
-          </p>
-        </div>
-      </header>
-
-      <ul className="divide-y divide-stone-100">
-        {mostradas.map((f) => (
-          <li key={f.id} className="px-3 py-2">
-            <p className="t-body text-stone-700">
-              {f.titulo}
-              {f.quem && <span className="text-stone-500"> · {f.quem}</span>}
-            </p>
-            <p className="t-meta mt-0.5 text-stone-400">{f.prova.descricao}</p>
-          </li>
-        ))}
-      </ul>
-
+    <section>
+      <h2 className="mb-2.5 flex justify-between t-micro text-stone-500">
+        Feito
+        <b className="font-mono text-stone-900">{fechadas.length}</b>
+      </h2>
+      {fechadas.length === 0 ? (
+        <p className="t-meta text-stone-400">
+          Ainda nada hoje. As tarefas saem daqui sozinhas quando o telefone ou o Desk mostram que foram feitas.
+        </p>
+      ) : (
+        <ul className="divide-y divide-stone-100">
+          {mostradas.map((f) => (
+            <li key={f.id} className="flex gap-2 py-2 first:pt-0">
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" aria-hidden />
+              <div className="min-w-0">
+                <p className="t-body text-stone-800">
+                  {f.titulo}
+                  {f.quem && <span className="text-stone-500"> · {f.quem}</span>}
+                </p>
+                <p className="t-meta text-stone-400">{f.prova.descricao}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
       {fechadas.length > mostradas.length && (
         <button
-          className="t-meta w-full border-t border-stone-200 bg-stone-50 py-1.5 text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900"
+          className="t-meta mt-1 font-semibold text-teal-800 underline underline-offset-[3px]"
           onClick={() => setTudo(true)}
         >
           mostrar mais {fechadas.length - mostradas.length}
@@ -589,11 +694,67 @@ export function FecharamSozinhas({ fechadas }: { fechadas: TarefaFechada[] }) {
   );
 }
 
+/**
+ * O que está parado: à espera do cliente, ou sem prazo para já.
+ *
+ * Nomes, e não caixas com números: "Contigo 0 / Com o cliente 2" obrigava a
+ * perguntar "quem?". No máximo cinco de cada; nada disto é trabalho de hoje.
+ */
+export function AEspera({ tarefas }: { tarefas: Tarefa[] }) {
+  if (tarefas.length === 0) return null;
+  const cliente = tarefas.filter((t) => t.categoria === "espera_cliente");
+  const semPrazo = tarefas.filter((t) => t.categoria !== "espera_cliente");
+  return (
+    <>
+      {cliente.length > 0 && (
+        <Parados
+          titulo="À espera do cliente"
+          tarefas={cliente}
+          nota="Nada a fazer. Voltam à lista se passarem 14 dias."
+        />
+      )}
+      {semPrazo.length > 0 && (
+        <Parados
+          titulo="Sem prazo para já"
+          tarefas={semPrazo}
+          nota="Contigo, mas sem data esta semana."
+        />
+      )}
+    </>
+  );
+}
+
+function Parados({ titulo, tarefas, nota }: { titulo: string; tarefas: Tarefa[]; nota: string }) {
+  return (
+    <section>
+      <h2 className="mb-2.5 flex justify-between t-micro text-stone-500">
+        {titulo}
+        <b className="font-mono text-stone-900">{tarefas.length}</b>
+      </h2>
+      <ul className="divide-y divide-stone-100">
+        {tarefas.slice(0, 5).map((t) => (
+          <li key={t.id} className="flex justify-between gap-3 py-2 first:pt-0 t-body text-stone-800">
+            <span className="min-w-0 truncate">
+              {t.contacto.nome ?? (t.contacto.telefone ? telefone(t.contacto.telefone) : "Sem nome")}
+              <span className="text-stone-500"> · {t.titulo}</span>
+            </span>
+            {t.esperaHoras != null && (
+              <span className="shrink-0 font-mono text-[12.5px] text-stone-400">{idade(t.esperaHoras)}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+      {tarefas.length > 5 && <p className="t-meta text-stone-400">e mais {tarefas.length - 5}</p>}
+      <p className="mt-2 t-meta text-stone-400">{nota}</p>
+    </section>
+  );
+}
+
 /** Nothing to do. Deliberately warm — an empty list here is a good day. */
 export function SemTarefas() {
   return (
-    <div className="rounded-xl border border-stone-200 bg-white px-4 py-8 text-center">
-      <CircleCheck className="mx-auto h-6 w-6 text-emerald-500" aria-hidden />
+    <div className="rounded-md bg-white px-4 py-10 text-center shadow-[0_1px_2px_rgba(20,32,43,.06)]">
+      <CircleCheck className="mx-auto h-7 w-7 text-emerald-600" aria-hidden />
       <p className="t-titulo mt-2 text-stone-900">Nada por fazer</p>
       <p className="t-meta mt-1 text-stone-500">
         Sem chamadas por devolver, simulações por enviar ou compromissos em aberto.
