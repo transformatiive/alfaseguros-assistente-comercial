@@ -276,7 +276,13 @@ function Resumo({ atrasado, hoje }: { atrasado: number; hoje: number }) {
   );
 }
 
-/** Quantas já saíram da lista, num anel que enche. */
+/**
+ * Quantas já saíram da lista, num anel que enche.
+ *
+ * "Já feitas" e não "feitas hoje": são as tarefas que o painel teria mostrado
+ * mas que já têm prova — uma chamada atendida, uma resposta no ticket —, e a
+ * prova pode ser de ontem ou de há dias.
+ */
 function Anel({ feitas, total }: { feitas: number; total: number }) {
   const C = 97.4; // 2πr com r = 15.5
   const cheio = total > 0 ? (feitas / total) * C : 0;
@@ -300,7 +306,7 @@ function Anel({ feitas, total }: { feitas: number; total: number }) {
         <b className="block font-mono text-[22px]">
           {feitas} de {total}
         </b>
-        <span className="text-[13px] text-[#9FB0BC]">feitas desde ontem</span>
+        <span className="text-[13px] text-[#9FB0BC]">já feitas</span>
       </div>
     </div>
   );
