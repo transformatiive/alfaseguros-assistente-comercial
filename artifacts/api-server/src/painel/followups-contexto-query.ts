@@ -4,6 +4,7 @@ import type { FollowUpItem } from "./followups-shape.js";
 import {
   descreverFecho,
   eDeQuem,
+  estadoDoNegocio,
   inicioDaChamada,
   lerContexto,
   numerosCitados,
@@ -82,6 +83,7 @@ export async function carregarContextoDosFollowUps(
             phoneFingerprint: ticketsTable.phoneFingerprint,
             createdTime: ticketsTable.createdTime,
             closedTime: ticketsTable.closedTime,
+            customFieldsJson: ticketsTable.customFieldsJson,
           })
           .from(ticketsTable)
           .where(or(...condicoes)),
@@ -102,6 +104,7 @@ export async function carregarContextoDosFollowUps(
     phoneFingerprint: t.phoneFingerprint,
     createdTime: t.createdTime ? t.createdTime.toISOString() : null,
     closedTime: t.closedTime ? t.closedTime.toISOString() : null,
+    estadoNegocio: estadoDoNegocio(t.customFieldsJson),
   }));
   const zidsDaEquipa = new Set(equipa.map((e) => e.zid).filter((z): z is string => !!z));
 

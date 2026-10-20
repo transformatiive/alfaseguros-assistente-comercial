@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, isNull, lt, ne, or } from "drizzle-orm";
 import { db, ticketsTable } from "@workspace/db";
+import { estadoDoNegocio, negocioDecidido, nomeDoNegocio } from "./followups-contexto.js";
 
 /**
  * "Tickets em risco" — open tickets assigned to this agent that have been open
@@ -23,6 +24,8 @@ export interface TicketEmRisco {
   contactName: string | null;
   contactPhone: string | null;
   contactEmail: string | null;
+  /** "Simulação · EM TRATAMENTO": o negócio do ticket, como o Desk o tem. */
+  negocio: string | null;
 }
 
 /**
@@ -122,6 +125,11 @@ export async function listTicketsEmRisco(params: {
     // The `lt` above already excludes nulls, but the column is nullable and
     // the type says so — narrow rather than assert.
     if (!t.createdTime) return [];
+    // Um negócio GANHO, PERDIDO ou TRATADO já não espera por nós, mesmo que
+    // o ticket tenha ficado aberto: a apólice saiu, ou a decisão está tomada.
+    const estado = estadoDoNegocio(t.customFieldsJson);
+    if (negocioDecidido(estado)) return [];
+    const nome = nomeDoNegocio(t.customFieldsJson);
     return [
       {
         id: t.id,
@@ -134,6 +142,7 @@ export async function listTicketsEmRisco(params: {
         contactName: t.contactName,
         contactPhone: t.contactPhone,
         contactEmail: emailDoTicket(t.rawJson),
+        negocio: [nome, estado].filter(Boolean).join(" · ") || null,
       },
     ];
   });

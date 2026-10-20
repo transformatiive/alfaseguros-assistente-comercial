@@ -133,6 +133,8 @@ export interface Tarefa {
   esperaHoras: number | null;
   /** Desk status, verbatim, on the rows that come from a ticket. */
   estado: string | null;
+  /** O negócio do ticket, como o Desk o tem: "Simulação · EM TRATAMENTO". */
+  negocio: string | null;
   ticketId: string | null;
   deskUrl: string | null;
   prioridade: "alta" | "media" | "baixa";

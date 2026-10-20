@@ -25,6 +25,8 @@ import { lisbonDayBoundsISO, toLisbonDate } from "../lib/dates.js";
 
 export interface TicketDeContexto {
   id: string;
+  /** Estado do Negócio no Desk ("GANHO", "PERDIDO", "TRATADO"…), quando há. */
+  estadoNegocio?: string | null;
   ticketNumber: string | null;
   statusType: string | null;
   assigneeId: string | null;
@@ -65,6 +67,35 @@ export interface ContextoDoFollowUp {
  */
 export const DIAS_DE_PROXIMIDADE = 14;
 
+/**
+ * Estados do negócio que dizem que o assunto está resolvido, mesmo com o
+ * ticket ainda aberto. Um negócio GANHO (apólice emitida), PERDIDO (com
+ * motivo) ou TRATADO já não pede simulação nem seguimento.
+ */
+const NEGOCIO_DECIDIDO = new Set(["GANHO", "PERDIDO", "TRATADO"]);
+
+/** O Estado do Negócio guardado nos campos do ticket, em maiúsculas. */
+export function estadoDoNegocio(customFields: unknown): string | null {
+  if (!customFields || typeof customFields !== "object") return null;
+  const v = (customFields as Record<string, unknown>).cf_estado_do_negocio;
+  return typeof v === "string" && v.trim() ? v.trim().toUpperCase() : null;
+}
+
+/** O nome do negócio ("Simulação", "Revisão de Contrato"), quando há. */
+export function nomeDoNegocio(customFields: unknown): string | null {
+  if (!customFields || typeof customFields !== "object") return null;
+  const cf = customFields as Record<string, unknown>;
+  for (const k of ["cf_negocio_1", "cf_negocio"]) {
+    const v = cf[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return null;
+}
+
+export function negocioDecidido(estado: string | null | undefined): boolean {
+  return !!estado && NEGOCIO_DECIDIDO.has(estado.toUpperCase());
+}
+
 /** Números de ticket citados no texto: "#173005", "ticket 173005". */
 export function numerosCitados(texto: string | null | undefined): string[] {
   const out = new Set<string>();
@@ -74,13 +105,18 @@ export function numerosCitados(texto: string | null | undefined): string[] {
   return [...out];
 }
 
+/** Fechado no Desk, ou com o negócio já decidido: nos dois casos acabou. */
 function fechado(t: TicketDeContexto): boolean {
-  return (t.statusType ?? "").toLowerCase() === "closed";
+  return (t.statusType ?? "").toLowerCase() === "closed" || negocioDecidido(t.estadoNegocio);
 }
 
 function instante(iso: string | null): number {
   const n = iso ? Date.parse(iso) : NaN;
   return Number.isNaN(n) ? 0 : n;
+}
+
+function quandoFechou(t: TicketDeContexto): number {
+  return t.closedTime ? instante(t.closedTime) : Number.MAX_SAFE_INTEGER;
 }
 
 export function lerContexto(
@@ -114,9 +150,11 @@ export function lerContexto(
   );
   const abertos = maisRecentePrimeiro.filter((t) => !fechado(t));
 
+  // O que fechou por último. Um negócio decidido num ticket ainda aberto não
+  // tem `closedTime`; conta como o mais recente, porque é o estado de agora.
   const fechadoPor =
     relacionados.length > 0 && abertos.length === 0
-      ? [...relacionados].sort((a, b) => instante(b.closedTime) - instante(a.closedTime))[0]
+      ? [...relacionados].sort((a, b) => quandoFechou(b) - quandoFechou(a))[0]
       : null;
 
   // O ticket a mostrar: o que os casos ligaram, depois o que o texto cita,
@@ -158,6 +196,7 @@ export function eDeQuem(params: {
 /** "ticket #173005 fechado a 08/09" — a prova que tira a promessa da lista. */
 export function descreverFecho(t: TicketDeContexto): string {
   const numero = t.ticketNumber ? `#${t.ticketNumber}` : "do Desk";
+  if (negocioDecidido(t.estadoNegocio)) return `negócio ${t.estadoNegocio} no ticket ${numero}`;
   if (!t.closedTime) return `ticket ${numero} fechado`;
   const [, m, d] = toLisbonDate(new Date(t.closedTime)).split("-");
   return `ticket ${numero} fechado a ${d}/${m}`;

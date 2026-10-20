@@ -101,6 +101,8 @@ export interface Tarefa {
   esperaHoras: number | null;
   /** Desk status, verbatim, for the rows that come from a ticket. */
   estado: string | null;
+  /** O negócio do ticket ("Simulação · EM TRATAMENTO"), nas linhas de ticket. */
+  negocio: string | null;
   ticketId: string | null;
   deskUrl: string | null;
   prioridade: PrioridadeTarefa;
@@ -155,6 +157,7 @@ export interface TicketParaTarefa {
   contactName: string | null;
   contactPhone: string | null;
   contactEmail: string | null;
+  negocio?: string | null;
 }
 
 export interface AcaoParaTarefa {
@@ -434,6 +437,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       porqueAberta: null,
       esperaHoras: horasEntre(inicio, entrada.now),
       estado: null,
+      negocio: null,
       ticketId: d.ticketId,
       deskUrl: d.ticketId ? linkDoTicket(d.ticketId, entrada) : null,
       prioridade: "alta",
@@ -504,6 +508,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       porqueAberta: porqueContinuaAberta(prova),
       esperaHoras: horasEntre(detectado, entrada.now),
       estado: null,
+      negocio: null,
       ticketId: f.linked_ticket_id,
       deskUrl: f.linked_ticket_id ? linkDoTicket(f.linked_ticket_id, entrada) : null,
       // Past its deadline is high; still inside it is a normal day's work.
@@ -532,6 +537,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       porqueAberta: null,
       esperaHoras: null,
       estado: null,
+      negocio: null,
       ticketId: null,
       deskUrl: null,
       prioridade: a.prioridade,
@@ -618,6 +624,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       porqueAberta: aguardaTerceiros ? null : porqueContinuaAberta(prova),
       esperaHoras: t.idadeHoras,
       estado: estado || null,
+      negocio: t.negocio ?? null,
       ticketId: t.id,
       deskUrl: t.deskUrl || linkDoTicket(t.id, entrada),
       // Waiting on someone else is never urgent to *us*, however old it is.

@@ -439,6 +439,7 @@ function PorqueEstaAqui({ t, agora, semCadeia }: { t: Tarefa; agora: Date; semCa
   if (razao) linhas.push(`Veio para ti: ${razao}.`);
   if (prazo && t.prazoPorque) linhas.push(`Prazo: ${prazo.texto} · ${t.prazoPorque}.`);
   if (t.estado) linhas.push(`Estado no Desk: ${t.estado}.`);
+  if (t.negocio) linhas.push(`Negócio: ${t.negocio}.`);
   if (t.contacto.email) linhas.push(`Email: ${t.contacto.email}`);
   const temCadeia = !semCadeia && t.cadeia && t.cadeia.passos.filter((p) => p.estado !== "nao_aplicavel").length >= 2;
   if (linhas.length === 0 && !temCadeia) return null;
