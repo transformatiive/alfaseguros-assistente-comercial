@@ -177,3 +177,59 @@ export function posicaoNaFaixa(iso: string): number | null {
   const x = ((h + m / 60 - 8) / 12) * 100;
   return x < 0 || x > 100 ? null : x;
 }
+
+/** Um ponto na faixa do dia: uma tarefa, ou várias que caem perto umas das outras. */
+export interface GrupoNaFaixa {
+  x: number;
+  tarefas: Tarefa[];
+  /** Todas sem hora combinada: o prazo é "até ao fim do dia". */
+  fimDoDia: boolean;
+}
+
+/**
+ * Distância mínima, em % da faixa, entre dois pontos com nome. Cerca de uma
+ * hora: menos do que isso e os nomes escrevem-se uns por cima dos outros.
+ */
+const DISTANCIA_NA_FAIXA = 8;
+
+/**
+ * Junta as tarefas de hoje que cairiam no mesmo sítio da faixa.
+ *
+ * Sem isto, todas as tarefas sem hora combinada iam parar às 18:00 e os
+ * nomes desenhavam-se uns sobre os outros, ilegíveis. As que são "até ao fim
+ * do dia" ficam num grupo só delas, à direita; as outras juntam-se quando
+ * estão a menos de uma hora umas das outras.
+ */
+export function agruparNaFaixa(tarefas: readonly Tarefa[]): GrupoNaFaixa[] {
+  const fimDoDia: Tarefa[] = [];
+  const comHora: { t: Tarefa; x: number }[] = [];
+  for (const t of tarefas) {
+    if (!t.prazo) continue;
+    if (t.prazoHora === "dia") {
+      fimDoDia.push(t);
+      continue;
+    }
+    const x = posicaoNaFaixa(t.prazo);
+    if (x !== null) comHora.push({ t, x });
+  }
+  comHora.sort((a, b) => a.x - b.x);
+
+  const grupos: GrupoNaFaixa[] = [];
+  for (const { t, x } of comHora) {
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo && x - ultimo.x < DISTANCIA_NA_FAIXA) ultimo.tarefas.push(t);
+    else grupos.push({ x, tarefas: [t], fimDoDia: false });
+  }
+
+  if (fimDoDia.length > 0) {
+    // Às 19h: depois da hora normal de saída, para não se confundir com uma
+    // tarefa combinada para as 18:00.
+    const x = ((19 - 8) / 12) * 100;
+    const perto = grupos.length > 0 && x - grupos[grupos.length - 1].x < DISTANCIA_NA_FAIXA;
+    // Se uma tarefa combinada já está ali, empurra-se esse grupo para trás em
+    // vez de juntar os dois: "fim do dia" e "às 18:30" dizem coisas diferentes.
+    if (perto) grupos[grupos.length - 1].x = Math.min(grupos[grupos.length - 1].x, x - DISTANCIA_NA_FAIXA);
+    grupos.push({ x, tarefas: fimDoDia, fimDoDia: true });
+  }
+  return grupos;
+}
