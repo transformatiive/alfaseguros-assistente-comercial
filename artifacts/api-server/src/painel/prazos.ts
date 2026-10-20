@@ -36,10 +36,23 @@ import {
 
 export type OrigemPrazo = "prometido" | "inferido";
 
+/**
+ * Que parte de `quando` foi mesmo dita.
+ *
+ *   `combinada` — houve uma hora: "até às 21h".
+ *   `manha`     — "de manhã": guardado como 12:00.
+ *   `dia`       — só o dia, ou nada: guardado como 18:00, que é o fim do dia
+ *                 de trabalho, e **mostrado como "fim do dia"**. Seis tarefas
+ *                 "às 18:00" liam-se como seis horas combinadas com seis
+ *                 clientes, e nenhuma o era.
+ */
+export type HoraDoPrazo = "combinada" | "manha" | "dia";
+
 export interface Prazo {
   /** ISO instant. */
   quando: string;
   origem: OrigemPrazo;
+  hora: HoraDoPrazo;
   /** One line, printed under the date: "prometeste na chamada de 03/09". */
   porque: string;
 }
@@ -57,6 +70,7 @@ interface Achado {
   /** How long the match was. Longer wins a tie, so the specific beats the vague. */
   comprimento: number;
   quando: Date;
+  hora: HoraDoPrazo;
 }
 
 const DIAS_DA_SEMANA: Record<string, number> = {
@@ -112,7 +126,12 @@ function dataCurta(dia: string, d: number, m: number, ano?: number): string | nu
   return candidato;
 }
 
-type Regra = { re: RegExp; ler: (m: RegExpExecArray, dia: string) => Date | null };
+type Regra = {
+  re: RegExp;
+  ler: (m: RegExpExecArray, dia: string) => Date | null;
+  /** Que parte da hora o texto diz. Sem isto, só o dia. */
+  hora?: (m: RegExpExecArray) => HoraDoPrazo;
+};
 
 /**
  * The expressions, each anchored on a cue word.
@@ -139,6 +158,7 @@ const REGRAS: Regra[] = [
   // "até às 21h", "até às 18:30"
   {
     re: /at[ée]\s+[àa]s?\s+(\d{1,2})(?:[h:](\d{2}))?\s*h?(?:oras)?\b/gi,
+    hora: () => "combinada",
     ler: (m, dia) => {
       const h = +m[1];
       if (h > 23) return null;
@@ -156,6 +176,7 @@ const REGRAS: Regra[] = [
   // "até quinta-feira", "até segunda-feira de manhã"
   {
     re: /at[ée]\s+(?:[àa]\s+)?(domingo|segunda|ter[cç]a|quarta|quinta|sexta|s[áa]bado)(?:[-\s]feira)?(\s+de\s+manh[ãa])?/gi,
+    hora: (m) => (m[2] ? "manha" : "dia"),
     ler: (m, dia) => {
       const alvo = DIAS_DA_SEMANA[m[1].toLowerCase()];
       if (alvo === undefined) return null;
@@ -219,6 +240,14 @@ export function lerPrazoEscrito(
   texto: string | null | undefined,
   referencia: Date,
 ): Date | null {
+  return lerPrazoComHora(texto, referencia)?.quando ?? null;
+}
+
+/** O mesmo que `lerPrazoEscrito`, dizendo também se havia hora. */
+export function lerPrazoComHora(
+  texto: string | null | undefined,
+  referencia: Date,
+): { quando: Date; hora: HoraDoPrazo } | null {
   const t = (texto ?? "").trim();
   if (!t) return null;
   const dia = toLisbonDate(referencia);
@@ -230,7 +259,12 @@ export function lerPrazoEscrito(
     if (!m) continue;
     const quando = regra.ler(m, dia);
     if (!quando || Number.isNaN(quando.getTime())) continue;
-    const achado = { indice: m.index, comprimento: m[0].length, quando };
+    const achado = {
+      indice: m.index,
+      comprimento: m[0].length,
+      quando,
+      hora: regra.hora?.(m) ?? "dia",
+    };
     if (
       !melhor ||
       achado.indice < melhor.indice ||
@@ -239,7 +273,7 @@ export function lerPrazoEscrito(
       melhor = achado;
     }
   }
-  return melhor?.quando ?? null;
+  return melhor ? { quando: melhor.quando, hora: melhor.hora } : null;
 }
 
 /* ── Inferir quando nada foi dito ───────────────────────────────────────── */
@@ -285,6 +319,12 @@ export function prazoInferido(tipo: TipoDeEspera, desde: Date): { quando: Date; 
 export interface PedidoDePrazo {
   /** The promise, or the ticket thread. Where a date might be written. */
   texto?: string | null;
+  /**
+   * Mensagens do ticket, cada uma com o dia em que foi escrita, a mais
+   * recente primeiro. Lidas antes de `texto`: o que ficou combinado por
+   * último é o que vale, e "até amanhã" conta do dia da mensagem.
+   */
+  mensagens?: readonly { texto: string; quando: Date }[];
   /** The day that text was written — what "quinta-feira" is relative to. */
   referencia: Date;
   /** When the obligation started. What an inferred deadline counts from. */
@@ -299,13 +339,24 @@ function diasDesde(desde: Date, agora: Date): number {
 }
 
 export function derivarPrazo(p: PedidoDePrazo): Prazo {
-  const escrito = lerPrazoEscrito(p.texto, p.referencia);
-  if (escrito) {
-    const quandoFoiDito = toLisbonDate(p.referencia).split("-").reverse().slice(0, 2).join("/");
+  for (const msg of p.mensagens ?? []) {
+    const escrito = lerPrazoComHora(msg.texto, msg.quando);
+    if (!escrito) continue;
     return {
-      quando: escrito.toISOString(),
+      quando: escrito.quando.toISOString(),
       origem: "prometido",
-      porque: `prometido na conversa de ${quandoFoiDito}`,
+      hora: escrito.hora,
+      porque: `combinado no ticket a ${diaCurtoDe(msg.quando)}`,
+    };
+  }
+
+  const escrito = lerPrazoComHora(p.texto, p.referencia);
+  if (escrito) {
+    return {
+      quando: escrito.quando.toISOString(),
+      origem: "prometido",
+      hora: escrito.hora,
+      porque: `prometido na conversa de ${diaCurtoDe(p.referencia)}`,
     };
   }
 
@@ -315,5 +366,10 @@ export function derivarPrazo(p: PedidoDePrazo): Prazo {
   // that set the date — that is the number the agent is actually judging.
   const razao =
     quando < p.agora && dias >= 2 ? `${dias} dias sem resposta` : porque;
-  return { quando: quando.toISOString(), origem: "inferido", porque: razao };
+  return { quando: quando.toISOString(), origem: "inferido", hora: "dia", porque: razao };
+}
+
+/** "03/09", em Lisboa. */
+function diaCurtoDe(d: Date): string {
+  return toLisbonDate(d).split("-").reverse().slice(0, 2).join("/");
 }

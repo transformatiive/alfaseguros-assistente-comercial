@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  agruparNaFaixa,
   colunaDoPrazo,
   comoSai,
   origemDaTarefa,
@@ -138,5 +139,51 @@ describe("posicaoNaFaixa", () => {
   it("fica de fora antes das 8h e depois das 20h", () => {
     expect(posicaoNaFaixa("2026-09-25T05:00:00Z")).toBeNull();
     expect(posicaoNaFaixa("2026-09-25T20:30:00Z")).toBeNull();
+  });
+});
+
+describe("colunaDoPrazo sem hora combinada", () => {
+  it("diz 'fim do dia' em vez de inventar as 18:00", () => {
+    expect(colunaDoPrazo("2026-09-25T17:00:00Z", "hoje", agora, "dia")).toEqual({
+      grande: "Hoje",
+      pequeno: "fim do dia",
+    });
+  });
+
+  it("mostra a hora só quando ela foi combinada", () => {
+    expect(colunaDoPrazo("2026-09-25T15:00:00Z", "hoje", agora, "combinada").grande).toBe("16:00");
+    expect(colunaDoPrazo("2026-09-25T11:00:00Z", "hoje", agora, "manha").grande).toBe("Manhã");
+  });
+});
+
+describe("agruparNaFaixa", () => {
+  const base = { prazoHora: "combinada" } as const;
+  const t = (id: number, prazo: string, prazoHora: "combinada" | "dia" = "combinada") =>
+    ({ ...base, id, prazo, prazoHora, contacto: { nome: `C${id}` } }) as unknown as Tarefa;
+
+  it("põe as tarefas sem hora num só grupo de fim do dia, em vez de empilhar às 18:00", () => {
+    const g = agruparNaFaixa([
+      t(1, "2026-09-25T17:00:00Z", "dia"),
+      t(2, "2026-09-25T17:00:00Z", "dia"),
+      t(3, "2026-09-25T17:00:00Z", "dia"),
+    ]);
+    expect(g).toHaveLength(1);
+    expect(g[0].fimDoDia).toBe(true);
+    expect(g[0].tarefas.map((x) => x.id)).toEqual([1, 2, 3]);
+  });
+
+  it("junta as tarefas a menos de uma hora e separa as que estão longe", () => {
+    const g = agruparNaFaixa([
+      t(1, "2026-09-25T09:00:00Z"), // 10:00 Lisboa
+      t(2, "2026-09-25T09:30:00Z"), // 10:30
+      t(3, "2026-09-25T13:00:00Z"), // 14:00
+    ]);
+    expect(g.map((x) => x.tarefas.map((y) => y.id))).toEqual([[1, 2], [3]]);
+  });
+
+  it("uma tarefa combinada para as 18:30 não se mistura com o fim do dia", () => {
+    const g = agruparNaFaixa([t(1, "2026-09-25T17:30:00Z"), t(2, "2026-09-25T17:00:00Z", "dia")]);
+    expect(g).toHaveLength(2);
+    expect(g[1].x - g[0].x).toBeGreaterThanOrEqual(8);
   });
 });

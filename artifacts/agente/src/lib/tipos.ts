@@ -112,6 +112,9 @@ export interface Cadeia {
   emFalta: NomeDoPasso | null;
 }
 
+/** Que parte da hora do prazo foi mesmo dita. */
+export type HoraDoPrazo = "combinada" | "manha" | "dia";
+
 export interface Tarefa {
   id: string;
   categoria: CategoriaTarefa;
@@ -121,6 +124,8 @@ export interface Tarefa {
   prazo: string | null;
   /** Promised to the customer, or worked out by us. The row says which. */
   prazoOrigem: "prometido" | "inferido" | null;
+  /** Se houve hora combinada. `dia` mostra "fim do dia", nunca "18:00". */
+  prazoHora: HoraDoPrazo | null;
   prazoPorque: string | null;
   desde: string | null;
   /** Só nas promessas: quando foi a chamada onde se prometeu. */
@@ -133,6 +138,8 @@ export interface Tarefa {
   esperaHoras: number | null;
   /** Desk status, verbatim, on the rows that come from a ticket. */
   estado: string | null;
+  /** O negócio do ticket, como o Desk o tem: "Simulação · EM TRATAMENTO". */
+  negocio: string | null;
   ticketId: string | null;
   deskUrl: string | null;
   prioridade: "alta" | "media" | "baixa";
@@ -239,7 +246,7 @@ export function coachingDisponivel(
  * minutos. É o relógio que interessa para "isto já foi tratado?".
  *
  * `analise` é o último dia cujas conversas foram lidas pela IA, e quando essa
- * leitura acabou — duas vezes por dia útil. É o relógio que interessa para o
+ * leitura acabou — às 8h, 12h30 e 16h dos dias úteis. É o relógio que interessa para o
  * coaching e para as ações do dia, e está normalmente horas ou um fim-de-semana
  * atrás do outro.
  */

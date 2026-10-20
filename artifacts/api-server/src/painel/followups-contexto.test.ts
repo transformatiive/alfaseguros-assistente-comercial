@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   descreverFecho,
   eDeQuem,
+  estadoDoNegocio,
   inicioDaChamada,
+  negocioDecidido,
+  nomeDoNegocio,
   lerContexto,
   numerosCitados,
   type TicketDeContexto,
@@ -175,5 +178,34 @@ describe("inicioDaChamada", () => {
 
   it("sem pernas com hora, recua para o início do dia", () => {
     expect(inicioDaChamada([], "2026-09-03")).toBe("2026-09-02T23:00:00.000Z");
+  });
+});
+
+describe("negócio decidido", () => {
+  it("lê o Estado do Negócio dos campos do Desk", () => {
+    expect(estadoDoNegocio({ cf_estado_do_negocio: "Ganho " })).toBe("GANHO");
+    expect(estadoDoNegocio({ cf_estado_do_negocio: null })).toBeNull();
+    expect(estadoDoNegocio(null)).toBeNull();
+    expect(nomeDoNegocio({ cf_negocio: "SIMULAÇÃO", cf_negocio_1: "Revisão de Contrato" })).toBe(
+      "Revisão de Contrato",
+    );
+  });
+
+  it("GANHO, PERDIDO e TRATADO acabam o assunto; EM TRATAMENTO não", () => {
+    expect(negocioDecidido("GANHO")).toBe(true);
+    expect(negocioDecidido("PERDIDO")).toBe(true);
+    expect(negocioDecidido("TRATADO")).toBe(true);
+    expect(negocioDecidido("EM TRATAMENTO")).toBe(false);
+    expect(negocioDecidido(null)).toBe(false);
+  });
+
+  it("um negócio GANHO num ticket ainda aberto tira a promessa, e diz porquê", () => {
+    const ctx = lerContexto(
+      { linkedTicketId: "t", descricao: "Enviar simulação.", fingerprint: null, chamadaEm: null },
+      [ticket({ id: "t", ticketNumber: "178288", statusType: "Open", estadoNegocio: "GANHO" })],
+    );
+    expect(ctx.fechadoPor?.id).toBe("t");
+    expect(ctx.dono).toBeNull();
+    expect(descreverFecho(ctx.fechadoPor!)).toBe("negócio GANHO no ticket #178288");
   });
 });

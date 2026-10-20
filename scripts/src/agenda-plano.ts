@@ -11,7 +11,7 @@
  *
  * For the fifteen-minute refresh that does not matter. For the analysis it
  * does: the whole point of the 08:00 run is that it finishes before people
- * arrive, and the 16:30 run is timed to the end of the working day. Drifting
+ * arrive, and the 12:30 and 16:00 runs are timed to the team's day. Drifting
  * an hour either way in winter defeats both.
  *
  * So Railway fires this script every fifteen minutes and *this* decides, using
@@ -28,9 +28,11 @@
  *      Hence every fifteen minutes, with a two-hour Desk window so that fifty
  *      runs a day do not cost fifty two-day syncs.
  *
- *   `run` — the analysis. Costs real money per conversation, so exactly twice
- *      a working day: before the team arrives, and once more at the end of the
- *      afternoon.
+ *   `run` — the analysis. Costs real money per conversation, so three times a
+ *      working day, as agreed with the team: before they arrive (08:00), when
+ *      they come back from lunch (12:30) and mid-afternoon (16:00). A
+ *      conversation already analysed is skipped, so the extra runs pay only
+ *      for new calls.
  *
  * ## Failure posture
  *
@@ -99,8 +101,12 @@ export interface SlotDeAnalise {
 export const SLOTS_ANALISE: readonly SlotDeAnalise[] = [
   // Terça a sábado: o dia anterior foi um dia de trabalho.
   { hora: 8, minuto: 0, offset: -1, dias: [2, 3, 4, 5, 6] },
-  // Segunda a sexta: apanha as chamadas da própria manhã.
-  { hora: 16, minuto: 30, offset: 0, dias: [1, 2, 3, 4, 5] },
+  // Segunda a sexta, ao regresso do almoço: apanha as chamadas da manhã.
+  { hora: 12, minuto: 30, offset: 0, dias: [1, 2, 3, 4, 5] },
+  // Segunda a sexta: apanha as chamadas do início da tarde, a tempo de ainda
+  // se tratarem antes de o dia acabar. Combinado com a equipa a 20/10/2026:
+  // o painel actualiza às 8h, 12h30 e 16h.
+  { hora: 16, minuto: 0, offset: 0, dias: [1, 2, 3, 4, 5] },
 ];
 
 /** The hours the refresh is worth running. Nobody is working at 03:00. */

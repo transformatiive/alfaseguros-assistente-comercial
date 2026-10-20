@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Indisponivel } from "@/components/Bloco";
 import { diaPorExtenso, haQuantoTempo, hora, primeiroNome, saudacao } from "@/lib/formatos";
-import { leituraCurta, posicaoNaFaixa, primeiraTarefa, resumoDoDia, semMarcas } from "@/lib/leitura";
+import { agruparNaFaixa, type GrupoNaFaixa, leituraCurta, posicaoNaFaixa, primeiraTarefa, resumoDoDia, semMarcas } from "@/lib/leitura";
 import { cn } from "@/lib/utils";
 import { BlocoCoaching } from "@/pages/blocos-acoes";
 import { AEspera, ComecaPorAqui, Feitas, GrupoPorPrazo, SemTarefas } from "@/pages/tarefas";
@@ -138,7 +138,7 @@ export function CorpoDoPainel({
 
       <p className="border-t border-stone-200 pt-3 t-meta text-stone-400">
         As tarefas saem da lista sozinhas quando o telefone ou o Desk mostram que foram feitas.
-        Prazos e leitura das chamadas às 08:00 e às 16:30.
+        Chamadas novas entram no painel às 8h, 12h30 e 16h.
       </p>
     </div>
   );
@@ -175,9 +175,7 @@ function Faixa({
   const total = feitas + porFazer;
   const doDia = data === hojeEmLisboa(agora);
   const agoraX = doDia ? posicaoNaFaixa(agora.toISOString()) : null;
-  const pontos = piles.hoje
-    .map((t) => ({ t, x: t.prazo ? posicaoNaFaixa(t.prazo) : null }))
-    .filter((p): p is { t: Tarefa; x: number } => p.x !== null);
+  const pontos = agruparNaFaixa(piles.hoje);
 
   return (
     <section className="rounded-md bg-[#14202B] px-5 py-6 text-[#F3F5F6] sm:px-7">
@@ -228,16 +226,22 @@ function Faixa({
               </span>
             </>
           )}
-          {pontos.map(({ t, x }) => (
+          {pontos.map((g) => (
             <span
-              key={t.id}
+              key={g.tarefas[0].id}
               className="absolute top-6 flex -translate-x-1/2 flex-col items-center gap-0.5"
-              style={{ left: `${x}%` }}
+              style={{ left: `${g.x}%` }}
+              title={g.tarefas.map(nomeNaFaixa).join("\n")}
             >
-              <i className="h-3.5 w-3.5 rounded-full border-2 border-[#14202B] bg-[#6FD0D8]" />
+              {g.tarefas.length === 1 ? (
+                <i className="h-3.5 w-3.5 rounded-full border-2 border-[#14202B] bg-[#6FD0D8]" />
+              ) : (
+                <i className="flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-[#14202B] bg-[#6FD0D8] px-1 font-mono text-[11px] font-bold not-italic leading-none text-[#14202B]">
+                  {g.tarefas.length}
+                </i>
+              )}
               <small className="hidden whitespace-nowrap text-[11.5px] font-semibold sm:block">
-                {hora(t.prazo!)}
-                {t.contacto.nome ? ` ${primeiroNome(t.contacto.nome)}` : ""}
+                {rotuloNaFaixa(g)}
               </small>
             </span>
           ))}
@@ -252,6 +256,27 @@ function Faixa({
       <Relogios frescura={frescura} agora={agora} />
     </section>
   );
+}
+
+/** "Joaquim, 18:30" — uma linha da lista que aparece ao passar o rato. */
+function nomeNaFaixa(t: Tarefa): string {
+  const quem = t.contacto.nome ? primeiroNome(t.contacto.nome) : "Sem nome";
+  return t.prazoHora === "dia" || !t.prazo ? `${quem}, fim do dia` : `${quem}, ${hora(t.prazo)}`;
+}
+
+/**
+ * O texto por baixo de um ponto. Uma tarefa diz a hora e o nome; várias dizem
+ * só quantas são e quando, para não se escreverem umas por cima das outras.
+ */
+function rotuloNaFaixa(g: GrupoNaFaixa): string {
+  const [t] = g.tarefas;
+  if (g.tarefas.length === 1) {
+    const nome = t.contacto.nome ? ` ${primeiroNome(t.contacto.nome)}` : "";
+    return g.fimDoDia ? `fim do dia${nome}` : `${hora(t.prazo!)}${nome}`;
+  }
+  if (g.fimDoDia) return "até ao fim do dia";
+  const horas = [...new Set(g.tarefas.map((x) => hora(x.prazo!)))];
+  return horas.length === 1 ? `às ${horas[0]}` : `${horas[0]} a ${horas[horas.length - 1]}`;
 }
 
 function Resumo({ atrasado, hoje }: { atrasado: number; hoje: number }) {
@@ -317,7 +342,7 @@ function Anel({ feitas, total }: { feitas: number; total: number }) {
  *
  * São dois porque são mesmo dois, e andam a ritmos diferentes: as tarefas
  * seguem a sincronização de quinze em quinze minutos, a leitura segue a
- * análise de duas vezes ao dia. Juntá-los numa frase só obrigaria a escolher
+ * análise das 8h, 12h30 e 16h. Juntá-los numa frase só obrigaria a escolher
  * qual deles mentir.
  */
 function Relogios({ frescura, agora }: { frescura?: Frescura; agora: Date }) {
@@ -326,7 +351,7 @@ function Relogios({ frescura, agora }: { frescura?: Frescura; agora: Date }) {
     <p className="mt-3 t-meta text-[#9FB0BC]">
       <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 align-middle" aria-hidden />
       Tarefas atualizadas {frescura.sincronizacao ? haQuantoTempo(frescura.sincronizacao, agora) : "—"}
-      {" · "}a lista atualiza-se de 15 em 15 minutos
+      {" · "}respostas no Desk contam de 15 em 15 minutos, chamadas novas às 8h, 12h30 e 16h
     </p>
   );
 }

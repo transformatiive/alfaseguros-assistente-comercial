@@ -37,9 +37,13 @@ describe("planear — a análise cai às 08:00 de Lisboa o ano inteiro", () => {
     expect(planear(new Date("2026-01-13T08:00:00Z")).analise).toBe(-1);
   });
 
-  it("dispara às 16:30, nas duas estações, e sobre o próprio dia", () => {
-    expect(planear(new Date("2026-08-10T15:30:00Z")).analise).toBe(0);
-    expect(planear(new Date("2026-01-12T16:30:00Z")).analise).toBe(0);
+  it("dispara às 12:30 e às 16:00, nas duas estações, e sobre o próprio dia", () => {
+    expect(planear(new Date("2026-08-10T11:30:00Z")).analise).toBe(0);
+    expect(planear(new Date("2026-01-12T12:30:00Z")).analise).toBe(0);
+    expect(planear(new Date("2026-08-10T15:00:00Z")).analise).toBe(0);
+    expect(planear(new Date("2026-01-12T16:00:00Z")).analise).toBe(0);
+    // A antiga hora das 16:30 já não dispara.
+    expect(planear(new Date("2026-01-12T16:30:00Z")).analise).toBeNull();
   });
 
   it("dispara uma vez por slot e não em cada tick da hora", () => {

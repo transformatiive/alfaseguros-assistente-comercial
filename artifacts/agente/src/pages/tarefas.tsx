@@ -23,6 +23,7 @@ import type {
   BaldeDePrazo,
   Cadeia,
   CategoriaTarefa,
+  HoraDoPrazo,
   Passo,
   Tarefa,
   TarefaFechada,
@@ -128,7 +129,11 @@ export function espera(horas: number): string {
 }
 
 /** The deadline, said the way a person would say it. */
-export function prazoTexto(prazo: string, agora: Date): { texto: string; tarde: boolean } {
+export function prazoTexto(
+  prazo: string,
+  agora: Date,
+  horaDoPrazo: HoraDoPrazo | null = "combinada",
+): { texto: string; tarde: boolean } {
   const d = new Date(prazo);
   const horas = Math.round((d.getTime() - agora.getTime()) / 3_600_000);
   if (d.getTime() < agora.getTime()) {
@@ -152,8 +157,13 @@ export function prazoTexto(prazo: string, agora: Date): { texto: string; tarde: 
     minute: "2-digit",
     timeZone: "Europe/Lisbon",
   });
-  if (horas <= 12) return { texto: `até hoje às ${hora}`, tarde: false };
-  if (horas <= 36) return { texto: `até amanhã às ${hora}`, tarde: false };
+  // Só se diz a hora quando ela foi combinada. Sem ela, o prazo é o dia.
+  const quando =
+    horaDoPrazo === "dia" ? "ao fim do dia" : horaDoPrazo === "manha" ? "de manhã" : `às ${hora}`;
+  const hoje = d.toLocaleDateString("en-CA", { timeZone: "Europe/Lisbon" }) ===
+    agora.toLocaleDateString("en-CA", { timeZone: "Europe/Lisbon" });
+  if (horas <= 12 && hoje) return { texto: `até hoje ${quando}`, tarde: false };
+  if (horas <= 36) return { texto: `até amanhã ${quando}`, tarde: false };
   return {
     texto: `até ${d.toLocaleDateString("pt-PT", { day: "numeric", month: "short", timeZone: "Europe/Lisbon" })}`,
     tarde: false,
@@ -433,12 +443,13 @@ function SaiDaLista({ t }: { t: Tarefa }) {
 function PorqueEstaAqui({ t, agora, semCadeia }: { t: Tarefa; agora: Date; semCadeia?: boolean }) {
   const [aberto, setAberto] = useState(false);
   const razao = porqueMe(t.atribuicaoOrigem);
-  const prazo = t.prazo ? prazoTexto(t.prazo, agora) : null;
+  const prazo = t.prazo ? prazoTexto(t.prazo, agora, t.prazoHora) : null;
   const linhas: string[] = [];
   if (t.porqueAberta) linhas.push(t.porqueAberta);
   if (razao) linhas.push(`Veio para ti: ${razao}.`);
   if (prazo && t.prazoPorque) linhas.push(`Prazo: ${prazo.texto} · ${t.prazoPorque}.`);
   if (t.estado) linhas.push(`Estado no Desk: ${t.estado}.`);
+  if (t.negocio) linhas.push(`Negócio: ${t.negocio}.`);
   if (t.contacto.email) linhas.push(`Email: ${t.contacto.email}`);
   const temCadeia = !semCadeia && t.cadeia && t.cadeia.passos.filter((p) => p.estado !== "nao_aplicavel").length >= 2;
   if (linhas.length === 0 && !temCadeia) return null;
@@ -476,7 +487,7 @@ function LinhaTarefa({
   agora: Date;
   somenteLeitura?: boolean;
 }) {
-  const coluna = t.prazo ? colunaDoPrazo(t.prazo, balde, agora) : null;
+  const coluna = t.prazo ? colunaDoPrazo(t.prazo, balde, agora, t.prazoHora) : null;
   const a = ASPETO_PRAZO[balde];
 
   return (
@@ -530,7 +541,7 @@ export function ComecaPorAqui({
   agora: Date;
   somenteLeitura?: boolean;
 }) {
-  const prazo = t.prazo ? prazoTexto(t.prazo, agora) : null;
+  const prazo = t.prazo ? prazoTexto(t.prazo, agora, t.prazoHora) : null;
   const como = comoSai(t.categoria);
   const passos = t.cadeia?.passos.filter((p) => p.estado !== "nao_aplicavel") ?? [];
   const tarde = balde === "atrasado";

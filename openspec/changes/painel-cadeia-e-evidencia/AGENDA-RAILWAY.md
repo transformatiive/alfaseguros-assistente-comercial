@@ -6,7 +6,11 @@
 |---|---|---|---|---|
 | Refresh dos canais | `POST /api/painel/refresh` | 15 min, 07:00–20:00, seg–sex | — | **Não**, por construção e por teste |
 | Análise da manhã | `POST /api/run` | 08:00, **ter–sáb** | o dia anterior | Sim, por conversa |
-| Análise da tarde | `POST /api/run` | 16:30, seg–sex | o próprio dia | Sim, por conversa |
+| Análise do almoço | `POST /api/run` | 12:30, seg–sex | o próprio dia | Sim, por conversa |
+| Análise da tarde | `POST /api/run` | 16:00, seg–sex | o próprio dia | Sim, por conversa |
+
+Horas combinadas com a equipa a 20/10/2026 (8h, 12h30, 16h). Antes a tarde
+corria às 16:30 e não havia corrida ao meio-dia.
 
 ### Porque é que a análise da manhã corre de terça a sábado
 
