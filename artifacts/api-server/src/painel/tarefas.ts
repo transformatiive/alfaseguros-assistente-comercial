@@ -38,7 +38,7 @@ import {
   type RespostaParaEvidencia,
   type TipoDeProva,
 } from "./evidencia.js";
-import { derivarPrazo, type OrigemPrazo, type TipoDeEspera } from "./prazos.js";
+import { derivarPrazo, type HoraDoPrazo, type OrigemPrazo, type TipoDeEspera } from "./prazos.js";
 import { urlDoDesk } from "./tickets-risco.js";
 
 export type CategoriaTarefa =
@@ -77,6 +77,8 @@ export interface Tarefa {
    * second and not with the first.
    */
   prazoOrigem: OrigemPrazo | null;
+  /** Se houve hora combinada. Sem ela, o ecrã diz "fim do dia", não "18:00". */
+  prazoHora: HoraDoPrazo | null;
   /** The one line under the date: "prometido na conversa de 03/09". */
   prazoPorque: string | null;
   /** When the obligation started — the call, or the ticket being opened. */
@@ -403,9 +405,23 @@ function contactosPorTicket(
   return out;
 }
 
+/** O texto de cada ticket, a mensagem mais recente primeiro. */
+function mensagensDosTickets(
+  respostas: readonly RespostaParaEvidencia[],
+): Map<string, { texto: string; quando: Date }[]> {
+  const out = new Map<string, { texto: string; quando: Date }[]>();
+  for (const r of respostas) {
+    if (!r.texto) continue;
+    out.set(r.ticketId, [...(out.get(r.ticketId) ?? []), { texto: r.texto, quando: new Date(r.quando) }]);
+  }
+  for (const lista of out.values()) lista.sort((a, b) => b.quando.getTime() - a.quando.getTime());
+  return out;
+}
+
 export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
   const out: Tarefa[] = [];
   const nossos = contactosPorTicket(entrada.respostas);
+  const mensagensPorTicket = mensagensDosTickets(entrada.respostas);
 
   // 1. Chamadas por devolver. No deadline field: the deadline is now, which is
   //    why these sort first and carry the only unconditional `alta`.
@@ -429,6 +445,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       contacto: contactoDe(d.numeroCliente, entrada),
       prazo: prazo.quando,
       prazoOrigem: prazo.origem,
+      prazoHora: prazo.hora,
       prazoPorque: prazo.porque,
       desde: inicio.toISOString(),
       chamadaEm: null,
@@ -500,6 +517,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       contacto,
       prazo: prazo.quando,
       prazoOrigem: prazo.origem,
+      prazoHora: prazo.hora,
       prazoPorque: prazo.porque,
       desde: inicioDaPromessa,
       chamadaEm: f.chamada_em ?? null,
@@ -529,6 +547,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       contacto: contactoDe(a.customerPhone, entrada, a.contactName),
       prazo: null,
       prazoOrigem: null,
+      prazoHora: null,
       prazoPorque: null,
       desde: null,
       chamadaEm: null,
@@ -582,6 +601,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
     // rather than the most neglected.
     const desde = nosso?.ultimo ? new Date(nosso.ultimo) : criado;
     const prazo = derivarPrazo({
+      mensagens: mensagensPorTicket.get(t.id),
       texto: assunto,
       referencia: criado,
       desde,
@@ -614,6 +634,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       },
       prazo: prazo.quando,
       prazoOrigem: prazo.origem,
+      prazoHora: prazo.hora,
       prazoPorque: prazo.porque,
       desde: desde.toISOString(),
       chamadaEm: null,

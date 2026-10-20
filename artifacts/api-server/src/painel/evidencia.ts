@@ -82,6 +82,8 @@ export interface RespostaParaEvidencia {
    */
   direcao: string | null;
   ticketNumber: string | null;
+  /** O texto da mensagem, para ler um prazo combinado no ticket. */
+  texto?: string | null;
 }
 
 export type TipoDeProva = "chamada" | "resposta";

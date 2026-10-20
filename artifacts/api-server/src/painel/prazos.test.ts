@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { derivarPrazo, lerPrazoEscrito, prazoInferido } from "./prazos.js";
+import { derivarPrazo, lerPrazoComHora, lerPrazoEscrito, prazoInferido } from "./prazos.js";
 import { toLisbonDate } from "../lib/dates.js";
 
 /** 4 September 2026 is a Friday. Every "referência" below is that day. */
@@ -165,5 +165,39 @@ describe("derivarPrazo — e a razão que o cartão imprime", () => {
     });
     expect(p.origem).toBe("inferido");
     expect(p.porque).toBe("13 dias sem resposta");
+  });
+});
+
+describe("hora do prazo", () => {
+  const ref = new Date("2026-09-03T10:00:00Z");
+
+  it("só é combinada quando o texto diz a hora", () => {
+    expect(lerPrazoComHora("envio até às 15h", ref)?.hora).toBe("combinada");
+    expect(lerPrazoComHora("até segunda-feira de manhã", ref)?.hora).toBe("manha");
+    expect(lerPrazoComHora("até ao final do dia", ref)?.hora).toBe("dia");
+    expect(lerPrazoComHora("até amanhã", ref)?.hora).toBe("dia");
+  });
+
+  it("sem nada escrito, o prazo inferido não tem hora", () => {
+    const p = derivarPrazo({ texto: "Pedido de cotação", referencia: ref, desde: ref, tipo: "primeira_resposta", agora: ref });
+    expect(p.hora).toBe("dia");
+  });
+
+  it("o que ficou combinado no ticket vale, contado do dia da mensagem", () => {
+    const p = derivarPrazo({
+      mensagens: [
+        { texto: "Bom dia, envio a simulação até às 16h", quando: new Date("2026-09-05T09:00:00Z") },
+        { texto: "Recebemos o seu pedido", quando: new Date("2026-09-04T09:00:00Z") },
+      ],
+      texto: "Pedido de cotação",
+      referencia: ref,
+      desde: ref,
+      tipo: "simulacao_pedida",
+      agora: ref,
+    });
+    expect(p.quando).toBe("2026-09-05T15:00:00.000Z");
+    expect(p.hora).toBe("combinada");
+    expect(p.origem).toBe("prometido");
+    expect(p.porque).toBe("combinado no ticket a 05/09");
   });
 });

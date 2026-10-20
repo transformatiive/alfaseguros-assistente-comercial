@@ -73,6 +73,7 @@ export async function carregarEvidencias(
             authorType: ticketCommentsTable.authorType,
             direction: ticketCommentsTable.direction,
             ticketNumber: ticketsTable.ticketNumber,
+            texto: ticketCommentsTable.contentSanitized,
           })
           .from(ticketCommentsTable)
           .leftJoin(ticketsTable, eq(ticketCommentsTable.ticketId, ticketsTable.id))
@@ -108,6 +109,7 @@ export async function carregarEvidencias(
       autorTipo: r.authorType,
       direcao: r.direction ?? null,
       ticketNumber: r.ticketNumber ?? null,
+      texto: r.texto || null,
     });
   }
 

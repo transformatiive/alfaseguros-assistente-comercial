@@ -140,3 +140,17 @@ describe("posicaoNaFaixa", () => {
     expect(posicaoNaFaixa("2026-09-25T20:30:00Z")).toBeNull();
   });
 });
+
+describe("colunaDoPrazo sem hora combinada", () => {
+  it("diz 'fim do dia' em vez de inventar as 18:00", () => {
+    expect(colunaDoPrazo("2026-09-25T17:00:00Z", "hoje", agora, "dia")).toEqual({
+      grande: "Hoje",
+      pequeno: "fim do dia",
+    });
+  });
+
+  it("mostra a hora só quando ela foi combinada", () => {
+    expect(colunaDoPrazo("2026-09-25T15:00:00Z", "hoje", agora, "combinada").grande).toBe("16:00");
+    expect(colunaDoPrazo("2026-09-25T11:00:00Z", "hoje", agora, "manha").grande).toBe("Manhã");
+  });
+});

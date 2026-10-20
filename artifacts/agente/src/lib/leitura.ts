@@ -5,7 +5,7 @@
  * aprovado (faixa do dia, coluna de prazos, "sai da lista com…") tenha uma
  * única fonte para as frases que mostra.
  */
-import type { BaldeDePrazo, CategoriaTarefa, Coaching, Tarefa, TarefasPorPrazo } from "./tipos";
+import type { BaldeDePrazo, CategoriaTarefa, Coaching, HoraDoPrazo, Tarefa, TarefasPorPrazo } from "./tipos";
 
 /**
  * Como é que uma tarefa sai da lista, dito ao agente.
@@ -74,6 +74,7 @@ export function colunaDoPrazo(
   prazo: string,
   balde: Exclude<BaldeDePrazo, "aguardar">,
   agora: Date,
+  hora: HoraDoPrazo | null = "combinada",
 ): { grande: string; pequeno: string } {
   const d = new Date(prazo);
   if (balde === "atrasado") {
@@ -82,6 +83,9 @@ export function colunaDoPrazo(
     return { grande: `${Math.floor(horas / 24)} dias`, pequeno: "de atraso" };
   }
   if (balde === "hoje") {
+    // Sem hora combinada não há hora a mostrar: o prazo é o dia.
+    if (hora === "dia") return { grande: "Hoje", pequeno: "fim do dia" };
+    if (hora === "manha") return { grande: "Manhã", pequeno: "hoje" };
     return {
       grande: d.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit", timeZone: LISBOA }),
       pequeno: "hoje",

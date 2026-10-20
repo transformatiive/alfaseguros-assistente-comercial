@@ -112,6 +112,9 @@ export interface Cadeia {
   emFalta: NomeDoPasso | null;
 }
 
+/** Que parte da hora do prazo foi mesmo dita. */
+export type HoraDoPrazo = "combinada" | "manha" | "dia";
+
 export interface Tarefa {
   id: string;
   categoria: CategoriaTarefa;
@@ -121,6 +124,8 @@ export interface Tarefa {
   prazo: string | null;
   /** Promised to the customer, or worked out by us. The row says which. */
   prazoOrigem: "prometido" | "inferido" | null;
+  /** Se houve hora combinada. `dia` mostra "fim do dia", nunca "18:00". */
+  prazoHora: HoraDoPrazo | null;
   prazoPorque: string | null;
   desde: string | null;
   /** Só nas promessas: quando foi a chamada onde se prometeu. */
