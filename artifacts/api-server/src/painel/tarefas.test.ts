@@ -199,6 +199,35 @@ describe("derivarTarefas", () => {
     expect(t[0].atribuicaoOrigem).toBe("ticket");
   });
 
+  it("conta a promessa a partir da chamada, e mostra a chamada e o ticket", () => {
+    // #173005: a chamada foi a 03/09, a resposta do Tiago a 04/09 e a 08/09.
+    // O `detected_at` é o `updated_at` da conversa, que andou para a frente;
+    // contar a partir dele deixava as respostas de fora.
+    const t = derivarTarefas(
+      entrada({
+        now: new Date("2026-10-20T13:00:00.000Z"),
+        followUps: [
+          {
+            id: "conv_1",
+            contact_phone: "351938840630",
+            contact_email: null,
+            follow_up_descricao: "Confirmar se o Joaquim enviou o questionário (#173005).",
+            follow_up_sla_hours: 24,
+            linked_ticket_id: "367662000127411347",
+            product: "Condomínio",
+            detected_at: "2026-09-10T07:00:00.000Z",
+            chamada_em: "2026-09-03T15:27:00.000Z",
+            ticket_numero: "173005",
+          },
+        ],
+      }),
+    );
+    expect(t[0].desde).toBe("2026-09-03T15:27:00.000Z");
+    expect(t[0].chamadaEm).toBe("2026-09-03T15:27:00.000Z");
+    expect(t[0].ticketNumero).toBe("173005");
+    expect(t[0].deskUrl).not.toBeNull();
+  });
+
   it("separa uma promessa de simulação de uma promessa qualquer", () => {
     const base = {
       contact_phone: "351919852209",

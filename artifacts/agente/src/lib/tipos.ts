@@ -123,6 +123,10 @@ export interface Tarefa {
   prazoOrigem: "prometido" | "inferido" | null;
   prazoPorque: string | null;
   desde: string | null;
+  /** Só nas promessas: quando foi a chamada onde se prometeu. */
+  chamadaEm: string | null;
+  /** Número do ticket como se vê no Desk. */
+  ticketNumero: string | null;
   cadeia: Cadeia | null;
   /** The absence that keeps this on the list, written out. */
   porqueAberta: string | null;
@@ -144,7 +148,7 @@ export interface TarefaFechada {
   id: string;
   titulo: string;
   quem: string | null;
-  prova: { tipo: "chamada" | "resposta"; descricao: string };
+  prova: { tipo: "chamada" | "resposta" | "ticket_fechado"; descricao: string };
 }
 
 /* ── Agrupamento por quando ─────────────────────────────────────────────── */

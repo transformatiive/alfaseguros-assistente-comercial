@@ -81,6 +81,13 @@ export interface Tarefa {
   prazoPorque: string | null;
   /** When the obligation started — the call, or the ticket being opened. */
   desde: string | null;
+  /**
+   * Quando foi a chamada onde isto foi prometido. Só nas promessas: é o que a
+   * linha mostra para o agente se lembrar da conversa.
+   */
+  chamadaEm: string | null;
+  /** O número do ticket como se vê no Desk, para a linha o mostrar. */
+  ticketNumero: string | null;
   /** Where this sits in pedido → simulação → follow-up. Null when it has no chain. */
   cadeia: Cadeia | null;
   /**
@@ -132,6 +139,9 @@ export interface FollowUpParaTarefa {
   linked_ticket_id: string | null;
   product: string | null;
   detected_at: string;
+  /** ISO da chamada. Quando falta, conta o `detected_at`. */
+  chamada_em?: string | null;
+  ticket_numero?: string | null;
 }
 
 export interface TicketParaTarefa {
@@ -418,6 +428,8 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       prazoOrigem: prazo.origem,
       prazoPorque: prazo.porque,
       desde: inicio.toISOString(),
+      chamadaEm: null,
+      ticketNumero: null,
       cadeia: null,
       porqueAberta: null,
       esperaHoras: horasEntre(inicio, entrada.now),
@@ -434,7 +446,11 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
   //    its own category: it has a recipient and a date, and it is the one kind
   //    of promise where being late loses the sale outright.
   for (const f of entrada.followUps) {
-    const detectado = new Date(f.detected_at);
+    // A promessa nasce na chamada. O `detected_at` é o `updated_at` da
+    // conversa, que muda sempre que a linha é tocada, e fazia uma promessa de
+    // 03/09 contar a partir de outro dia — e uma resposta de 08/09 não contar.
+    const inicioDaPromessa = f.chamada_em ?? f.detected_at;
+    const detectado = new Date(inicioDaPromessa);
     const simulacao = prometeSimulacao(f.follow_up_descricao);
     const contacto = contactoDe(f.contact_phone, entrada);
     if (f.contact_email) contacto.email = f.contact_email;
@@ -452,7 +468,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
     });
     const nosso = f.linked_ticket_id ? nossos.get(f.linked_ticket_id) : undefined;
     const cadeia = derivarCadeia({
-      pedidoEm: f.detected_at,
+      pedidoEm: inicioDaPromessa,
       envolveSimulacao: simulacao,
       simulacaoEnviadaEm: nosso?.primeiro ?? null,
       ultimoContactoNosso: nosso?.ultimo ?? null,
@@ -464,7 +480,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       // que já não conta.
       aceita: PROVAS_ACEITES[categoria],
       diaDoCompromisso: toLisbonDate(detectado),
-      desde: f.detected_at,
+      desde: inicioDaPromessa,
       fingerprint: impressaoDigital(f.contact_phone),
       ticketId: f.linked_ticket_id,
     };
@@ -481,7 +497,9 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       prazo: prazo.quando,
       prazoOrigem: prazo.origem,
       prazoPorque: prazo.porque,
-      desde: f.detected_at,
+      desde: inicioDaPromessa,
+      chamadaEm: f.chamada_em ?? null,
+      ticketNumero: f.ticket_numero ?? null,
       cadeia,
       porqueAberta: porqueContinuaAberta(prova),
       esperaHoras: horasEntre(detectado, entrada.now),
@@ -508,6 +526,8 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       prazoOrigem: null,
       prazoPorque: null,
       desde: null,
+      chamadaEm: null,
+      ticketNumero: null,
       cadeia: null,
       porqueAberta: null,
       esperaHoras: null,
@@ -590,6 +610,8 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       prazoOrigem: prazo.origem,
       prazoPorque: prazo.porque,
       desde: desde.toISOString(),
+      chamadaEm: null,
+      ticketNumero: t.ticketNumber,
       cadeia,
       // A ticket parked on the customer is not open because we failed to
       // reply, so the "no reply from you" line would be a lie on that row.

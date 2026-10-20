@@ -164,6 +164,11 @@ export class ZohoDeskClient {
    *
    * `null` quando o número não existe.
    */
+  async getTicket(id: string): Promise<ZohoTicket> {
+    const ticket = await this.request(`/tickets/${id}`, { include: "contacts,assignee" });
+    return zohoTicketSchema.parse(ticket);
+  }
+
   async getTicketByNumber(numero: string): Promise<ZohoTicket | null> {
     const json = await this.request("/tickets/search", { ticketNumber: numero, limit: "1" });
     const id = ticketsListResponseSchema.parse(json).data?.[0]?.id;

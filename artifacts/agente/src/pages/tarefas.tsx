@@ -18,7 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import { enviar } from "@/lib/api";
 import { idade, iniciais, porqueMe, telefone } from "@/lib/formatos";
-import { colunaDoPrazo, comoSai, corDoCliente, TIPO_DE_TAREFA } from "@/lib/leitura";
+import { colunaDoPrazo, comoSai, corDoCliente, origemDaTarefa, TIPO_DE_TAREFA } from "@/lib/leitura";
 import type {
   BaldeDePrazo,
   Cadeia,
@@ -404,6 +404,13 @@ function TipoDeTarefa({ t }: { t: Tarefa }) {
   );
 }
 
+/** A data da chamada e o número do ticket, quando a tarefa os tem. */
+function Origem({ t }: { t: Tarefa }) {
+  const texto = origemDaTarefa(t);
+  if (!texto) return null;
+  return <p className="mt-0.5 t-meta tabular-nums text-stone-500">{texto}</p>;
+}
+
 function SaiDaLista({ t }: { t: Tarefa }) {
   const como = comoSai(t.categoria);
   if (!como) return null;
@@ -491,6 +498,7 @@ function LinhaTarefa({
         <TipoDeTarefa t={t} />
         <h3 className="t-titulo mt-1 text-stone-900">{t.titulo}</h3>
         {t.contacto.nome && <p className="t-body font-semibold text-stone-600">{t.contacto.nome}</p>}
+        <Origem t={t} />
         {t.porque && <p className="t-narrativa mt-1 text-stone-600">{t.porque}</p>}
         <SaiDaLista t={t} />
         <PorqueEstaAqui t={t} agora={agora} />
@@ -555,6 +563,7 @@ export function ComecaPorAqui({
           <TipoDeTarefa t={t} />
           <h2 className="t-destaque mt-0.5 text-stone-900">{t.titulo}</h2>
           {t.contacto.nome && <p className="t-body font-semibold text-stone-600">{t.contacto.nome}</p>}
+          <Origem t={t} />
         </div>
       </div>
 

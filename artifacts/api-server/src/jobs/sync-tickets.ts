@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
 import {
   db,
   ticketsTable,
@@ -163,6 +163,14 @@ export async function syncTickets(
     }
   }
 
+  // Depois da janela, e sem a deixar falhar: é uma verificação a mais, e a
+  // sincronização normal já está gravada.
+  try {
+    await reverAbertos(client);
+  } catch (err) {
+    logger.warn({ err }, "sync-tickets: revisão dos tickets abertos falhou");
+  }
+
   await db.insert(ticketSyncStateTable).values({
     anchor: "default",
     windowFrom: from,
@@ -180,9 +188,79 @@ export async function syncTickets(
   };
 }
 
-// Drizzle's `eq` is imported above to keep the type-checker happy when
-// extending this file with selective updates later.
-void eq;
+/**
+ * Quantos tickets "abertos" se confirmam no Desk por corrida, e de quanto em
+ * quanto tempo cada um.
+ *
+ * Com 100 por corrida de 15 minutos, 400 tickets são todos revistos em hora e
+ * meia, e o custo de um em dia é uma chamada à Zoho a cada seis horas.
+ */
+export const REVISAO_POR_CORRIDA = 100;
+export const HORAS_ENTRE_REVISOES = 6;
+
+/**
+ * Confirma no Desk os tickets que a nossa base ainda dá como abertos.
+ *
+ * A janela por `modifiedTime` só vê o que mexeu desde a última corrida, e um
+ * fecho que ela não apanhou nunca mais é corrigido: o ticket fica aberto aqui
+ * para sempre. Em Outubro de 2026 o painel mostrava tickets da Your Motion
+ * com 46 dias de atraso que estavam fechados no Desk desde 03/09. A causa
+ * provável foram as alterações em massa de 21, 22 e 29 de Setembro (cerca de
+ * 13 mil tickets): uma corrida lê no máximo 5000, e a seguinte já começa
+ * depois.
+ *
+ * Só os que o painel pode mostrar — com responsável e com mais de um dia — e
+ * só os que não foram vistos há `HORAS_ENTRE_REVISOES`. Os mais esquecidos
+ * primeiro. O `synced_at` é o relógio: gravar o ticket actualiza-o, e por isso
+ * a fila anda sozinha.
+ */
+async function reverAbertos(client: ZohoDeskClient, now: Date = new Date()): Promise<void> {
+  const umDia = new Date(now.getTime() - 24 * 3_600_000);
+  const revistoAntesDe = new Date(now.getTime() - HORAS_ENTRE_REVISOES * 3_600_000);
+
+  const porRever = await db
+    .select({ id: ticketsTable.id, modifiedTime: ticketsTable.modifiedTime })
+    .from(ticketsTable)
+    .where(
+      and(
+        or(ne(ticketsTable.statusType, "Closed"), isNull(ticketsTable.statusType)),
+        isNotNull(ticketsTable.assigneeId),
+        lt(ticketsTable.createdTime, umDia),
+        lt(ticketsTable.syncedAt, revistoAntesDe),
+      ),
+    )
+    .orderBy(asc(ticketsTable.syncedAt))
+    .limit(REVISAO_POR_CORRIDA);
+
+  let fechados = 0;
+  const descartadas: Array<ZohoComment & { ticketId: string }> = [];
+  for (const linha of porRever) {
+    try {
+      const t = await client.getTicket(linha.id);
+      const mudou =
+        !linha.modifiedTime ||
+        !t.modifiedTime ||
+        new Date(t.modifiedTime).getTime() > linha.modifiedTime.getTime();
+      await gravarTicket(client, t, mudou, descartadas);
+      if ((t.statusType ?? "").toLowerCase() === "closed") fechados++;
+    } catch (err) {
+      // Um ticket apagado ou movido para fora do alcance dá erro para sempre.
+      // Sem marcar a visita, ficava à cabeça da fila e bloqueava os outros.
+      await db
+        .update(ticketsTable)
+        .set({ syncedAt: now })
+        .where(eq(ticketsTable.id, linha.id));
+      logger.warn({ err, ticketId: linha.id }, "sync-tickets: ticket aberto não foi possível rever");
+    }
+  }
+
+  if (porRever.length > 0) {
+    logger.info(
+      { revistos: porRever.length, fechados },
+      "sync-tickets: tickets abertos confirmados no Desk",
+    );
+  }
+}
 
 /** Grava um ticket e, quando pedido, as conversas dele. */
 async function gravarTicket(

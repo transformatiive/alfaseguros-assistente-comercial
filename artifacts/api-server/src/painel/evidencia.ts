@@ -102,7 +102,11 @@ export interface PedidoDeProva {
 }
 
 export interface Prova {
-  tipo: TipoDeProva;
+  /**
+   * `ticket_fechado` não é pedido por nenhuma tarefa: é o Desk a dizer que o
+   * assunto acabou, e entra pela leitura do contexto das promessas.
+   */
+  tipo: TipoDeProva | "ticket_fechado";
   /** What to print: "chamada atendida de 6 min a 05/09". */
   descricao: string;
 }

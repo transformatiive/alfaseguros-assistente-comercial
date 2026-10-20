@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   colunaDoPrazo,
   comoSai,
+  origemDaTarefa,
   corDoCliente,
   leituraCurta,
   posicaoNaFaixa,
@@ -26,7 +27,28 @@ describe("comoSai", () => {
     expect(comoSai("devolver_chamada")).toMatch(/chamada atendida/);
     expect(comoSai("devolver_chamada")).not.toMatch(/resposta/);
     expect(comoSai("enviar_simulacao")).toMatch(/resposta tua no ticket/);
-    expect(comoSai("cumprir_compromisso")).toMatch(/chamada atendida ou uma resposta/);
+    expect(comoSai("cumprir_compromisso")).toMatch(/chamada atendida, uma resposta/);
+  });
+
+  it("diz que fechar o ticket também tira a tarefa da lista", () => {
+    expect(comoSai("enviar_simulacao")).toMatch(/ticket fechado/);
+    expect(comoSai("cumprir_compromisso")).toMatch(/ticket fechado/);
+    expect(comoSai("espera_alfa")).toMatch(/ticket fechado/);
+    // Uma devolução não se fecha pelo ticket: o servidor não a fecha assim.
+    expect(comoSai("devolver_chamada")).not.toMatch(/fechado/);
+  });
+});
+
+describe("origemDaTarefa", () => {
+  it("diz a data e a hora da chamada, em Lisboa, e o número do ticket", () => {
+    expect(origemDaTarefa({ chamadaEm: "2026-09-03T14:27:00Z", ticketNumero: "173005" })).toBe(
+      "Chamada de 03/09 às 15:27 · Ticket #173005",
+    );
+  });
+
+  it("mostra só o que existe, e nada quando não há nada", () => {
+    expect(origemDaTarefa({ chamadaEm: null, ticketNumero: "173005" })).toBe("Ticket #173005");
+    expect(origemDaTarefa({ chamadaEm: null, ticketNumero: null })).toBeNull();
   });
 
   it("não promete nada para o que está à espera do cliente", () => {
