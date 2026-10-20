@@ -246,7 +246,7 @@ export function coachingDisponivel(
  * minutos. É o relógio que interessa para "isto já foi tratado?".
  *
  * `analise` é o último dia cujas conversas foram lidas pela IA, e quando essa
- * leitura acabou — duas vezes por dia útil. É o relógio que interessa para o
+ * leitura acabou — às 8h, 12h30 e 16h dos dias úteis. É o relógio que interessa para o
  * coaching e para as ações do dia, e está normalmente horas ou um fim-de-semana
  * atrás do outro.
  */

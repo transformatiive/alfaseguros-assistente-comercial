@@ -138,7 +138,7 @@ export function CorpoDoPainel({
 
       <p className="border-t border-stone-200 pt-3 t-meta text-stone-400">
         As tarefas saem da lista sozinhas quando o telefone ou o Desk mostram que foram feitas.
-        Prazos e leitura das chamadas às 08:00 e às 16:30.
+        Chamadas novas entram no painel às 8h, 12h30 e 16h.
       </p>
     </div>
   );
@@ -342,7 +342,7 @@ function Anel({ feitas, total }: { feitas: number; total: number }) {
  *
  * São dois porque são mesmo dois, e andam a ritmos diferentes: as tarefas
  * seguem a sincronização de quinze em quinze minutos, a leitura segue a
- * análise de duas vezes ao dia. Juntá-los numa frase só obrigaria a escolher
+ * análise das 8h, 12h30 e 16h. Juntá-los numa frase só obrigaria a escolher
  * qual deles mentir.
  */
 function Relogios({ frescura, agora }: { frescura?: Frescura; agora: Date }) {
@@ -351,7 +351,7 @@ function Relogios({ frescura, agora }: { frescura?: Frescura; agora: Date }) {
     <p className="mt-3 t-meta text-[#9FB0BC]">
       <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 align-middle" aria-hidden />
       Tarefas atualizadas {frescura.sincronizacao ? haQuantoTempo(frescura.sincronizacao, agora) : "—"}
-      {" · "}a lista atualiza-se de 15 em 15 minutos
+      {" · "}respostas no Desk contam de 15 em 15 minutos, chamadas novas às 8h, 12h30 e 16h
     </p>
   );
 }
