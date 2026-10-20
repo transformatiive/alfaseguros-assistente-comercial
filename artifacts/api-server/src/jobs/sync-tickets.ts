@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, lt, notInArray, or } from "drizzle-orm";
 import {
   db,
   ticketsTable,
@@ -6,6 +6,7 @@ import {
   ticketSyncStateTable,
 } from "@workspace/db";
 import { ZohoDeskClient, type ZohoComment, type ZohoTicket } from "@workspace/zoho-desk";
+import { ESTADO_APAGADO } from "../painel/tickets-risco.js";
 import { phoneFingerprint } from "@workspace/phone";
 import { classifyOutcome } from "../analysis/outcome.js";
 import { sanitizeCommentContent } from "../cases/linker.js";
@@ -223,7 +224,7 @@ async function reverAbertos(client: ZohoDeskClient, now: Date = new Date()): Pro
     .from(ticketsTable)
     .where(
       and(
-        or(ne(ticketsTable.statusType, "Closed"), isNull(ticketsTable.statusType)),
+        or(notInArray(ticketsTable.statusType, ["Closed", ESTADO_APAGADO]), isNull(ticketsTable.statusType)),
         isNotNull(ticketsTable.assigneeId),
         lt(ticketsTable.createdTime, umDia),
         lt(ticketsTable.syncedAt, revistoAntesDe),
@@ -242,7 +243,7 @@ async function reverAbertos(client: ZohoDeskClient, now: Date = new Date()): Pro
         !t.modifiedTime ||
         new Date(t.modifiedTime).getTime() > linha.modifiedTime.getTime();
       await gravarTicket(client, t, mudou, descartadas);
-      if ((t.statusType ?? "").toLowerCase() === "closed") fechados++;
+      if ((t.statusType ?? "").toLowerCase() === "closed" || apagado(t)) fechados++;
     } catch (err) {
       // Um ticket apagado ou movido para fora do alcance dá erro para sempre.
       // Sem marcar a visita, ficava à cabeça da fila e bloqueava os outros.
@@ -260,6 +261,15 @@ async function reverAbertos(client: ZohoDeskClient, now: Date = new Date()): Pro
       "sync-tickets: tickets abertos confirmados no Desk",
     );
   }
+}
+
+/**
+ * No lixo ou apagado de vez. A API devolve um ticket apagado por id, com o
+ * estado que tinha antes, e só estes dois campos dizem que já não existe.
+ */
+function apagado(t: ZohoTicket): boolean {
+  const r = t as unknown as Record<string, unknown>;
+  return r.isDeleted === true || r.isTrashed === true;
 }
 
 /** Grava um ticket e, quando pedido, as conversas dele. */
@@ -287,7 +297,7 @@ async function gravarTicket(
     ticketNumber: t.ticketNumber != null ? String(t.ticketNumber) : null,
     subject: t.subject ?? null,
     status: t.status ?? null,
-    statusType: t.statusType ?? null,
+    statusType: apagado(t) ? ESTADO_APAGADO : (t.statusType ?? null),
     channel: t.channel ?? null,
     category: t.category ?? null,
     productName: t.productName ?? null,

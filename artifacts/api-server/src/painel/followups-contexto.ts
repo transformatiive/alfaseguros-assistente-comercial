@@ -105,9 +105,10 @@ export function numerosCitados(texto: string | null | undefined): string[] {
   return [...out];
 }
 
-/** Fechado no Desk, ou com o negócio já decidido: nos dois casos acabou. */
+/** Fechado ou apagado no Desk, ou com o negócio já decidido: acabou. */
 function fechado(t: TicketDeContexto): boolean {
-  return (t.statusType ?? "").toLowerCase() === "closed" || negocioDecidido(t.estadoNegocio);
+  const estado = (t.statusType ?? "").toLowerCase();
+  return estado === "closed" || estado === "deleted" || negocioDecidido(t.estadoNegocio);
 }
 
 function instante(iso: string | null): number {
@@ -197,6 +198,7 @@ export function eDeQuem(params: {
 export function descreverFecho(t: TicketDeContexto): string {
   const numero = t.ticketNumber ? `#${t.ticketNumber}` : "do Desk";
   if (negocioDecidido(t.estadoNegocio)) return `negócio ${t.estadoNegocio} no ticket ${numero}`;
+  if ((t.statusType ?? "").toLowerCase() === "deleted") return `ticket ${numero} apagado no Desk`;
   if (!t.closedTime) return `ticket ${numero} fechado`;
   const [, m, d] = toLisbonDate(new Date(t.closedTime)).split("-");
   return `ticket ${numero} fechado a ${d}/${m}`;

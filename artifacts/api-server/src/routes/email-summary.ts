@@ -8,6 +8,7 @@
  *  - operators: per-operator coaching; 360 operators include followups[] with
  *    optional desk_url when a Zoho ticket is linked to the conversation
  */
+import { urlDoDesk } from "../painel/tickets-risco.js";
 import { Router, type IRouter, type RequestHandler } from "express";
 import { eq, sql, inArray } from "drizzle-orm";
 import {
@@ -308,7 +309,7 @@ router.get("/email/summary", requireToken, async (req, res): Promise<void> => {
       ...(deskTicketId
         ? {
             desk_ticket_id: deskTicketId,
-            desk_url: `https://desk.zoho.com/support/alfaseguros/ShowHomePage.do#Cases/dv/${deskTicketId}`,
+            desk_url: urlDoDesk(String(deskTicketId)),
           }
         : {}),
     };

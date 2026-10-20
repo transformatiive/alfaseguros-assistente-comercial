@@ -35,26 +35,25 @@ describe("RISCO_THRESHOLD_HOURS", () => {
 });
 
 describe("urlDoDesk", () => {
-  it("usa o link que o próprio Desk deu", () => {
-    const raw = { webUrl: "https://desk.zoho.com/agent/alfaseguros/naovida/tickets/details/123" };
-    expect(urlDoDesk("123", raw)).toBe(raw.webUrl);
-  });
-
-  it("recorre ao URL do portal quando o ticket foi sincronizado sem webUrl", () => {
-    expect(urlDoDesk("123", { subject: "x" })).toBe(
-      "https://desk.zoho.com/support/alfaseguros/ShowHomePage.do#Cases/dv/123",
+  it("dá o link da consola de agente, como a equipa o copia do browser", () => {
+    // O exemplo do Nuno, a 20/10/2026, para o ticket #172694.
+    expect(urlDoDesk("367662000127190248", { departmentId: "367662000000006907" })).toBe(
+      "https://desk.zoho.com/agent/alfaseguros/alfa-seguros/tickets/details/367662000127190248",
     );
-    expect(urlDoDesk("123")).toContain("/support/alfaseguros/");
   });
 
-  it("nunca constrói o caminho com o id numérico da organização", () => {
-    // Era esta a forma anterior, e todos os links davam "a página não existe":
-    // a consola do Desk encaminha pelo nome do portal, não pelo id da org.
-    expect(urlDoDesk("123", null)).not.toContain("/agent/683863304/");
+  it("usa o departamento do ticket", () => {
+    expect(urlDoDesk("1", { departmentId: "367662000097048676" })).toContain("/alfaseguros/corporate/");
   });
 
-  it("ignora um webUrl que não seja um endereço https", () => {
-    expect(urlDoDesk("123", { webUrl: "javascript:alert(1)" })).toContain("/support/");
-    expect(urlDoDesk("123", { webUrl: 42 })).toContain("/support/");
+  it("sem departamento conhecido, usa Alfa Seguros", () => {
+    expect(urlDoDesk("1")).toContain("/alfaseguros/alfa-seguros/tickets/details/1");
+    expect(urlDoDesk("1", { departmentId: "999" })).toContain("/alfa-seguros/");
+  });
+
+  it("não usa o link antigo do portal, nem o id numérico da organização", () => {
+    const raw = { webUrl: "https://desk.zoho.com/support/alfaseguros/ShowHomePage.do#Cases/dv/1" };
+    expect(urlDoDesk("1", raw)).not.toContain("ShowHomePage");
+    expect(urlDoDesk("1", null)).not.toContain("/agent/683863304/");
   });
 });

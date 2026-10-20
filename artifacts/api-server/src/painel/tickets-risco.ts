@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, lt, ne, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, notInArray, or } from "drizzle-orm";
 import { db, ticketsTable } from "@workspace/db";
 import { estadoDoNegocio, negocioDecidido, nomeDoNegocio } from "./followups-contexto.js";
 
@@ -59,35 +59,49 @@ export function emailDoTicket(rawJson: unknown): string | null {
 export const PORTAL_DESK = "alfaseguros";
 
 /**
- * Desk deep link for a ticket.
+ * Desk deep link for a ticket, in the agent console.
  *
  * Exported because every task with a ticket deserves one, not just the rows
  * that came *from* the ticket table: a promise made on a call carries a
- * `linked_ticket_id` and used to render without a way to reach it, which left
- * the agent knowing the ticket number and having to search for it by hand.
+ * `linked_ticket_id` and used to render without a way to reach it.
  *
- * ## Ask Zoho for the link; only build one when Zoho has not said
+ * ## The shape, and why it took three tries
  *
- * The previous version built `/agent/{orgId}/tickets/details/{id}` and every
- * link 404'd. The agent console routes on the **portal name**; the org id is
- * an API identifier and means nothing to it. Guessing a second URL shape
- * would be the same mistake with a different string.
+ * `/agent/{orgId}/tickets/details/{id}` 404'd: the console routes on the
+ * portal name, not the numeric org id. Desk's own `webUrl` then gave the
+ * classic `/support/alfaseguros/ShowHomePage.do#Cases/dv/{id}` page, which
+ * the team does not use and which, in October 2026, led Nuno to a deleted
+ * duplicate of the ticket he was looking for.
  *
- * So the ticket sync now asks Desk for `webUrl` and it lands in `raw_json`.
- * A link the other system hands us cannot be wrong about that system's own
- * routing, and it survives Zoho changing the shape again.
- *
- * The fallback is for tickets synced before `webUrl` was requested, and uses
- * the classic portal URL that the daily email has been sending for months —
- * a shape with evidence behind it rather than a fresh guess.
+ * The link the team copies from its own browser is
+ * `/agent/{portal}/{department}/tickets/details/{id}`, the department being
+ * Desk's `sanitizedName`. The department comes from the ticket when Desk
+ * gave it to us, and falls back to Alfa Seguros, the default department,
+ * where almost every ticket lives.
  */
 export function urlDoDesk(ticketId: string, raw?: unknown): string {
-  if (raw && typeof raw === "object") {
-    const web = (raw as Record<string, unknown>).webUrl;
-    if (typeof web === "string" && web.startsWith("https://")) return web;
-  }
-  return `https://desk.zoho.com/support/${PORTAL_DESK}/ShowHomePage.do#Cases/dv/${encodeURIComponent(ticketId)}`;
+  const dep =
+    raw && typeof raw === "object" ? (raw as Record<string, unknown>).departmentId : undefined;
+  const slug = (typeof dep === "string" && DEPARTAMENTOS_DESK[dep]) || DEPARTAMENTO_POR_OMISSAO;
+  return `https://desk.zoho.com/agent/${PORTAL_DESK}/${encodeURIComponent(slug)}/tickets/details/${encodeURIComponent(ticketId)}`;
 }
+
+/** Desk department id → `sanitizedName`, as `GET /departments` returns it. */
+const DEPARTAMENTOS_DESK: Record<string, string> = {
+  "367662000000006907": "alfa-seguros",
+  "367662000097048676": "corporate",
+  "367662000128357813": "contratação-pública",
+};
+const DEPARTAMENTO_POR_OMISSAO = "alfa-seguros";
+
+/**
+ * Apagado no Desk: está no lixo, ou foi apagado de vez. A API continua a
+ * devolvê-lo por id, com o estado que tinha, e por isso ele ficava "aberto"
+ * aqui para sempre. Era o caso do #172698, um duplicado de uma chamada
+ * perdida que a Vânia apagou a 02/09 e que o painel mostrava com 46 dias de
+ * atraso.
+ */
+export const ESTADO_APAGADO = "Deleted";
 
 /** Hours between `createdTime` and `now`, rounded down. */
 export function idadeEmHoras(criadoEm: Date, now: Date): number {
@@ -115,7 +129,7 @@ export async function listTicketsEmRisco(params: {
     .where(
       and(
         eq(ticketsTable.assigneeId, params.zid),
-        or(ne(ticketsTable.statusType, "Closed"), isNull(ticketsTable.statusType)),
+        or(notInArray(ticketsTable.statusType, ["Closed", ESTADO_APAGADO]), isNull(ticketsTable.statusType)),
         lt(ticketsTable.createdTime, cutoff),
       ),
     )
@@ -149,15 +163,14 @@ export async function listTicketsEmRisco(params: {
 }
 
 /**
- * Desk links for a set of ticket ids, read from what Desk itself told us.
+ * Desk links for a set of ticket ids, with the department each ticket is in.
  *
  * Built in one query rather than per row: a panel routinely references thirty
  * or forty tickets, and thirty round trips to save a `WHERE id IN` is a cost
  * with nothing bought.
  *
- * Ids with no row, or rows synced before `webUrl` was requested, are simply
- * absent — the caller falls back to `urlDoDesk`, which is the point of that
- * function having a fallback at all.
+ * Ids with no row are absent; the caller falls back to `urlDoDesk` with the
+ * default department.
  */
 export async function urlsDeTickets(ids: readonly string[]): Promise<Map<string, string>> {
   const unicos = [...new Set(ids)].filter(Boolean);
@@ -169,11 +182,6 @@ export async function urlsDeTickets(ids: readonly string[]): Promise<Map<string,
     .where(inArray(ticketsTable.id, unicos));
 
   const mapa = new Map<string, string>();
-  for (const r of rows) {
-    const web = r.rawJson && typeof r.rawJson === "object"
-      ? (r.rawJson as Record<string, unknown>).webUrl
-      : null;
-    if (typeof web === "string" && web.startsWith("https://")) mapa.set(r.id, web);
-  }
+  for (const r of rows) mapa.set(r.id, urlDoDesk(r.id, r.rawJson));
   return mapa;
 }
