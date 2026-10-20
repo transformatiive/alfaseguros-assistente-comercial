@@ -3,7 +3,7 @@ import { VIDA_AGENT_IDS as VIDA_CONST } from "@workspace/ringover";
 import { env } from "../lib/env.js";
 import { listDevolucoesPendentes } from "../storage/devolucoes-repo.js";
 import { listTicketsEmRisco, urlsDeTickets, type TicketEmRisco } from "./tickets-risco.js";
-import { loadPendingFollowUps, type FollowUpItem } from "./followups-query.js";
+import { loadPendingFollowUps } from "./followups-query.js";
 import {
   listAcoesDoAgente,
   loadCoaching,
@@ -16,12 +16,27 @@ import type { Acao } from "./acoes.js";
 import {
   derivarTarefas,
   impressaoDigital,
+  resumirPromessa,
   separarPorProva,
   type Tarefa,
   type TarefaFechada,
 } from "./tarefas.js";
 import { carregarContactos } from "./contactos.js";
 import { carregarEvidencias } from "./evidencia-query.js";
+import {
+  carregarContextoDosFollowUps,
+  type FollowUpComContexto,
+  type FollowUpFechado,
+} from "./followups-contexto-query.js";
+
+/** Quantas promessas abertas um painel mostra. Era o limite da consulta. */
+const MAX_FOLLOW_UPS = 50;
+
+/**
+ * Até quando uma promessa fechada pelo ticket ainda aparece em "saiu da lista".
+ * Esse cartão mostra o que acabou de sair, não o histórico todo.
+ */
+const HORAS_DE_FECHO_RECENTE = 48;
 
 /**
  * The agent panel payload: what must I do today, in four blocks.
@@ -118,7 +133,7 @@ export interface AgentePainel {
   data: string;
   devolucoes: DevolucaoPainel[] | BlocoIndisponivel;
   ticketsEmRisco: TicketEmRisco[] | BlocoIndisponivel;
-  followUps: FollowUpItem[] | BlocoIndisponivel;
+  followUps: FollowUpComContexto[] | BlocoIndisponivel;
   /**
    * The seven rules of "Ações do Dia", for this agent only. Each carries the
    * call's own sentence, so the row says what the conversation was about
@@ -202,7 +217,8 @@ function buildExcludedProducts(): Set<string> {
 async function montarTarefas(b: {
   devolucoes: DevolucaoPainel[] | BlocoIndisponivel;
   ticketsEmRisco: TicketEmRisco[] | BlocoIndisponivel;
-  followUps: FollowUpItem[] | BlocoIndisponivel;
+  followUps: FollowUpComContexto[] | BlocoIndisponivel;
+  followUpsFechados: readonly FollowUpFechado[];
   acoes: Acao[] | BlocoIndisponivel;
 }): Promise<{ tarefas: Tarefa[]; fechadas: TarefaFechada[] }> {
   const lista = <T,>(x: T[] | BlocoIndisponivel): T[] => (Array.isArray(x) ? x : []);
@@ -272,7 +288,20 @@ async function montarTarefas(b: {
     now: new Date(),
   });
 
-  return separarPorProva(todas, evidencias.chamadas, evidencias.respostas);
+  const separadas = separarPorProva(todas, evidencias.chamadas, evidencias.respostas);
+
+  // As promessas que o Desk fechou entram em "saiu da lista" com a prova à
+  // vista: o agente vê porque é que saíram, em vez de as ver desaparecer.
+  for (const f of b.followUpsFechados) {
+    const fp = impressaoDigital(f.item.contact_phone);
+    separadas.fechadas.push({
+      id: f.item.id,
+      titulo: resumirPromessa(f.item.follow_up_descricao),
+      quem: (fp ? contactos.nomes.get(fp) : undefined) ?? f.item.contact_phone,
+      prova: { tipo: "ticket_fechado", descricao: f.descricao },
+    });
+  }
+  return separadas;
 }
 
 /**
@@ -298,13 +327,19 @@ export async function buildAgentePainel(
 
     colaborador.ringoverUserId
       ? loadPendingFollowUps({
-          limit: 50,
+          limit: 5000,
           offset: 0,
           vidaIds: buildVidaIds(),
           excludedProducts: buildExcludedProducts(),
           emailMap: buildEmailMap(),
-          agentRef: colaborador.ringoverUserId,
-        })
+          // Sem filtro por agente: uma promessa cujo ticket passou para outra
+          // pessoa pertence-lhe, e só se sabe isso depois de ler o Desk.
+        }).then((r) =>
+          carregarContextoDosFollowUps(r.pending, {
+            zid: colaborador.zid,
+            ringoverUserId: colaborador.ringoverUserId ?? null,
+          }),
+        )
       : Promise.resolve(null),
 
     // Both read what the daily analysis already produced. Neither calls the
@@ -348,13 +383,22 @@ export async function buildAgentePainel(
     ticketsEmRisco = ticketsR.value;
   }
 
-  let followUps: FollowUpItem[] | BlocoIndisponivel;
+  let followUps: FollowUpComContexto[] | BlocoIndisponivel;
+  let followUpsFechados: FollowUpFechado[] = [];
   if (followUpsR.status === "rejected") {
     followUps = indisponivel("Não foi possível carregar os follow-ups.");
   } else if (followUpsR.value === null) {
     followUps = indisponivel("Ainda não está associado a um utilizador do Ringover.");
   } else {
-    followUps = followUpsR.value.pending;
+    // Os mais recentes primeiro, e no máximo os de antes: o limite estava na
+    // consulta, e passou para aqui porque a consulta agora lê a equipa toda.
+    followUps = [...followUpsR.value.abertos]
+      .sort((a, b) => (b.chamada_em ?? b.detected_at).localeCompare(a.chamada_em ?? a.detected_at))
+      .slice(0, MAX_FOLLOW_UPS);
+    const limite = Date.now() - HORAS_DE_FECHO_RECENTE * 3_600_000;
+    followUpsFechados = followUpsR.value.fechados.filter(
+      (f) => f.fechadoEm !== null && Date.parse(f.fechadoEm) >= limite,
+    );
   }
 
   let acoes: Acao[] | BlocoIndisponivel;
@@ -399,6 +443,7 @@ export async function buildAgentePainel(
     devolucoes,
     ticketsEmRisco,
     followUps,
+    followUpsFechados,
     acoes,
   });
 

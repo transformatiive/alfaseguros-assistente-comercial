@@ -23,13 +23,32 @@ export function comoSai(categoria: CategoriaTarefa): string | null {
       return "uma chamada atendida para este número";
     case "enviar_simulacao":
     case "espera_alfa":
-      return "uma resposta tua no ticket";
+      return "uma resposta tua no ticket, ou com o ticket fechado";
     case "cumprir_compromisso":
+      return "uma chamada atendida, uma resposta tua, ou com o ticket fechado";
     case "retomar_conversa":
       return "uma chamada atendida ou uma resposta tua";
     case "espera_cliente":
       return null;
   }
+}
+
+/**
+ * De onde vem a tarefa: "Chamada de 03/09 às 15:27 · Ticket #173005".
+ *
+ * Uma promessa sem a data da chamada obriga o agente a adivinhar de que
+ * conversa se fala; sem o ticket, a procurá-lo no Desk à mão.
+ */
+export function origemDaTarefa(t: { chamadaEm: string | null; ticketNumero: string | null }): string | null {
+  const partes: string[] = [];
+  if (t.chamadaEm) {
+    const d = new Date(t.chamadaEm);
+    const dia = d.toLocaleDateString("pt-PT", { day: "2-digit", month: "2-digit", timeZone: LISBOA });
+    const hora = d.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit", timeZone: LISBOA });
+    partes.push(`Chamada de ${dia} às ${hora}`);
+  }
+  if (t.ticketNumero) partes.push(`Ticket #${t.ticketNumero}`);
+  return partes.length > 0 ? partes.join(" · ") : null;
 }
 
 /** O que a tarefa é, numa linha pequena por cima do título. */
