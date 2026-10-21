@@ -6,6 +6,7 @@
 import type { LeadsView } from "./compute.js";
 import { formatDDMM } from "./compute.js";
 import { LOGO } from "../lib/email-template.js";
+import { urlDoDesk } from "../painel/tickets-risco.js";
 
 const MAROON = "#762023";
 const ORANGE = "#E87D1D";
@@ -17,7 +18,7 @@ const CARD = "#ffffff";
 const GREEN = "#0a7d3f";
 const RED = "#c0392b";
 
-const DESK_TICKET_URL = (id: string) => `https://desk.zoho.com/support/alfaseguros/ShowHomePage.do#Cases/dv/${encodeURIComponent(id)}`;
+const DESK_TICKET_URL = (id: string) => urlDoDesk(id);
 
 function esc(s: unknown): string {
   return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");

@@ -143,6 +143,8 @@ export async function carregarIntervalos(
 
   for (const t of tickets) {
     if (!t.createdTime) continue;
+    // Apagado no Desk: nunca foi trabalho de ninguém, não entra nas curvas.
+    if (t.statusType === "Deleted") continue;
     const fechado = t.statusType === "Closed";
     // Um ticket fechado sem `closed_time` existe — o Desk não o preenche em
     // todos os canais. É descartado em vez de adivinhado: contá-lo como aberto

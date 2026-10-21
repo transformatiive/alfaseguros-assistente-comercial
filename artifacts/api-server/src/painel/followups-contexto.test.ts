@@ -209,3 +209,14 @@ describe("negócio decidido", () => {
     expect(descreverFecho(ctx.fechadoPor!)).toBe("negócio GANHO no ticket #178288");
   });
 });
+
+describe("ticket apagado no Desk", () => {
+  it("conta como fechado e diz porquê", () => {
+    const ctx = lerContexto(
+      { linkedTicketId: "t", descricao: "Devolver chamada.", fingerprint: null, chamadaEm: null },
+      [ticket({ id: "t", ticketNumber: "172698", statusType: "Deleted" })],
+    );
+    expect(ctx.fechadoPor?.id).toBe("t");
+    expect(descreverFecho(ctx.fechadoPor!)).toBe("ticket #172698 apagado no Desk");
+  });
+});
