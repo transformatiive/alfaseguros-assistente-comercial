@@ -17,6 +17,7 @@ import leadsRouter from "./leads.js";
 import agenteRouter from "./agente.js";
 import painelRefreshRouter from "./painel-refresh.js";
 import preVisualizacaoRouter from "./pre-visualizacao.js";
+import chamadasSftpRouter, { chamadasSftpAdminRouter } from "./chamadas-sftp.js";
 import { requireAuth } from "../middleware/require-auth.js";
 
 const router: IRouter = Router();
@@ -45,6 +46,8 @@ router.use(painelRefreshRouter);
 // is exactly "1". Mounted before requireAuth because the whole point is to be
 // reachable without a session; the env flag is what keeps it shut.
 router.use(preVisualizacaoRouter);
+// Análise de Chamadas Vida: o disparo manual tem o seu cron-secret.
+router.use(chamadasSftpAdminRouter);
 
 // Protected routes — must be authenticated
 router.use(requireAuth);
@@ -55,5 +58,6 @@ router.use(operatorsRouter);
 router.use(casesRouter);
 router.use(actionsRouter);
 router.use(statsRouter);
+router.use(chamadasSftpRouter);
 
 export default router;
