@@ -104,6 +104,20 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     cacheWriteUsdPerMillion: 1.25,
     cacheReadUsdPerMillion: 0.1,
   },
+  // Used by the SFTP call analysis (OPENROUTER_MODEL_SFTP). Prices from the
+  // OpenRouter catalogue, 22/10/2026.
+  "anthropic/claude-sonnet-5.5": {
+    inputUsdPerMillion: 2,
+    outputUsdPerMillion: 10,
+    cacheWriteUsdPerMillion: 2.5,
+    cacheReadUsdPerMillion: 0.2,
+  },
+  "anthropic/claude-haiku-5.5": {
+    inputUsdPerMillion: 0.1,
+    outputUsdPerMillion: 0.5,
+    cacheWriteUsdPerMillion: 0.125,
+    cacheReadUsdPerMillion: 0.01,
+  },
   // Batch variants are the same models at half price. Listed because the daily
   // run is exactly the workload they exist for: it fires at 06:00 with nobody
   // waiting on the result.
