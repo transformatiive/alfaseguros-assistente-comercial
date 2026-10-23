@@ -65,24 +65,6 @@ const envSchema = z.object({
    * phone numbers and ticket subjects.
    */
   PAINEL_PREVIEW_ENABLED: z.string().optional(),
-  /**
-   * Bucket `sftp-files` da Railway (projeto Alfaseguros-SFTP): gravações da
-   * campanha Vida e as transcrições do Whisper. Sem estas variáveis o menu
-   * "Análise de Chamadas" abre vazio e o job não corre.
-   */
-  SFTP_S3_ENDPOINT: z.string().optional(),
-  SFTP_S3_BUCKET: z.string().optional(),
-  SFTP_S3_REGION: z.string().default("auto"),
-  SFTP_S3_ACCESS_KEY_ID: z.string().optional(),
-  SFTP_S3_SECRET_ACCESS_KEY: z.string().optional(),
-  /**
-   * Modelo da análise das chamadas do SFTP. Sonnet 5.5 por decisão do Nuno
-   * (21/10/2026); se não correr bem, trocar por `anthropic/claude-haiku-5.5`
-   * sem deploy.
-   */
-  OPENROUTER_MODEL_SFTP: z.string().default("anthropic/claude-sonnet-5.5"),
-  /** "0" desliga a execução automática de hora a hora. */
-  SFTP_ANALISE_AUTOMATICA: z.string().default("1"),
 });
 
 let cached: z.infer<typeof envSchema> | null = null;
