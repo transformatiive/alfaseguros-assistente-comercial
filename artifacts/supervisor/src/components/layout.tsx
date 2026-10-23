@@ -21,7 +21,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const navLinks = [
     { href: "/", label: "Resumo Diário" },
     { href: "/checklist", label: "Checklist Vida" },
-    { href: "/analise-chamadas", label: "Análise de Chamadas" },
   ];
 
   const handleLogout = async () => {
