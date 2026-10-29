@@ -132,6 +132,8 @@ export interface Tarefa {
   chamadaEm: string | null;
   /** Número do ticket como se vê no Desk. */
   ticketNumero: string | null;
+  /** O ticket mostrado é o último do cliente, já fechado: só contexto. */
+  ticketFechado?: boolean;
   cadeia: Cadeia | null;
   /** The absence that keeps this on the list, written out. */
   porqueAberta: string | null;

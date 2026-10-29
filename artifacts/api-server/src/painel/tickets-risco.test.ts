@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { idadeEmHoras, RISCO_THRESHOLD_HOURS, urlDoDesk } from "./tickets-risco.js";
+import { escolherTicketDoCliente, idadeEmHoras, RISCO_THRESHOLD_HOURS, urlDoDesk } from "./tickets-risco.js";
 
 describe("idadeEmHoras", () => {
   const now = new Date("2026-08-28T12:00:00Z");
@@ -55,5 +55,35 @@ describe("urlDoDesk", () => {
     const raw = { webUrl: "https://desk.zoho.com/support/alfaseguros/ShowHomePage.do#Cases/dv/1" };
     expect(urlDoDesk("1", raw)).not.toContain("ShowHomePage");
     expect(urlDoDesk("1", null)).not.toContain("/agent/683863304/");
+  });
+});
+
+describe("escolherTicketDoCliente", () => {
+  const c = (id: string, fechado: boolean, criadoEm: number, fechadoEm = criadoEm) => ({
+    id,
+    numero: id.replace("T", "18"),
+    fp: "912345678",
+    url: `https://desk/${id}`,
+    fechado,
+    criadoEm,
+    fechadoEm,
+  });
+
+  it("prefere o ticket aberto mais recente, mesmo havendo fechados mais novos", () => {
+    const m = escolherTicketDoCliente([c("T1", false, 1), c("T2", false, 5), c("T3", true, 9, 10)]);
+    expect(m.get("912345678")).toMatchObject({ id: "T2", fechado: false });
+  });
+
+  it("sem aberto, escolhe o que fechou por último", () => {
+    const m = escolherTicketDoCliente([c("T1", true, 1, 20), c("T2", true, 5, 6)]);
+    expect(m.get("912345678")).toMatchObject({ id: "T1", fechado: true });
+  });
+
+  it("ignora tickets sem número ou sem telefone", () => {
+    const m = escolherTicketDoCliente([
+      { ...c("T1", false, 1), numero: null },
+      { ...c("T2", false, 2), fp: null },
+    ]);
+    expect(m.size).toBe(0);
   });
 });

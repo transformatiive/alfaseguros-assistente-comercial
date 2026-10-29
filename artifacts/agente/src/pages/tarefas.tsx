@@ -427,18 +427,20 @@ function NumeroDoTicket({ t }: { t: Tarefa }) {
   if (!t.ticketNumero) {
     return <span className={cn(base, "bg-amber-50 text-amber-800")}>{texto}</span>;
   }
+  // O último ticket do cliente, já fechado: está aqui para ler o contexto,
+  // não porque haja trabalho nele. Diz-se com todas as letras.
+  const fechado = !!t.ticketFechado;
+  const conteudo = fechado ? `${texto} · último ticket, fechado` : texto;
+  const cor = fechado ? "bg-white text-stone-500 ring-1 ring-inset ring-stone-300" : "bg-stone-100 text-stone-900";
+  const titulo = fechado
+    ? "Último ticket do cliente, já fechado. Abrir no Desk para ler o contexto."
+    : "Abrir no Desk";
   if (!t.deskUrl) {
-    return <span className={cn(base, "bg-stone-100 text-stone-900")}>{texto}</span>;
+    return <span className={cn(base, cor)}>{conteudo}</span>;
   }
   return (
-    <a
-      href={t.deskUrl}
-      target="_blank"
-      rel="noreferrer"
-      className={cn(base, "bg-stone-100 text-stone-900 hover:underline")}
-      title="Abrir no Desk"
-    >
-      {texto}
+    <a href={t.deskUrl} target="_blank" rel="noreferrer" className={cn(base, cor, "hover:underline")} title={titulo}>
+      {conteudo}
     </a>
   );
 }
@@ -791,6 +793,7 @@ function Parados({ titulo, tarefas, nota }: { titulo: string; tarefas: Tarefa[];
               <span className="font-mono text-[12.5px] font-semibold tabular-nums text-stone-900">
                 {numeroDoTicket(t)}
               </span>
+              {t.ticketFechado && <span className="text-stone-500"> (fechado)</span>}
               <span className="text-stone-400"> · </span>
               {t.contacto.nome ?? (t.contacto.telefone ? telefone(t.contacto.telefone) : "Sem nome")}
               <span className="text-stone-500"> · {t.titulo}</span>

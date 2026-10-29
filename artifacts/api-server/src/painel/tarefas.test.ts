@@ -493,7 +493,7 @@ describe("agruparTarefas", () => {
 
 describe("nº do ticket em todas as linhas", () => {
   const doCliente = new Map([
-    ["912345678", { id: "T-ABERTO", numero: "185106", url: "https://desk/T-ABERTO" }],
+    ["912345678", { id: "T-ABERTO", numero: "185106", url: "https://desk/T-ABERTO", fechado: false }],
   ]);
 
   it("a chamada por devolver mostra o nº do ticket a que já está ligada", () => {
@@ -540,6 +540,7 @@ describe("nº do ticket em todas as linhas", () => {
       }),
     );
     expect(t.ticketNumero).toBe("185106");
+    expect(t.ticketFechado).toBe(false);
     expect(t.deskUrl).toBe("https://desk/T-ABERTO");
     // Não passa a contar como ligada: a prova que fecha a tarefa não muda.
     expect(t.ticketId).toBeNull();
@@ -609,5 +610,57 @@ describe("nº do ticket em todas as linhas", () => {
       }),
     );
     expect(t.ticketNumero).toBe("170402");
+  });
+});
+
+describe("último ticket fechado, para contexto", () => {
+  it("sem ticket aberto, a linha mostra o último fechado e marca-o como fechado", () => {
+    const [t] = derivarTarefas(
+      entrada({
+        followUps: [
+          {
+            id: "conv_11",
+            contact_phone: "351912345678",
+            contact_email: null,
+            follow_up_descricao: "Confirmar se a apólice foi emitida.",
+            follow_up_sla_hours: 24,
+            linked_ticket_id: null,
+            product: null,
+            detected_at: "2026-08-28T10:00:00.000Z",
+            ticket_numero: null,
+          },
+        ],
+        ticketPorFingerprint: new Map([
+          ["912345678", { id: "T-F", numero: "170001", url: "https://desk/T-F", fechado: true }],
+        ]),
+      }),
+    );
+    expect(t.ticketNumero).toBe("170001");
+    expect(t.ticketFechado).toBe(true);
+    expect(t.deskUrl).toBe("https://desk/T-F");
+    // Só contexto: não liga a tarefa ao ticket, por isso não a fecha.
+    expect(t.ticketId).toBeNull();
+  });
+
+  it("uma linha com ticket seu nunca aparece como fechada", () => {
+    const [t] = derivarTarefas(
+      entrada({
+        tickets: [
+          {
+            id: "T1",
+            ticketNumber: "185106",
+            subject: "Simulação MR",
+            status: "Aberto",
+            idadeHoras: 30,
+            criadoEm: "2026-08-28T03:00:00.000Z",
+            deskUrl: "https://desk/T1",
+            contactName: null,
+            contactPhone: "351912345678",
+            contactEmail: null,
+          },
+        ],
+      }),
+    );
+    expect(t.ticketFechado).toBe(false);
   });
 });

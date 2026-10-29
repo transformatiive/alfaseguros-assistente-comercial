@@ -207,25 +207,32 @@ export async function numerosDeTickets(ids: readonly string[]): Promise<Map<stri
   return mapa;
 }
 
-/** The customer's open process in Desk, for a row that has no ticket of its own. */
+/** The customer's process in Desk, for a row that has no ticket of its own. */
 export interface TicketDoCliente {
   id: string;
   numero: string;
   url: string;
+  /**
+   * True when the customer has no open ticket and this is their last closed
+   * one. The row shows it marked as closed: it is there to read context, not
+   * because there is work in it.
+   */
+  fechado: boolean;
 }
 
 /**
- * The most recent open ticket for each phone fingerprint.
+ * The ticket to show for each phone fingerprint: the most recent open one,
+ * or, when there is none, the one that closed last.
  *
  * Used only to *show* which process a row belongs to — never to close a task
  * or to decide whose panel it is on. A promise made on a call is usually about
- * a ticket the customer already had open before ringing, and the call-to-ticket
+ * a ticket the customer already had before ringing, and the call-to-ticket
  * window (which starts on the day of the call) cannot see that one.
  *
- * "Open" is the same rule as the panel's ticket list: not closed or deleted,
- * and the business not already decided.
+ * "Open" is the same rule as the panel's ticket list: not closed, and the
+ * business not already decided. Deleted tickets are never shown.
  */
-export async function ticketsAbertosPorFingerprint(
+export async function ticketsDoClientePorFingerprint(
   fingerprints: readonly string[],
 ): Promise<Map<string, TicketDoCliente>> {
   const unicos = [...new Set(fingerprints)].filter(Boolean);
@@ -236,6 +243,9 @@ export async function ticketsAbertosPorFingerprint(
       id: ticketsTable.id,
       ticketNumber: ticketsTable.ticketNumber,
       fp: ticketsTable.phoneFingerprint,
+      statusType: ticketsTable.statusType,
+      createdTime: ticketsTable.createdTime,
+      closedTime: ticketsTable.closedTime,
       rawJson: ticketsTable.rawJson,
       customFieldsJson: ticketsTable.customFieldsJson,
     })
@@ -243,17 +253,55 @@ export async function ticketsAbertosPorFingerprint(
     .where(
       and(
         inArray(ticketsTable.phoneFingerprint, unicos),
-        or(notInArray(ticketsTable.statusType, ["Closed", ESTADO_APAGADO]), isNull(ticketsTable.statusType)),
+        or(notInArray(ticketsTable.statusType, [ESTADO_APAGADO]), isNull(ticketsTable.statusType)),
       ),
-    )
-    // Oldest first, so the last write wins and each number keeps its newest ticket.
-    .orderBy(asc(ticketsTable.createdTime));
+    );
 
+  return escolherTicketDoCliente(
+    rows.map((r) => ({
+      id: r.id,
+      numero: r.ticketNumber,
+      fp: r.fp,
+      url: urlDoDesk(r.id, r.rawJson),
+      fechado:
+        r.statusType === "Closed" || negocioDecidido(estadoDoNegocio(r.customFieldsJson)),
+      criadoEm: r.createdTime?.getTime() ?? 0,
+      fechadoEm: r.closedTime?.getTime() ?? r.createdTime?.getTime() ?? 0,
+    })),
+  );
+}
+
+/** One row of the lookup above, already read. Exported for the test. */
+export interface CandidatoTicket {
+  id: string;
+  numero: string | null;
+  fp: string | null;
+  url: string;
+  fechado: boolean;
+  criadoEm: number;
+  fechadoEm: number;
+}
+
+/** Newest open ticket per number; failing that, the one that closed last. */
+export function escolherTicketDoCliente(
+  candidatos: readonly CandidatoTicket[],
+): Map<string, TicketDoCliente> {
+  const abertos = new Map<string, CandidatoTicket>();
+  const fechados = new Map<string, CandidatoTicket>();
+  for (const c of candidatos) {
+    if (!c.fp || !c.numero) continue;
+    if (c.fechado) {
+      const atual = fechados.get(c.fp);
+      if (!atual || c.fechadoEm > atual.fechadoEm) fechados.set(c.fp, c);
+    } else {
+      const atual = abertos.get(c.fp);
+      if (!atual || c.criadoEm > atual.criadoEm) abertos.set(c.fp, c);
+    }
+  }
   const mapa = new Map<string, TicketDoCliente>();
-  for (const r of rows) {
-    if (!r.fp || !r.ticketNumber) continue;
-    if (negocioDecidido(estadoDoNegocio(r.customFieldsJson))) continue;
-    mapa.set(r.fp, { id: r.id, numero: r.ticketNumber, url: urlDoDesk(r.id, r.rawJson) });
+  for (const fp of new Set([...abertos.keys(), ...fechados.keys()])) {
+    const c = abertos.get(fp) ?? fechados.get(fp);
+    if (c?.numero) mapa.set(fp, { id: c.id, numero: c.numero, url: c.url, fechado: c.fechado });
   }
   return mapa;
 }
