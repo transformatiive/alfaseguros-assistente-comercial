@@ -5,7 +5,7 @@ import { listDevolucoesPendentes } from "../storage/devolucoes-repo.js";
 import {
   listTicketsEmRisco,
   numerosDeTickets,
-  ticketsAbertosPorFingerprint,
+  ticketsDoClientePorFingerprint,
   urlsDeTickets,
   type TicketDoCliente,
   type TicketEmRisco,
@@ -286,7 +286,7 @@ async function montarTarefas(b: {
   // the screen then says "Sem ticket", which is what it said before.
   const [numeroPorTicket, ticketPorFingerprint] = await Promise.all([
     numerosDeTickets(ticketIds).catch(() => new Map<string, string>()),
-    ticketsAbertosPorFingerprint(porIdentificar).catch(() => new Map<string, TicketDoCliente>()),
+    ticketsDoClientePorFingerprint(porIdentificar).catch(() => new Map<string, TicketDoCliente>()),
   ]);
 
   const todas = derivarTarefas({

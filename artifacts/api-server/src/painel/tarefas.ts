@@ -90,6 +90,11 @@ export interface Tarefa {
   chamadaEm: string | null;
   /** O número do ticket como se vê no Desk, para a linha o mostrar. */
   ticketNumero: string | null;
+  /**
+   * O ticket mostrado é o último do cliente, já fechado: só para ler contexto.
+   * Só acontece quando a linha não tem ticket seu e o cliente não tem nenhum aberto.
+   */
+  ticketFechado: boolean;
   /** Where this sits in pedido → simulação → follow-up. Null when it has no chain. */
   cadeia: Cadeia | null;
   /**
@@ -193,8 +198,9 @@ export interface EntradaTarefas {
   /** Ticket id → the number Desk shows, for rows that know only the id. */
   numeroPorTicket?: ReadonlyMap<string, string>;
   /**
-   * Last 9 digits → the customer's most recent open ticket. Only for showing
-   * the number on a row that has no ticket of its own; it never closes a task.
+   * Last 9 digits → the customer's most recent open ticket, or their last
+   * closed one when none is open. Only for showing the number on a row that
+   * has no ticket of its own; it never closes a task.
    */
   ticketPorFingerprint?: ReadonlyMap<string, TicketDoCliente>;
   now: Date;
@@ -210,26 +216,28 @@ function linkDoTicket(ticketId: string, entrada: EntradaTarefas): string {
  *
  * Every row should name its process, because that is how the team finds it in
  * Desk. In order: the number the row already carries, the number of the ticket
- * it is linked to, and — only when it has neither — the customer's most recent
- * open ticket by phone. Null when the customer has no open ticket at all; the
- * screen then says "Sem ticket" rather than leaving a blank.
+ * it is linked to, and — only when it has neither — the customer's ticket by
+ * phone: the most recent open one, else the last closed one, flagged so the
+ * screen marks it as context only. Null when the customer has no ticket at
+ * all; the screen then says "Sem ticket" rather than leaving a blank.
  */
 function ticketDaLinha(
   linha: { numero?: string | null; ticketId: string | null; telefone: string | null },
   entrada: EntradaTarefas,
-): { numero: string | null; deskUrl: string | null } {
+): { numero: string | null; deskUrl: string | null; fechado: boolean } {
   if (linha.ticketId) {
     return {
       numero: linha.numero ?? entrada.numeroPorTicket?.get(linha.ticketId) ?? null,
       deskUrl: linkDoTicket(linha.ticketId, entrada),
+      fechado: false,
     };
   }
-  if (linha.numero) return { numero: linha.numero, deskUrl: null };
+  if (linha.numero) return { numero: linha.numero, deskUrl: null, fechado: false };
   const fp = impressaoDigital(linha.telefone);
   const doCliente = fp ? entrada.ticketPorFingerprint?.get(fp) : undefined;
   return doCliente
-    ? { numero: doCliente.numero, deskUrl: doCliente.url }
-    : { numero: null, deskUrl: null };
+    ? { numero: doCliente.numero, deskUrl: doCliente.url, fechado: doCliente.fechado }
+    : { numero: null, deskUrl: null, fechado: false };
 }
 
 /* ── Regras de classificação ────────────────────────────────────────────── */
@@ -485,6 +493,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       desde: inicio.toISOString(),
       chamadaEm: null,
       ticketNumero: ticket.numero,
+      ticketFechado: ticket.fechado,
       cadeia: null,
       porqueAberta: null,
       esperaHoras: horasEntre(inicio, entrada.now),
@@ -561,6 +570,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       desde: inicioDaPromessa,
       chamadaEm: f.chamada_em ?? null,
       ticketNumero: ticket.numero,
+      ticketFechado: ticket.fechado,
       cadeia,
       porqueAberta: porqueContinuaAberta(prova),
       esperaHoras: horasEntre(detectado, entrada.now),
@@ -592,6 +602,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       desde: null,
       chamadaEm: null,
       ticketNumero: ticket.numero,
+      ticketFechado: ticket.fechado,
       cadeia: null,
       porqueAberta: null,
       esperaHoras: null,
@@ -679,6 +690,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       desde: desde.toISOString(),
       chamadaEm: null,
       ticketNumero: t.ticketNumber,
+      ticketFechado: false,
       cadeia,
       // A ticket parked on the customer is not open because we failed to
       // reply, so the "no reply from you" line would be a lie on that row.
