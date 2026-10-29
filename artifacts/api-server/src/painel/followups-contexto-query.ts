@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, isNotNull, notInArray, or, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { db, colaboradoresTable, conversationsTable, ticketsTable } from "@workspace/db";
 import type { FollowUpItem } from "./followups-shape.js";
 import {
@@ -87,7 +87,7 @@ export async function carregarContextoDosFollowUps(
           .from(conversationsTable)
           .where(inArray(conversationsTable.id, convIds)),
     db
-      .select({ zid: colaboradoresTable.zid })
+      .select({ zid: colaboradoresTable.zid, ringoverUserId: colaboradoresTable.ringoverUserId })
       .from(colaboradoresTable)
       .where(and(eq(colaboradoresTable.ativo, true), isNotNull(colaboradoresTable.zid))),
   ]);
@@ -99,9 +99,13 @@ export async function carregarContextoDosFollowUps(
   // dias (mais um, pela hora de Lisboa) antes da chamada mais antiga: são
   // pesquisas dentro do JSON do Desk, sem índice.
   const instantes = [...chamadaPorConversa.values()].map((iso) => Date.parse(iso));
+  // Nunca mais de 180 dias para trás: uma promessa mais velha do que isso não
+  // ganha nada com um ticket de antes dela, e a pesquisa sem índice cresce
+  // com a tabela toda.
+  const chao = Date.now() - 180 * 86_400_000;
   const limite =
     instantes.length > 0
-      ? new Date(Math.min(...instantes) - (DIAS_ANTES_DA_CHAMADA + 1) * 86_400_000)
+      ? new Date(Math.max(chao, Math.min(...instantes) - (DIAS_ANTES_DA_CHAMADA + 1) * 86_400_000))
       : null;
 
   const condicoes = [
@@ -118,34 +122,28 @@ export async function carregarContextoDosFollowUps(
       ? []
       : await db.select(COLUNAS_DO_TICKET).from(ticketsTable).where(or(...condicoes));
 
-  // Os emails que o Desk associa a cada número. Ligam os tickets que chegaram
-  // por email, com o telefone de um parceiro ou sem telefone.
+  // Os emails que o Desk associa a cada número: só dos tickets cujo
+  // *contacto* tem esse número. Num formulário de parceiro o contacto é o
+  // parceiro, e o email dele levaria a todos os clientes desse parceiro.
   const emailsPorFingerprint = new Map<string, Set<string>>();
   for (const t of primeiros) {
+    if (deOutroDepartamento(t.rawJson) || !t.phoneFingerprint) continue;
     const email = emailDoTicket(t.rawJson)?.toLowerCase();
     if (!email) continue;
-    for (const fp of [t.phoneFingerprint, telefoneDoTicket(t.rawJson)]) {
-      if (!fp) continue;
-      const set = emailsPorFingerprint.get(fp) ?? new Set<string>();
-      set.add(email);
-      emailsPorFingerprint.set(fp, set);
-    }
+    const set = emailsPorFingerprint.get(t.phoneFingerprint) ?? new Set<string>();
+    set.add(email);
+    emailsPorFingerprint.set(t.phoneFingerprint, set);
   }
   const emails = [...new Set([...emailsPorFingerprint.values()].flatMap((s) => [...s]))];
-  const jaLidos = primeiros.map((t) => t.id);
-  const porEmail =
+  const jaLidos = new Set(primeiros.map((t) => t.id));
+  const porEmail = (
     emails.length > 0 && limite
       ? await db
           .select(COLUNAS_DO_TICKET)
           .from(ticketsTable)
-          .where(
-            and(
-              gte(ticketsTable.createdTime, limite),
-              inArray(EMAIL_DO_TICKET_SQL, emails),
-              jaLidos.length > 0 ? notInArray(ticketsTable.id, jaLidos) : undefined,
-            ),
-          )
-      : [];
+          .where(and(gte(ticketsTable.createdTime, limite), inArray(EMAIL_DO_TICKET_SQL, emails)))
+      : []
+  ).filter((t) => !jaLidos.has(t.id));
 
   // A Corporate e a Contratação Pública não entram no painel da equipa 360:
   // nem para mostrar, nem para segurar ou fechar uma promessa.
@@ -170,6 +168,8 @@ export async function carregarContextoDosFollowUps(
     });
   }
   const zidsDaEquipa = new Set(equipa.map((e) => e.zid).filter((z): z is string => !!z));
+  const zidPorRingover = new Map<string, string>();
+  for (const e of equipa) if (e.ringoverUserId && e.zid) zidPorRingover.set(e.ringoverUserId, e.zid);
 
   const abertos: FollowUpComContexto[] = [];
   const fechados: FollowUpFechado[] = [];
@@ -187,6 +187,7 @@ export async function carregarContextoDosFollowUps(
         fingerprint,
         chamadaEm,
         emails: fingerprint ? emailsPorFingerprint.get(fingerprint) : undefined,
+        zidDoAgente: f.agent_ref ? zidPorRingover.get(f.agent_ref) ?? null : null,
       },
       tickets,
     );
