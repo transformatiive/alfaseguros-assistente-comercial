@@ -18,7 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import { enviar } from "@/lib/api";
 import { idade, iniciais, porqueMe, telefone } from "@/lib/formatos";
-import { colunaDoPrazo, comoSai, corDoCliente, origemDaTarefa, TIPO_DE_TAREFA } from "@/lib/leitura";
+import { colunaDoPrazo, comoSai, corDoCliente, numeroDoTicket, origemDaTarefa, TIPO_DE_TAREFA } from "@/lib/leitura";
 import type {
   BaldeDePrazo,
   Cadeia,
@@ -406,7 +406,8 @@ function TipoDeTarefa({ t }: { t: Tarefa }) {
   const Icone = marca.icone;
   const tentativas = t.devolucaoIds && t.devolucaoIds.length > 1 ? ` · ligou ${t.devolucaoIds.length} vezes` : "";
   return (
-    <span className={cn("flex items-center gap-1.5 t-micro", marca.cor)}>
+    <span className={cn("flex flex-wrap items-center gap-1.5 t-micro", marca.cor)}>
+      <NumeroDoTicket t={t} />
       <Icone className="h-3.5 w-3.5 shrink-0" aria-hidden />
       {TIPO_DE_TAREFA[t.categoria]}
       {tentativas}
@@ -414,7 +415,35 @@ function TipoDeTarefa({ t }: { t: Tarefa }) {
   );
 }
 
-/** A data da chamada e o número do ticket, quando a tarefa os tem. */
+/**
+ * O número do ticket, primeiro na linha, como o Desk o mostra.
+ *
+ * É por ele que a equipa encontra o processo. Abre o ticket quando há link;
+ * sem ticket, diz "Sem ticket" a âmbar, para se ver que falta criar um.
+ */
+function NumeroDoTicket({ t }: { t: Tarefa }) {
+  const texto = numeroDoTicket(t);
+  const base = "rounded-[3px] px-1.5 py-0.5 font-mono text-[12px] font-semibold normal-case tracking-normal tabular-nums";
+  if (!t.ticketNumero) {
+    return <span className={cn(base, "bg-amber-50 text-amber-800")}>{texto}</span>;
+  }
+  if (!t.deskUrl) {
+    return <span className={cn(base, "bg-stone-100 text-stone-900")}>{texto}</span>;
+  }
+  return (
+    <a
+      href={t.deskUrl}
+      target="_blank"
+      rel="noreferrer"
+      className={cn(base, "bg-stone-100 text-stone-900 hover:underline")}
+      title="Abrir no Desk"
+    >
+      {texto}
+    </a>
+  );
+}
+
+/** A data da chamada, quando a tarefa vem de uma. */
 function Origem({ t }: { t: Tarefa }) {
   const texto = origemDaTarefa(t);
   if (!texto) return null;
@@ -759,6 +788,10 @@ function Parados({ titulo, tarefas, nota }: { titulo: string; tarefas: Tarefa[];
         {tarefas.slice(0, 5).map((t) => (
           <li key={t.id} className="flex justify-between gap-3 py-2 first:pt-0 t-body text-stone-800">
             <span className="min-w-0 truncate">
+              <span className="font-mono text-[12.5px] font-semibold tabular-nums text-stone-900">
+                {numeroDoTicket(t)}
+              </span>
+              <span className="text-stone-400"> · </span>
               {t.contacto.nome ?? (t.contacto.telefone ? telefone(t.contacto.telefone) : "Sem nome")}
               <span className="text-stone-500"> · {t.titulo}</span>
             </span>

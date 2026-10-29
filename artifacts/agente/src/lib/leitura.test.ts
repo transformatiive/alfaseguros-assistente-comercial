@@ -3,6 +3,7 @@ import {
   agruparNaFaixa,
   colunaDoPrazo,
   comoSai,
+  numeroDoTicket,
   origemDaTarefa,
   corDoCliente,
   leituraCurta,
@@ -41,15 +42,23 @@ describe("comoSai", () => {
 });
 
 describe("origemDaTarefa", () => {
-  it("diz a data e a hora da chamada, em Lisboa, e o número do ticket", () => {
-    expect(origemDaTarefa({ chamadaEm: "2026-09-03T14:27:00Z", ticketNumero: "173005" })).toBe(
-      "Chamada de 03/09 às 15:27 · Ticket #173005",
-    );
+  it("diz a data e a hora da chamada, em Lisboa", () => {
+    expect(origemDaTarefa({ chamadaEm: "2026-09-03T14:27:00Z" })).toBe("Chamada de 03/09 às 15:27");
   });
 
-  it("mostra só o que existe, e nada quando não há nada", () => {
-    expect(origemDaTarefa({ chamadaEm: null, ticketNumero: "173005" })).toBe("Ticket #173005");
-    expect(origemDaTarefa({ chamadaEm: null, ticketNumero: null })).toBeNull();
+  it("nada quando não houve chamada", () => {
+    expect(origemDaTarefa({ chamadaEm: null })).toBeNull();
+  });
+});
+
+describe("numeroDoTicket", () => {
+  it("mostra o número como no Desk", () => {
+    expect(numeroDoTicket({ ticketNumero: "185106" })).toBe("#185106");
+  });
+
+  it("diz que não há ticket, em vez de deixar em branco", () => {
+    expect(numeroDoTicket({ ticketNumero: null })).toBe("Sem ticket");
+    expect(numeroDoTicket({ ticketNumero: "" })).toBe("Sem ticket");
   });
 
   it("não promete nada para o que está à espera do cliente", () => {

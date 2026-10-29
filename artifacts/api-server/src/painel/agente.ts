@@ -2,7 +2,14 @@ import type { Colaborador } from "@workspace/db";
 import { VIDA_AGENT_IDS as VIDA_CONST } from "@workspace/ringover";
 import { env } from "../lib/env.js";
 import { listDevolucoesPendentes } from "../storage/devolucoes-repo.js";
-import { listTicketsEmRisco, urlsDeTickets, type TicketEmRisco } from "./tickets-risco.js";
+import {
+  listTicketsEmRisco,
+  numerosDeTickets,
+  ticketsAbertosPorFingerprint,
+  urlsDeTickets,
+  type TicketDoCliente,
+  type TicketEmRisco,
+} from "./tickets-risco.js";
 import { loadPendingFollowUps } from "./followups-query.js";
 import {
   listAcoesDoAgente,
@@ -275,6 +282,13 @@ async function montarTarefas(b: {
   // beats no panel.
   const urlPorTicket = await urlsDeTickets(ticketIds).catch(() => new Map<string, string>());
 
+  // The number on every row. A failure only costs the number, never the row:
+  // the screen then says "Sem ticket", which is what it said before.
+  const [numeroPorTicket, ticketPorFingerprint] = await Promise.all([
+    numerosDeTickets(ticketIds).catch(() => new Map<string, string>()),
+    ticketsAbertosPorFingerprint(porIdentificar).catch(() => new Map<string, TicketDoCliente>()),
+  ]);
+
   const todas = derivarTarefas({
     devolucoes,
     followUps,
@@ -285,6 +299,8 @@ async function montarTarefas(b: {
     chamadas: evidencias.chamadas,
     respostas: evidencias.respostas,
     urlPorTicket,
+    numeroPorTicket,
+    ticketPorFingerprint,
     now: new Date(),
   });
 
