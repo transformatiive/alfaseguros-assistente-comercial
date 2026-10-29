@@ -347,7 +347,23 @@ const PREAMBULOS = [
   /^agendar uma tarefa para\s*/i,
 ];
 
+/**
+ * "Recado para Cármen: devolver a chamada…" — o recado que o operador passou a
+ * um colega. Devolve o nome do colega, ou null.
+ *
+ * A análise escreve assim desde 30/10/2026. Um recado é uma promessa como as
+ * outras e sai da mesma maneira — o cliente atende uma chamada, ou alguém lhe
+ * responde no ticket — mas o título diz a quem foi passado, porque é isso que
+ * quem o passou tem de confirmar.
+ */
+export function colegaDoRecado(descricao: string | null | undefined): string | null {
+  const m = /^\s*(?:\*\*)?recado\s+para\s+(?:o\s+|a\s+)?([\p{L}][\p{L}\s.'-]{0,40}?)(?:\*\*)?\s*:/iu.exec(descricao ?? "");
+  return m ? m[1].trim() : null;
+}
+
 export function resumirPromessa(descricao: string, maximo = 72): string {
+  const colega = colegaDoRecado(descricao);
+  if (colega) return `Confirmar que ${colega} tratou o recado`;
   let t = descricao.trim();
   for (const p of PREAMBULOS) t = t.replace(p, "");
 
