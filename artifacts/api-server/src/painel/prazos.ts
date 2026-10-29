@@ -128,6 +128,8 @@ function dataCurta(dia: string, d: number, m: number, ano?: number): string | nu
 
 type Regra = {
   re: RegExp;
+  /** Só no texto da promessa, e só depois de um verbo de ação na mesma frase. */
+  soNaPromessa?: boolean;
   ler: (m: RegExpExecArray, dia: string) => Date | null;
   /** Que parte da hora o texto diz. Sem isto, só o dia. */
   hora?: (m: RegExpExecArray) => HoraDoPrazo;
@@ -158,13 +160,42 @@ const MESES: Record<string, number> = {
 };
 const MES_RE = "(janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)";
 
-/** O último dia do mês `m` (1-12), no ano que faz sentido a partir de `dia`. */
+/** O último dia do mês `m` (1-12): deste ano, ou do próximo se já passou. */
 function ultimoDiaDoMes(dia: string, m: number): string | null {
-  const primeiro = dataCurta(dia, 1, m);
-  if (!primeiro) return null;
-  const [y, mm] = primeiro.split("-").map(Number);
-  const ultimo = new Date(Date.UTC(y, mm, 0)).getUTCDate();
-  return `${y}-${String(mm).padStart(2, "0")}-${String(ultimo).padStart(2, "0")}`;
+  if (m < 1 || m > 12) return null;
+  const ultimoDe = (y: number) =>
+    `${y}-${String(m).padStart(2, "0")}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, "0")}`;
+  const y = anoDe(dia);
+  const este = ultimoDe(y);
+  return este < dia ? ultimoDe(y + 1) : este;
+}
+
+/**
+ * Verbos que dizem que a frase é uma ação nossa. As regras das datas
+ * marcadas pelo cliente só valem quando um destes aparece antes da data, na
+ * mesma frase: "Contactar o Sr. Costa a partir de 17/11" sim, "O seguro
+ * começa a partir de 01/01" não.
+ */
+const ACAO_ANTES =
+  /\b(?:contactar|ligar|telefonar|voltar\s+a|enviar|reenviar|confirmar|agendar|marcar|falar|responder|remeter|enviar|recolher|preparar|acompanhar|verificar|tratar|reunir|devolver|retomar|rever|apresentar|fechar|emitir|pedir|solicitar|lembrar|relembrar)\b/i;
+
+/**
+ * O que vem antes da posição `indice`, desde o início da frase. Um ponto a
+ * seguir a uma palavra curta ("Sr.", "Dra.", "n.") é uma abreviatura, não o
+ * fim da frase.
+ */
+function fraseAte(texto: string, indice: number): string {
+  const antes = texto.slice(0, indice);
+  let corte = -1;
+  for (const m of antes.matchAll(/[.;!?\n]/g)) {
+    const i = m.index ?? 0;
+    if (m[0] === ".") {
+      const palavra = /([\p{L}]+)$/u.exec(antes.slice(0, i))?.[1] ?? "";
+      if (palavra.length > 0 && palavra.length <= 3) continue;
+    }
+    corte = i;
+  }
+  return antes.slice(corte + 1);
 }
 
 const REGRAS: Regra[] = [
@@ -255,11 +286,18 @@ const REGRAS: Regra[] = [
   // As datas que o cliente marca. "a partir de 17 de novembro" quer dizer que
   // antes disso não há nada a fazer: o prazo é esse dia, e até lá a linha não
   // está em atraso (o #178260 do Tiago aparecia com 29 dias de atraso).
+  //
+  // Estas regras só se leem no texto da promessa, e só quando a frase pede
+  // uma ação nossa antes da data ("Contactar … a partir de 17/11"). Numa
+  // mensagem de ticket, ou numa frase que conta o que aconteceu ("No dia 03/09
+  // o cliente ligou", "o seguro começa a partir de 01/01"), estas palavras
+  // descrevem o passado ou o início de uma apólice, e não um prazo.
 
   // "a partir de 17 de novembro", "até 3 de outubro", "no dia 5 de dezembro de 2026"
   {
+    soNaPromessa: true,
     re: new RegExp(
-      `(?:at[ée]|a\\s+partir\\s+d[eo]|depois\\s+d[eo]|ap[óo]s|antes\\s+d[eo]|no\\s+dia|para\\s+o\\s+dia)\\s+(?:(?:o|ao)\\s+)?(?:dia\\s+)?(\\d{1,2})\\s+de\\s+${MES_RE}(?:\\s+de\\s+(\\d{4}))?`,
+      `(?:at[ée]|a\\s+partir\\s+d[eo]|depois\\s+d[eo]|ap[óo]s|no\\s+dia|para\\s+o\\s+dia)\\s+(?:(?:o|ao)\\s+)?(?:dia\\s+)?(\\d{1,2})\\s+de\\s+${MES_RE}(?:\\s+de\\s+(\\d{4}))?`,
       "gi",
     ),
     ler: (m, dia) => {
@@ -269,18 +307,22 @@ const REGRAS: Regra[] = [
       return d ? lisbonInstant(d, FIM_DO_DIA) : null;
     },
   },
-  // "a partir de 17/11", "depois do dia 17/11", "no dia 17/11", "antes de 30/10"
+  // "a partir de 17/11", "depois do dia 17/11", "no dia 17/11". Só com "/":
+  // "depois de 1.5 anos" e "após 2/3 dias" não são datas.
   {
-    re: /(?:a\s+partir\s+d[eo]|depois\s+d[eo]|ap[óo]s|antes\s+d[eo]|no\s+dia|para\s+o\s+dia)\s+(?:(?:o|ao)\s+)?(?:dia\s+)?(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2,4}))?/gi,
+    soNaPromessa: true,
+    re: /(?:a\s+partir\s+d[eo]|depois\s+d[eo]|ap[óo]s|no\s+dia|para\s+o\s+dia)\s+(?:(?:o|ao)\s+)?(?:dia\s+)?(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?(?!\d|\s*(?:dias?|horas?|anos?|meses|m[êe]s|semanas?)\b)/gi,
     ler: (m, dia) => {
       const d = dataCurta(dia, +m[1], +m[2], m[3] ? +m[3] : undefined);
       return d ? lisbonInstant(d, FIM_DO_DIA) : null;
     },
   },
   // "na quarta-feira às 15h30", "na segunda-feira de manhã", "no sábado".
-  // Pede "-feira" nos dias úteis: "na segunda chamada" não é uma data.
+  // Pede "-feira" nos dias úteis ("na segunda chamada" não é uma data) e
+  // "às"/"as" com o s ("a 5 de novembro" não é uma hora).
   {
-    re: /\b(?:na|no)\s+(?:pr[óo]xim[ao]\s+)?(?:(segunda|ter[cç]a|quarta|quinta|sexta)[-\s]feira|(s[áa]bado|domingo))(\s+de\s+manh[ãa])?(?:\s+[àa]s?\s+(\d{1,2})(?:[h:](\d{2}))?\s*h?)?/gi,
+    soNaPromessa: true,
+    re: /\b(?:na|no)\s+(?:pr[óo]xim[ao]\s+)?(?:(segunda|ter[cç]a|quarta|quinta|sexta)[-\s]feira|(s[áa]bado|domingo))(?!\s+(?:passad|anterior))(\s+de\s+manh[ãa])?(?:\s+[àa]s\s+(\d{1,2})(?:[h:]([0-5]\d))?\s*h?)?/gi,
     hora: (m) => (m[4] ? "combinada" : m[3] ? "manha" : "dia"),
     ler: (m, dia) => {
       const alvo = DIAS_DA_SEMANA[(m[1] ?? m[2]).toLowerCase()];
@@ -294,19 +336,22 @@ const REGRAS: Regra[] = [
       return lisbonInstant(d, m[3] ? FIM_DA_MANHA : FIM_DO_DIA);
     },
   },
-  // "na próxima semana", "na semana seguinte", "para a semana"
+  // "na próxima semana", "na semana seguinte"
   {
-    re: /(?:na\s+pr[óo]xima\s+semana|na\s+semana\s+seguinte|para\s+a\s+semana\b)/gi,
+    soNaPromessa: true,
+    re: /(?:na\s+pr[óo]xima\s+semana|na\s+semana\s+seguinte)/gi,
     ler: (_m, dia) => lisbonInstant(sextaDaSemana(somarDias(dia, 7)), FIM_DO_DIA),
   },
-  // "até ao final do mês", "antes do final de outubro", "até ao fim de novembro"
+  // "até ao final do mês", "antes do final de outubro", "até ao fim do mês de novembro"
   {
+    soNaPromessa: true,
     re: new RegExp(
-      `(?:at[ée]|antes)\\s+(?:(?:ao|do|da|o|a)\\s+)?(?:final|fim)\\s+d[oe]\\s+(?:(m[êe]s)|${MES_RE})`,
+      `(?:at[ée]|antes)\\s+(?:(?:ao|do|da|o|a)\\s+)?(?:final|fim)\\s+d[oe]\\s+(?:m[êe]s\\s+de\\s+${MES_RE}|${MES_RE}|(m[êe]s))`,
       "gi",
     ),
     ler: (m, dia) => {
-      const mes = m[1] ? Number(dia.slice(5, 7)) : MESES[(m[2] ?? "").toLowerCase()];
+      const nome = m[1] ?? m[2];
+      const mes = nome ? MESES[nome.toLowerCase()] : Number(dia.slice(5, 7));
       if (!mes) return null;
       const d = ultimoDiaDoMes(dia, mes);
       return d ? lisbonInstant(d, FIM_DO_DIA) : null;
@@ -326,14 +371,16 @@ const REGRAS: Regra[] = [
 export function lerPrazoEscrito(
   texto: string | null | undefined,
   referencia: Date,
+  opcoes: { promessa?: boolean } = {},
 ): Date | null {
-  return lerPrazoComHora(texto, referencia)?.quando ?? null;
+  return lerPrazoComHora(texto, referencia, opcoes)?.quando ?? null;
 }
 
 /** O mesmo que `lerPrazoEscrito`, dizendo também se havia hora. */
 export function lerPrazoComHora(
   texto: string | null | undefined,
   referencia: Date,
+  opcoes: { promessa?: boolean } = {},
 ): { quando: Date; hora: HoraDoPrazo } | null {
   const t = (texto ?? "").trim();
   if (!t) return null;
@@ -341,8 +388,12 @@ export function lerPrazoComHora(
 
   let melhor: Achado | null = null;
   for (const regra of REGRAS) {
+    if (regra.soNaPromessa && !opcoes.promessa) continue;
     regra.re.lastIndex = 0;
-    const m = regra.re.exec(t);
+    let m = regra.re.exec(t);
+    // A primeira ocorrência numa frase sem verbo de ação não conta, mas a
+    // seguinte pode contar.
+    while (m && regra.soNaPromessa && !ACAO_ANTES.test(fraseAte(t, m.index))) m = regra.re.exec(t);
     if (!m) continue;
     const quando = regra.ler(m, dia);
     if (!quando || Number.isNaN(quando.getTime())) continue;
@@ -406,6 +457,8 @@ export function prazoInferido(tipo: TipoDeEspera, desde: Date): { quando: Date; 
 export interface PedidoDePrazo {
   /** The promise, or the ticket thread. Where a date might be written. */
   texto?: string | null;
+  /** `texto` é o que o agente prometeu na chamada, e não o assunto de um ticket. */
+  textoEPromessa?: boolean;
   /**
    * Mensagens do ticket, cada uma com o dia em que foi escrita, a mais
    * recente primeiro. Lidas antes de `texto`: o que ficou combinado por
@@ -437,7 +490,7 @@ export function derivarPrazo(p: PedidoDePrazo): Prazo {
     };
   }
 
-  const escrito = lerPrazoComHora(p.texto, p.referencia);
+  const escrito = lerPrazoComHora(p.texto, p.referencia, { promessa: p.textoEPromessa });
   if (escrito) {
     return {
       quando: escrito.quando.toISOString(),

@@ -357,7 +357,9 @@ const PREAMBULOS = [
  * quem o passou tem de confirmar.
  */
 export function colegaDoRecado(descricao: string | null | undefined): string | null {
-  const m = /^\s*(?:\*\*)?recado\s+para\s+(?:o\s+|a\s+)?([\p{L}][\p{L}\s.'-]{0,40}?)(?:\*\*)?\s*:/iu.exec(descricao ?? "");
+  const m = /^\s*(?:\*\*)?[Rr]ecado\s+para\s+(?:o\s+|a\s+)?(\p{Lu}[\p{L}'-]+(?:\s+\p{Lu}[\p{L}'-]+)?)\s*(?:\*\*)?\s*:/u.exec(
+    descricao ?? "",
+  );
   return m ? m[1].trim() : null;
 }
 
@@ -542,6 +544,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
     // with a number nobody said to anybody.
     const prazo = derivarPrazo({
       texto: f.follow_up_descricao,
+      textoEPromessa: true,
       referencia: detectado,
       desde: detectado,
       tipo: simulacao ? "simulacao_pedida" : "compromisso",
@@ -666,7 +669,11 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
     // answered a week ago and then left is not twenty days late, it is a
     // week late, and saying otherwise makes the oldest row the loudest
     // rather than the most neglected.
-    const desde = nosso?.ultimo ? new Date(nosso.ultimo) : criado;
+    // O mais recente dos dois: num ticket fechado onde o cliente voltou a
+    // escrever, `criado` é a mensagem do cliente, e a nossa última resposta é
+    // de antes do fecho.
+    const desde =
+      nosso?.ultimo && Date.parse(nosso.ultimo) > criado.getTime() ? new Date(nosso.ultimo) : criado;
     const prazo = derivarPrazo({
       mensagens: mensagensPorTicket.get(t.id),
       texto: assunto,

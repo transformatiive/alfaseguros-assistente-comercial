@@ -211,7 +211,18 @@ export function lerContexto(
   const daChamada: TicketDeContexto[] = [];
   const indiretos: TicketDeContexto[] = [];
   for (const t of tickets) {
-    if ((p.linkedTicketId && t.id === p.linkedTicketId) || (t.ticketNumber && citados.has(t.ticketNumber))) {
+    if (t.ticketNumber && citados.has(t.ticketNumber)) {
+      diretos.push(t);
+      continue;
+    }
+    if (p.linkedTicketId && t.id === p.linkedTicketId) {
+      // Os casos ligam a chamada ao ticket com atividade mais perto dela, seja
+      // qual for a idade dele. Um ticket que já estava fechado quando o
+      // cliente ligou é outro assunto, e não pode fechar esta promessa.
+      const criadoLigado = t.createdTime ? Date.parse(t.createdTime) : NaN;
+      if (chamada !== null && !Number.isNaN(criadoLigado) && criadoLigado < chamada && !vivoNaChamada(t, chamada)) {
+        continue;
+      }
       diretos.push(t);
       continue;
     }

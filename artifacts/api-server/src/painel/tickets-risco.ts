@@ -1,6 +1,7 @@
 import { and, asc, eq, gte, inArray, isNull, lt, notInArray, or } from "drizzle-orm";
 import { db, ticketCommentsTable, ticketsTable } from "@workspace/db";
 import { estadoDoNegocio, negocioDecidido, nomeDoNegocio } from "./followups-contexto.js";
+import { logger } from "../lib/logger.js";
 
 /**
  * "Tickets em risco" — open tickets assigned to this agent that have been open
@@ -190,7 +191,13 @@ export async function listTicketsEmRisco(params: {
 
   // Um ticket fechado onde o cliente voltou a escrever é tão trabalho como um
   // aberto. Uma falha aqui não pode esvaziar a lista dos abertos.
-  const reabertos = await listTicketsFechadosComMensagem(params.zid, now).catch(() => []);
+  const reabertos = await listTicketsFechadosComMensagem(params.zid, now).catch((err: unknown) => {
+    logger.warn(
+      { erro: err instanceof Error ? err.message : String(err) },
+      "painel: tickets fechados com mensagem do cliente indisponíveis",
+    );
+    return [];
+  });
   return [...abertos, ...reabertos];
 }
 
@@ -202,6 +209,22 @@ export interface MensagemDoTicket {
   quando: Date;
   autorTipo: string | null;
   direcao: string | null;
+  texto?: string | null;
+}
+
+/** Respostas automáticas e de cortesia: não pedem nada a ninguém. */
+const SEM_PEDIDO =
+  /(resposta autom[áa]tica|automatic reply|auto[- ]?reply|out of office|fora do escrit[óo]rio|ausente|de f[ée]rias|n[ãa]o se encontra dispon[íi]vel)/i;
+const CORTESIA = /^\W*(muito\s+)?(obrigad[oa]s?|grat[oa]|ok|recebid[oa]|recebi|bom dia|boa tarde|cumprimentos)\b/i;
+
+/** A mensagem do cliente pede alguma coisa? Uma curta de agradecimento não pede. */
+function pedeAlgo(m: MensagemDoTicket, fechadoEm: Date): boolean {
+  // Segundos depois do email de fecho é uma resposta automática.
+  if (m.quando.getTime() - fechadoEm.getTime() < 10 * 60_000) return false;
+  const texto = (m.texto ?? "").trim();
+  if (SEM_PEDIDO.test(texto)) return false;
+  if (texto.length < 120 && CORTESIA.test(texto)) return false;
+  return true;
 }
 
 /**
@@ -223,7 +246,7 @@ export function clienteEscreveuDepoisDeFechar(
     const autor = (m.autorTipo ?? "").toUpperCase();
     const direcao = (m.direcao ?? "").toLowerCase();
     if (autor === "END_USER") {
-      doCliente ??= m.quando;
+      if (pedeAlgo(m, fechadoEm)) doCliente ??= m.quando;
     } else if (autor === "AGENT" && direcao !== "in" && doCliente) {
       // Respondemos depois de o cliente escrever: já não é trabalho por fazer.
       doCliente = null;
@@ -240,7 +263,16 @@ export function clienteEscreveuDepoisDeFechar(
 async function listTicketsFechadosComMensagem(zid: string, now: Date): Promise<TicketEmRisco[]> {
   const desde = new Date(now.getTime() - DIAS_DEPOIS_DE_FECHAR * 86_400_000);
   const fechados = await db
-    .select()
+    .select({
+      id: ticketsTable.id,
+      ticketNumber: ticketsTable.ticketNumber,
+      subject: ticketsTable.subject,
+      status: ticketsTable.status,
+      closedTime: ticketsTable.closedTime,
+      contactName: ticketsTable.contactName,
+      contactPhone: ticketsTable.contactPhone,
+      rawJson: ticketsTable.rawJson,
+    })
     .from(ticketsTable)
     .where(
       and(
@@ -258,6 +290,7 @@ async function listTicketsFechadosComMensagem(zid: string, now: Date): Promise<T
       quando: ticketCommentsTable.commentedTime,
       autorTipo: ticketCommentsTable.authorType,
       direcao: ticketCommentsTable.direction,
+      texto: ticketCommentsTable.contentSanitized,
     })
     .from(ticketCommentsTable)
     .where(inArray(ticketCommentsTable.ticketId, candidatos.map((t) => t.id)));
@@ -265,7 +298,7 @@ async function listTicketsFechadosComMensagem(zid: string, now: Date): Promise<T
   for (const m of mensagens) {
     if (!m.quando) continue;
     const lista = porTicket.get(m.ticketId) ?? [];
-    lista.push({ quando: m.quando, autorTipo: m.autorTipo, direcao: m.direcao });
+    lista.push({ quando: m.quando, autorTipo: m.autorTipo, direcao: m.direcao, texto: m.texto });
     porTicket.set(m.ticketId, lista);
   }
 

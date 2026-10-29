@@ -20,6 +20,14 @@ const TELEFONE_DO_TICKET_SQL = sql`right(regexp_replace(coalesce(${ticketsTable.
 /** O email do ticket ou do contacto, em minúsculas, em SQL. Igual a `emailDoTicket`. */
 const EMAIL_DO_TICKET_SQL = sql`lower(coalesce(nullif(trim(${ticketsTable.rawJson}->>'email'), ''), trim(${ticketsTable.rawJson}->'contact'->>'email')))`;
 
+function emailDoContacto(rawJson: unknown): string | null {
+  if (!rawJson || typeof rawJson !== "object") return null;
+  const contacto = (rawJson as Record<string, unknown>).contact;
+  if (!contacto || typeof contacto !== "object") return null;
+  const e = (contacto as Record<string, unknown>).email;
+  return typeof e === "string" && e.trim() ? e.trim().toLowerCase() : null;
+}
+
 const COLUNAS_DO_TICKET = {
   id: ticketsTable.id,
   ticketNumber: ticketsTable.ticketNumber,
@@ -128,7 +136,9 @@ export async function carregarContextoDosFollowUps(
   const emailsPorFingerprint = new Map<string, Set<string>>();
   for (const t of primeiros) {
     if (deOutroDepartamento(t.rawJson) || !t.phoneFingerprint) continue;
-    const email = emailDoTicket(t.rawJson)?.toLowerCase();
+    // O email do contacto, e não o do ticket: num formulário o campo do
+    // ticket pode ter o endereço de quem o preencheu.
+    const email = emailDoContacto(t.rawJson);
     if (!email) continue;
     const set = emailsPorFingerprint.get(t.phoneFingerprint) ?? new Set<string>();
     set.add(email);

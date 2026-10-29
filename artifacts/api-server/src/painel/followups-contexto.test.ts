@@ -267,6 +267,32 @@ describe("lerContexto: tickets abertos antes da chamada (Tiago, 28/10)", () => {
     expect(ctx.fechadoPor).toBeNull();
   });
 
+  it("o ticket ligado pelos casos, já fechado antes da chamada, não fecha a promessa", () => {
+    const fp = "911111111";
+    const ctx = lerContexto(
+      { linkedTicketId: "velho", descricao: "Enviar simulação casa.", fingerprint: fp, zidDoAgente: TIAGO,
+        chamadaEm: "2026-09-10T09:00:00.000Z" },
+      [ticket({ id: "velho", statusType: "Closed", phoneFingerprint: fp, createdTime: "2026-08-20T09:00:00.000Z",
+        closedTime: "2026-09-05T09:00:00.000Z" })],
+    );
+    expect(ctx.fechadoPor).toBeNull();
+    expect(ctx.relacionados).toEqual([]);
+  });
+
+  it("um ticket do próprio dia, antes da chamada e de outra pessoa, já não muda a promessa de painel", () => {
+    // Mudança deliberada (30/10/2026): antes contava a partir das 00:00 do dia
+    // da chamada, mesmo sendo de outro agente.
+    const fp = "911111111";
+    const ctx = lerContexto(
+      { linkedTicketId: null, descricao: "Ligar.", fingerprint: fp, zidDoAgente: TIAGO,
+        chamadaEm: "2026-09-03T15:00:00.000Z" },
+      [ticket({ id: "manha", statusType: "Open", assigneeId: VANIA, phoneFingerprint: fp,
+        createdTime: "2026-09-03T08:00:00.000Z" })],
+    );
+    expect(ctx.relacionados).toEqual([]);
+    expect(ctx.dono).toBeNull();
+  });
+
   it("mais de 60 dias antes da chamada não conta, mesmo aberto", () => {
     const fp = "911111111";
     const ctx = lerContexto(

@@ -125,10 +125,11 @@ describe("telefoneDoTicket", () => {
 
 describe("clienteEscreveuDepoisDeFechar", () => {
   const fechou = new Date("2026-10-10T10:00:00Z");
-  const msg = (iso: string, autorTipo: string, direcao: string | null) => ({
+  const msg = (iso: string, autorTipo: string, direcao: string | null, texto = "Podem enviar-me a apólice?") => ({
     quando: new Date(iso),
     autorTipo,
     direcao,
+    texto,
   });
 
   it("o cliente escreveu depois do fecho e ninguém respondeu: volta ao painel", () => {
@@ -160,6 +161,20 @@ describe("clienteEscreveuDepoisDeFechar", () => {
 
   it("mensagens do cliente antes do fecho não contam", () => {
     expect(clienteEscreveuDepoisDeFechar(fechou, [msg("2026-10-09T09:00:00Z", "END_USER", "in")])).toBeNull();
+  });
+
+  it("respostas automáticas e agradecimentos não trazem o ticket de volta", () => {
+    expect(
+      clienteEscreveuDepoisDeFechar(fechou, [msg("2026-10-10T10:00:30Z", "END_USER", "in")]),
+    ).toBeNull();
+    expect(
+      clienteEscreveuDepoisDeFechar(fechou, [
+        msg("2026-10-12T09:00:00Z", "END_USER", "in", "Resposta automática: estou fora do escritório até dia 20."),
+      ]),
+    ).toBeNull();
+    expect(
+      clienteEscreveuDepoisDeFechar(fechou, [msg("2026-10-12T09:00:00Z", "END_USER", "in", "Muito obrigado, recebi.")]),
+    ).toBeNull();
   });
 
   it("sem mensagens, nada", () => {
