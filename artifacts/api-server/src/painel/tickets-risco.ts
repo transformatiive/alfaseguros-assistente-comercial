@@ -185,3 +185,75 @@ export async function urlsDeTickets(ids: readonly string[]): Promise<Map<string,
   for (const r of rows) mapa.set(r.id, urlDoDesk(r.id, r.rawJson));
   return mapa;
 }
+
+/**
+ * Desk ticket numbers for a set of ticket ids.
+ *
+ * Some rows know their ticket only by id — a missed call matched to a ticket,
+ * a promise the cases linked — and the agent finds a process in Desk by its
+ * number, not by an id nobody sees.
+ */
+export async function numerosDeTickets(ids: readonly string[]): Promise<Map<string, string>> {
+  const unicos = [...new Set(ids)].filter(Boolean);
+  if (unicos.length === 0) return new Map();
+
+  const rows = await db
+    .select({ id: ticketsTable.id, ticketNumber: ticketsTable.ticketNumber })
+    .from(ticketsTable)
+    .where(inArray(ticketsTable.id, unicos));
+
+  const mapa = new Map<string, string>();
+  for (const r of rows) if (r.ticketNumber) mapa.set(r.id, r.ticketNumber);
+  return mapa;
+}
+
+/** The customer's open process in Desk, for a row that has no ticket of its own. */
+export interface TicketDoCliente {
+  id: string;
+  numero: string;
+  url: string;
+}
+
+/**
+ * The most recent open ticket for each phone fingerprint.
+ *
+ * Used only to *show* which process a row belongs to — never to close a task
+ * or to decide whose panel it is on. A promise made on a call is usually about
+ * a ticket the customer already had open before ringing, and the call-to-ticket
+ * window (which starts on the day of the call) cannot see that one.
+ *
+ * "Open" is the same rule as the panel's ticket list: not closed or deleted,
+ * and the business not already decided.
+ */
+export async function ticketsAbertosPorFingerprint(
+  fingerprints: readonly string[],
+): Promise<Map<string, TicketDoCliente>> {
+  const unicos = [...new Set(fingerprints)].filter(Boolean);
+  if (unicos.length === 0) return new Map();
+
+  const rows = await db
+    .select({
+      id: ticketsTable.id,
+      ticketNumber: ticketsTable.ticketNumber,
+      fp: ticketsTable.phoneFingerprint,
+      rawJson: ticketsTable.rawJson,
+      customFieldsJson: ticketsTable.customFieldsJson,
+    })
+    .from(ticketsTable)
+    .where(
+      and(
+        inArray(ticketsTable.phoneFingerprint, unicos),
+        or(notInArray(ticketsTable.statusType, ["Closed", ESTADO_APAGADO]), isNull(ticketsTable.statusType)),
+      ),
+    )
+    // Oldest first, so the last write wins and each number keeps its newest ticket.
+    .orderBy(asc(ticketsTable.createdTime));
+
+  const mapa = new Map<string, TicketDoCliente>();
+  for (const r of rows) {
+    if (!r.fp || !r.ticketNumber) continue;
+    if (negocioDecidido(estadoDoNegocio(r.customFieldsJson))) continue;
+    mapa.set(r.fp, { id: r.id, numero: r.ticketNumber, url: urlDoDesk(r.id, r.rawJson) });
+  }
+  return mapa;
+}

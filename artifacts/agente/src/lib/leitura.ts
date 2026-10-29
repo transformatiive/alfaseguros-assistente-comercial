@@ -34,21 +34,29 @@ export function comoSai(categoria: CategoriaTarefa): string | null {
 }
 
 /**
- * De onde vem a tarefa: "Chamada de 03/09 às 15:27 · Ticket #173005".
+ * De onde vem a tarefa: "Chamada de 03/09 às 15:27".
  *
  * Uma promessa sem a data da chamada obriga o agente a adivinhar de que
- * conversa se fala; sem o ticket, a procurá-lo no Desk à mão.
+ * conversa se fala. O número do ticket já não vive aqui: tem o seu próprio
+ * lugar, no início da linha (`numeroDoTicket`).
  */
-export function origemDaTarefa(t: { chamadaEm: string | null; ticketNumero: string | null }): string | null {
-  const partes: string[] = [];
-  if (t.chamadaEm) {
-    const d = new Date(t.chamadaEm);
-    const dia = d.toLocaleDateString("pt-PT", { day: "2-digit", month: "2-digit", timeZone: LISBOA });
-    const hora = d.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit", timeZone: LISBOA });
-    partes.push(`Chamada de ${dia} às ${hora}`);
-  }
-  if (t.ticketNumero) partes.push(`Ticket #${t.ticketNumero}`);
-  return partes.length > 0 ? partes.join(" · ") : null;
+export function origemDaTarefa(t: { chamadaEm: string | null }): string | null {
+  if (!t.chamadaEm) return null;
+  const d = new Date(t.chamadaEm);
+  const dia = d.toLocaleDateString("pt-PT", { day: "2-digit", month: "2-digit", timeZone: LISBOA });
+  const hora = d.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit", timeZone: LISBOA });
+  return `Chamada de ${dia} às ${hora}`;
+}
+
+/**
+ * O processo a que a linha se refere, como no Desk: "#185106".
+ *
+ * Todas as linhas dizem o seu número, porque é por ele que a equipa encontra o
+ * processo. Sem ticket, diz-se "Sem ticket" — um espaço em branco não distingue
+ * "não há" de "não carregou".
+ */
+export function numeroDoTicket(t: { ticketNumero: string | null }): string {
+  return t.ticketNumero ? `#${t.ticketNumero}` : "Sem ticket";
 }
 
 /** O que a tarefa é, numa linha pequena por cima do título. */

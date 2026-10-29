@@ -39,7 +39,7 @@ import {
   type TipoDeProva,
 } from "./evidencia.js";
 import { derivarPrazo, type HoraDoPrazo, type OrigemPrazo, type TipoDeEspera } from "./prazos.js";
-import { urlDoDesk } from "./tickets-risco.js";
+import { urlDoDesk, type TicketDoCliente } from "./tickets-risco.js";
 
 export type CategoriaTarefa =
   | "devolver_chamada"
@@ -190,12 +190,46 @@ export interface EntradaTarefas {
    * reach it. Absent ids fall back to the built URL; see `urlDoDesk`.
    */
   urlPorTicket?: ReadonlyMap<string, string>;
+  /** Ticket id → the number Desk shows, for rows that know only the id. */
+  numeroPorTicket?: ReadonlyMap<string, string>;
+  /**
+   * Last 9 digits → the customer's most recent open ticket. Only for showing
+   * the number on a row that has no ticket of its own; it never closes a task.
+   */
+  ticketPorFingerprint?: ReadonlyMap<string, TicketDoCliente>;
   now: Date;
 }
 
 /** Desk's own link when we have it, a built one when we do not. */
 function linkDoTicket(ticketId: string, entrada: EntradaTarefas): string {
   return entrada.urlPorTicket?.get(ticketId) ?? urlDoDesk(ticketId);
+}
+
+/**
+ * The ticket number and link a row shows.
+ *
+ * Every row should name its process, because that is how the team finds it in
+ * Desk. In order: the number the row already carries, the number of the ticket
+ * it is linked to, and — only when it has neither — the customer's most recent
+ * open ticket by phone. Null when the customer has no open ticket at all; the
+ * screen then says "Sem ticket" rather than leaving a blank.
+ */
+function ticketDaLinha(
+  linha: { numero?: string | null; ticketId: string | null; telefone: string | null },
+  entrada: EntradaTarefas,
+): { numero: string | null; deskUrl: string | null } {
+  if (linha.ticketId) {
+    return {
+      numero: linha.numero ?? entrada.numeroPorTicket?.get(linha.ticketId) ?? null,
+      deskUrl: linkDoTicket(linha.ticketId, entrada),
+    };
+  }
+  if (linha.numero) return { numero: linha.numero, deskUrl: null };
+  const fp = impressaoDigital(linha.telefone);
+  const doCliente = fp ? entrada.ticketPorFingerprint?.get(fp) : undefined;
+  return doCliente
+    ? { numero: doCliente.numero, deskUrl: doCliente.url }
+    : { numero: null, deskUrl: null };
 }
 
 /* ── Regras de classificação ────────────────────────────────────────────── */
@@ -434,6 +468,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       tipo: "primeira_resposta",
       agora: entrada.now,
     });
+    const ticket = ticketDaLinha({ ticketId: d.ticketId, telefone: d.numeroCliente }, entrada);
     out.push({
       id: `dev_${d.ids[0]}`,
       categoria: "devolver_chamada",
@@ -449,14 +484,14 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       prazoPorque: prazo.porque,
       desde: inicio.toISOString(),
       chamadaEm: null,
-      ticketNumero: null,
+      ticketNumero: ticket.numero,
       cadeia: null,
       porqueAberta: null,
       esperaHoras: horasEntre(inicio, entrada.now),
       estado: null,
       negocio: null,
       ticketId: d.ticketId,
-      deskUrl: d.ticketId ? linkDoTicket(d.ticketId, entrada) : null,
+      deskUrl: ticket.deskUrl,
       prioridade: "alta",
       devolucaoIds: d.ids,
       atribuicaoOrigem: d.atribuicaoOrigem,
@@ -506,6 +541,10 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       ticketId: f.linked_ticket_id,
     };
     const vencido = Date.parse(prazo.quando) < entrada.now.getTime();
+    const ticket = ticketDaLinha(
+      { numero: f.ticket_numero, ticketId: f.linked_ticket_id, telefone: f.contact_phone },
+      entrada,
+    );
 
     out.push({
       id: f.id,
@@ -521,14 +560,14 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       prazoPorque: prazo.porque,
       desde: inicioDaPromessa,
       chamadaEm: f.chamada_em ?? null,
-      ticketNumero: f.ticket_numero ?? null,
+      ticketNumero: ticket.numero,
       cadeia,
       porqueAberta: porqueContinuaAberta(prova),
       esperaHoras: horasEntre(detectado, entrada.now),
       estado: null,
       negocio: null,
       ticketId: f.linked_ticket_id,
-      deskUrl: f.linked_ticket_id ? linkDoTicket(f.linked_ticket_id, entrada) : null,
+      deskUrl: ticket.deskUrl,
       // Past its deadline is high; still inside it is a normal day's work.
       prioridade: vencido ? "alta" : "media",
       devolucaoIds: null,
@@ -539,6 +578,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
   // 4. Sales that lost momentum. The quality rules are deliberately not here.
   for (const a of entrada.acoes) {
     if (!ehAcaoDeConversa(a.tipo)) continue;
+    const ticket = ticketDaLinha({ ticketId: null, telefone: a.customerPhone }, entrada);
     out.push({
       id: a.id,
       categoria: "retomar_conversa",
@@ -551,14 +591,14 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
       prazoPorque: null,
       desde: null,
       chamadaEm: null,
-      ticketNumero: null,
+      ticketNumero: ticket.numero,
       cadeia: null,
       porqueAberta: null,
       esperaHoras: null,
       estado: null,
       negocio: null,
       ticketId: null,
-      deskUrl: null,
+      deskUrl: ticket.deskUrl,
       prioridade: a.prioridade,
       devolucaoIds: null,
       atribuicaoOrigem: null,

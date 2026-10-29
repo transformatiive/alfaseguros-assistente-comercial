@@ -490,3 +490,124 @@ describe("agruparTarefas", () => {
     expect(grupo.tarefas.map((x) => x.titulo)).toEqual(["Velho", "Menos velho", "Recente"]);
   });
 });
+
+describe("nº do ticket em todas as linhas", () => {
+  const doCliente = new Map([
+    ["912345678", { id: "T-ABERTO", numero: "185106", url: "https://desk/T-ABERTO" }],
+  ]);
+
+  it("a chamada por devolver mostra o nº do ticket a que já está ligada", () => {
+    const [t] = derivarTarefas(
+      entrada({
+        devolucoes: [
+          {
+            ids: [7],
+            numeroCliente: "351912345678",
+            tentativas: 1,
+            primeiraChamada: "2026-08-29T08:00:00.000Z",
+            contexto: null,
+            ticketId: "T-LIGADO",
+            atribuicaoOrigem: "ticket",
+          },
+        ],
+        numeroPorTicket: new Map([["T-LIGADO", "184349"]]),
+        ticketPorFingerprint: doCliente,
+      }),
+    );
+    // O ticket ligado manda, mesmo havendo outro aberto do mesmo cliente.
+    expect(t.ticketNumero).toBe("184349");
+    expect(t.ticketId).toBe("T-LIGADO");
+    expect(t.deskUrl).toContain("T-LIGADO");
+  });
+
+  it("sem ticket ligado, usa o ticket aberto do cliente pelo telefone, só para mostrar", () => {
+    const [t] = derivarTarefas(
+      entrada({
+        followUps: [
+          {
+            id: "conv_9",
+            contact_phone: "+351 912 345 678",
+            contact_email: null,
+            follow_up_descricao: "Ligar à cliente para confirmar a receção da apólice.",
+            follow_up_sla_hours: 24,
+            linked_ticket_id: null,
+            product: null,
+            detected_at: "2026-08-28T10:00:00.000Z",
+            ticket_numero: null,
+          },
+        ],
+        ticketPorFingerprint: doCliente,
+      }),
+    );
+    expect(t.ticketNumero).toBe("185106");
+    expect(t.deskUrl).toBe("https://desk/T-ABERTO");
+    // Não passa a contar como ligada: a prova que fecha a tarefa não muda.
+    expect(t.ticketId).toBeNull();
+  });
+
+  it("a conversa por retomar também mostra o ticket do cliente", () => {
+    const [t] = derivarTarefas(
+      entrada({
+        acoes: [
+          {
+            id: "a1",
+            tipo: "risco_perda_lead",
+            prioridade: "media",
+            titulo: "Retomar a conversa sobre o seguro de saúde",
+            descricao: "O cliente ficou de pensar.",
+            customerPhone: "351912345678",
+            contactName: null,
+          },
+        ],
+        ticketPorFingerprint: doCliente,
+      }),
+    );
+    expect(t.categoria).toBe("retomar_conversa");
+    expect(t.ticketNumero).toBe("185106");
+    expect(t.deskUrl).toBe("https://desk/T-ABERTO");
+  });
+
+  it("sem ticket nenhum, o nº fica vazio e não aparece um link inventado", () => {
+    const [t] = derivarTarefas(
+      entrada({
+        devolucoes: [
+          {
+            ids: [8],
+            numeroCliente: "351999999999",
+            tentativas: 1,
+            primeiraChamada: "2026-08-29T08:00:00.000Z",
+            contexto: null,
+            ticketId: null,
+            atribuicaoOrigem: "chamada",
+          },
+        ],
+        ticketPorFingerprint: doCliente,
+      }),
+    );
+    expect(t.ticketNumero).toBeNull();
+    expect(t.deskUrl).toBeNull();
+  });
+
+  it("um nº já conhecido não é trocado pelo ticket do telefone", () => {
+    const [t] = derivarTarefas(
+      entrada({
+        followUps: [
+          {
+            id: "conv_10",
+            contact_phone: "351912345678",
+            contact_email: null,
+            follow_up_descricao: "Confirmar o envio do formulário.",
+            follow_up_sla_hours: 24,
+            linked_ticket_id: "T-X",
+            product: null,
+            detected_at: "2026-08-28T10:00:00.000Z",
+            ticket_numero: "170402",
+          },
+        ],
+        numeroPorTicket: new Map([["T-X", "999999"]]),
+        ticketPorFingerprint: doCliente,
+      }),
+    );
+    expect(t.ticketNumero).toBe("170402");
+  });
+});
