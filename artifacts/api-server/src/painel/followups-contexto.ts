@@ -35,6 +35,14 @@ export interface TicketDeContexto {
   createdTime: string | null;
   /** ISO. Só quando está fechado. */
   closedTime: string | null;
+  /**
+   * Últimos nove dígitos do campo "Telefone" do próprio ticket, quando é
+   * diferente do contacto. Nos formulários de parceiros o contacto é o
+   * parceiro e o número do cliente só está aqui.
+   */
+  telefoneDoTicket?: string | null;
+  /** Email do ticket ou do contacto, em minúsculas. */
+  email?: string | null;
 }
 
 export interface PedidoDeContexto {
@@ -45,6 +53,11 @@ export interface PedidoDeContexto {
   fingerprint: string | null;
   /** ISO da chamada. Sem ela não se procura por telefone. */
   chamadaEm: string | null;
+  /**
+   * Emails que o Desk associa a este número, em minúsculas. Liga os tickets
+   * que chegaram por email, com outro telefone ou nenhum.
+   */
+  emails?: ReadonlySet<string>;
 }
 
 export interface ContextoDoFollowUp {
@@ -66,6 +79,17 @@ export interface ContextoDoFollowUp {
  * É a mesma janela que o linker de casos usa.
  */
 export const DIAS_DE_PROXIMIDADE = 14;
+
+/**
+ * Quantos dias antes da chamada um ticket do mesmo cliente ainda conta.
+ *
+ * Uma chamada é muitas vezes sobre um pedido que já existia: o cliente liga a
+ * pedir um ponto de situação de um formulário de há três semanas. Em Outubro
+ * de 2026, 10 das 21 promessas que o Tiago marcou como erradas tinham o
+ * ticket aberto antes da chamada (o #166416 a 06/08, chamada a 03/09), e o
+ * painel nunca o via.
+ */
+export const DIAS_ANTES_DA_CHAMADA = 60;
 
 /**
  * Estados do negócio que dizem que o assunto está resolvido, mesmo com o
@@ -120,30 +144,65 @@ function quandoFechou(t: TicketDeContexto): number {
   return t.closedTime ? instante(t.closedTime) : Number.MAX_SAFE_INTEGER;
 }
 
+/** O ticket é deste cliente: mesmo telefone (do contacto ou do ticket) ou mesmo email. */
+function doMesmoCliente(p: PedidoDeContexto, t: TicketDeContexto): boolean {
+  if (p.fingerprint && (t.phoneFingerprint === p.fingerprint || t.telefoneDoTicket === p.fingerprint)) {
+    return true;
+  }
+  return !!t.email && !!p.emails && p.emails.has(t.email);
+}
+
+/**
+ * Um ticket aberto antes da chamada só conta se ainda estava vivo quando o
+ * cliente ligou: aberto, ou fechado depois da chamada.
+ *
+ * Um ticket que já estava fechado é um assunto antigo e não pode fechar uma
+ * promessa nova. Um ticket aberto com o negócio já decidido também fica de
+ * fora: não há data da decisão, e não se sabe se ela veio antes da chamada.
+ */
+function vivoNaChamada(t: TicketDeContexto, chamada: number): boolean {
+  const estado = (t.statusType ?? "").toLowerCase();
+  if (estado === "deleted") return false;
+  if (estado === "closed") {
+    const fechou = t.closedTime ? Date.parse(t.closedTime) : NaN;
+    return !Number.isNaN(fechou) && fechou >= chamada;
+  }
+  return !negocioDecidido(t.estadoNegocio);
+}
+
 export function lerContexto(
   p: PedidoDeContexto,
   tickets: readonly TicketDeContexto[],
 ): ContextoDoFollowUp {
   const citados = new Set(numerosCitados(p.descricao));
 
-  // A janela por telefone começa no início do dia da chamada, em Lisboa: o
-  // ticket da própria chamada é aberto pelo n8n depois de ela acabar, mas um
-  // pedido aberto de manhã para uma chamada da tarde é o mesmo assunto.
+  // A janela por contacto tem duas partes. Do início do dia da chamada, em
+  // Lisboa, até 14 dias depois, conta qualquer ticket: o da própria chamada é
+  // aberto pelo n8n depois de ela acabar, e um pedido aberto de manhã para uma
+  // chamada da tarde é o mesmo assunto. Nos 60 dias antes, só os que ainda
+  // estavam vivos quando o cliente ligou.
   let desde: number | null = null;
   let ate: number | null = null;
+  let chamada: number | null = null;
   if (p.chamadaEm && !Number.isNaN(Date.parse(p.chamadaEm))) {
     const dia = toLisbonDate(new Date(p.chamadaEm));
     desde = Date.parse(lisbonDayBoundsISO(dia)[0]);
-    ate = Date.parse(p.chamadaEm) + DIAS_DE_PROXIMIDADE * 86_400_000;
+    chamada = Date.parse(p.chamadaEm);
+    ate = chamada + DIAS_DE_PROXIMIDADE * 86_400_000;
   }
 
   const relacionados = tickets.filter((t) => {
     if (p.linkedTicketId && t.id === p.linkedTicketId) return true;
     if (t.ticketNumber && citados.has(t.ticketNumber)) return true;
-    if (!p.fingerprint || t.phoneFingerprint !== p.fingerprint) return false;
-    if (desde === null || ate === null || !t.createdTime) return false;
+    if (!doMesmoCliente(p, t)) return false;
+    if (desde === null || ate === null || chamada === null || !t.createdTime) return false;
     const criado = Date.parse(t.createdTime);
-    return criado >= desde && criado <= ate;
+    if (Number.isNaN(criado) || criado > ate) return false;
+    if (criado >= desde) return true;
+    // Aberto antes do dia da chamada: conta se o assunto ainda estava vivo
+    // quando o cliente ligou.
+    if (criado < desde - DIAS_ANTES_DA_CHAMADA * 86_400_000) return false;
+    return vivoNaChamada(t, chamada);
   });
 
   const maisRecentePrimeiro = [...relacionados].sort(

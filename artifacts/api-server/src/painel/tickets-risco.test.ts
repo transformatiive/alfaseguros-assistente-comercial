@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { escolherTicketDoCliente, idadeEmHoras, RISCO_THRESHOLD_HOURS, urlDoDesk } from "./tickets-risco.js";
+import {
+  DEPARTAMENTO_360,
+  deOutroDepartamento,
+  escolherTicketDoCliente,
+  idadeEmHoras,
+  RISCO_THRESHOLD_HOURS,
+  telefoneDoTicket,
+  urlDoDesk,
+} from "./tickets-risco.js";
 
 describe("idadeEmHoras", () => {
   const now = new Date("2026-08-28T12:00:00Z");
@@ -85,5 +93,31 @@ describe("escolherTicketDoCliente", () => {
       { ...c("T2", false, 2), fp: null },
     ]);
     expect(m.size).toBe(0);
+  });
+});
+
+describe("deOutroDepartamento", () => {
+  it("a Corporate e a Contratação Pública ficam de fora do painel 360", () => {
+    expect(deOutroDepartamento({ departmentId: "367662000097048676" })).toBe(true);
+    expect(deOutroDepartamento({ departmentId: "367662000128357813" })).toBe(true);
+  });
+
+  it("Alfa Seguros, ou sem departamento conhecido, fica", () => {
+    expect(deOutroDepartamento({ departmentId: DEPARTAMENTO_360 })).toBe(false);
+    expect(deOutroDepartamento({})).toBe(false);
+    expect(deOutroDepartamento(null)).toBe(false);
+  });
+});
+
+describe("telefoneDoTicket", () => {
+  it("lê o campo Telefone do ticket em qualquer formato", () => {
+    expect(telefoneDoTicket({ phone: "+351 939 148 441" })).toBe("939148441");
+    expect(telefoneDoTicket({ phone: "939148441" })).toBe("939148441");
+  });
+
+  it("sem número válido, nada", () => {
+    expect(telefoneDoTicket({ phone: "123" })).toBeNull();
+    expect(telefoneDoTicket({ phone: null })).toBeNull();
+    expect(telefoneDoTicket(undefined)).toBeNull();
   });
 });

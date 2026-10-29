@@ -94,6 +94,32 @@ const DEPARTAMENTOS_DESK: Record<string, string> = {
 };
 const DEPARTAMENTO_POR_OMISSAO = "alfa-seguros";
 
+/** O departamento Alfa Seguros no Desk, onde trabalha a equipa 360. */
+export const DEPARTAMENTO_360 = "367662000000006907";
+
+/**
+ * O ticket é de outro departamento do Desk (Corporate, Contratação Pública).
+ *
+ * O painel é da equipa 360. Um ticket da Corporate não é trabalho de um
+ * agente 360, não segura uma promessa dele, e o botão para lá dá "URL não
+ * encontrado" a quem não tem acesso (o #181742 do Tiago, em Outubro de 2026).
+ * Sem departamento conhecido, o ticket fica: quase todos são do 360.
+ */
+export function deOutroDepartamento(rawJson: unknown): boolean {
+  if (!rawJson || typeof rawJson !== "object") return false;
+  const dep = (rawJson as Record<string, unknown>).departmentId;
+  return typeof dep === "string" && dep !== "" && dep !== DEPARTAMENTO_360;
+}
+
+/** Últimos nove dígitos do campo "Telefone" do próprio ticket. */
+export function telefoneDoTicket(rawJson: unknown): string | null {
+  if (!rawJson || typeof rawJson !== "object") return null;
+  const v = (rawJson as Record<string, unknown>).phone;
+  if (typeof v !== "string") return null;
+  const digitos = v.replace(/\D/g, "");
+  return digitos.length >= 9 ? digitos.slice(-9) : null;
+}
+
 /**
  * Apagado no Desk: está no lixo, ou foi apagado de vez. A API continua a
  * devolvê-lo por id, com o estado que tinha, e por isso ele ficava "aberto"
@@ -139,6 +165,7 @@ export async function listTicketsEmRisco(params: {
     // The `lt` above already excludes nulls, but the column is nullable and
     // the type says so — narrow rather than assert.
     if (!t.createdTime) return [];
+    if (deOutroDepartamento(t.rawJson)) return [];
     // Um negócio GANHO, PERDIDO ou TRATADO já não espera por nós, mesmo que
     // o ticket tenha ficado aberto: a apólice saiu, ou a decisão está tomada.
     const estado = estadoDoNegocio(t.customFieldsJson);
@@ -258,7 +285,7 @@ export async function ticketsDoClientePorFingerprint(
     );
 
   return escolherTicketDoCliente(
-    rows.map((r) => ({
+    rows.filter((r) => !deOutroDepartamento(r.rawJson)).map((r) => ({
       id: r.id,
       numero: r.ticketNumber,
       fp: r.fp,
