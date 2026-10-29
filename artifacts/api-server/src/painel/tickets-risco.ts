@@ -1,6 +1,7 @@
-import { and, asc, eq, inArray, isNull, lt, notInArray, or } from "drizzle-orm";
-import { db, ticketsTable } from "@workspace/db";
+import { and, asc, eq, gte, inArray, isNull, lt, notInArray, or } from "drizzle-orm";
+import { db, ticketCommentsTable, ticketsTable } from "@workspace/db";
 import { estadoDoNegocio, negocioDecidido, nomeDoNegocio } from "./followups-contexto.js";
+import { logger } from "../lib/logger.js";
 
 /**
  * "Tickets em risco" — open tickets assigned to this agent that have been open
@@ -94,6 +95,32 @@ const DEPARTAMENTOS_DESK: Record<string, string> = {
 };
 const DEPARTAMENTO_POR_OMISSAO = "alfa-seguros";
 
+/** O departamento Alfa Seguros no Desk, onde trabalha a equipa 360. */
+export const DEPARTAMENTO_360 = "367662000000006907";
+
+/**
+ * O ticket é de outro departamento do Desk (Corporate, Contratação Pública).
+ *
+ * O painel é da equipa 360. Um ticket da Corporate não é trabalho de um
+ * agente 360, não segura uma promessa dele, e o botão para lá dá "URL não
+ * encontrado" a quem não tem acesso (o #181742 do Tiago, em Outubro de 2026).
+ * Sem departamento conhecido, o ticket fica: quase todos são do 360.
+ */
+export function deOutroDepartamento(rawJson: unknown): boolean {
+  if (!rawJson || typeof rawJson !== "object") return false;
+  const dep = (rawJson as Record<string, unknown>).departmentId;
+  return typeof dep === "string" && dep !== "" && dep !== DEPARTAMENTO_360;
+}
+
+/** Últimos nove dígitos do campo "Telefone" do próprio ticket. */
+export function telefoneDoTicket(rawJson: unknown): string | null {
+  if (!rawJson || typeof rawJson !== "object") return null;
+  const v = (rawJson as Record<string, unknown>).phone;
+  if (typeof v !== "string") return null;
+  const digitos = v.replace(/\D/g, "");
+  return digitos.length >= 9 ? digitos.slice(-9) : null;
+}
+
 /**
  * Apagado no Desk: está no lixo, ou foi apagado de vez. A API continua a
  * devolvê-lo por id, com o estado que tinha, e por isso ele ficava "aberto"
@@ -135,10 +162,11 @@ export async function listTicketsEmRisco(params: {
     )
     .orderBy(asc(ticketsTable.createdTime));
 
-  return rows.flatMap((t) => {
+  const abertos = rows.flatMap((t) => {
     // The `lt` above already excludes nulls, but the column is nullable and
     // the type says so — narrow rather than assert.
     if (!t.createdTime) return [];
+    if (deOutroDepartamento(t.rawJson)) return [];
     // Um negócio GANHO, PERDIDO ou TRATADO já não espera por nós, mesmo que
     // o ticket tenha ficado aberto: a apólice saiu, ou a decisão está tomada.
     const estado = estadoDoNegocio(t.customFieldsJson);
@@ -157,6 +185,140 @@ export async function listTicketsEmRisco(params: {
         contactPhone: t.contactPhone,
         contactEmail: emailDoTicket(t.rawJson),
         negocio: [nome, estado].filter(Boolean).join(" · ") || null,
+      },
+    ];
+  });
+
+  // Um ticket fechado onde o cliente voltou a escrever é tão trabalho como um
+  // aberto. Uma falha aqui não pode esvaziar a lista dos abertos.
+  const reabertos = await listTicketsFechadosComMensagem(params.zid, now).catch((err: unknown) => {
+    logger.warn(
+      { erro: err instanceof Error ? err.message : String(err) },
+      "painel: tickets fechados com mensagem do cliente indisponíveis",
+    );
+    return [];
+  });
+  return [...abertos, ...reabertos];
+}
+
+/** Quantos dias depois de fechar um ticket uma mensagem do cliente ainda o traz de volta. */
+export const DIAS_DEPOIS_DE_FECHAR = 30;
+
+/** Uma mensagem num ticket, só com o que decide de quem é a vez. */
+export interface MensagemDoTicket {
+  quando: Date;
+  autorTipo: string | null;
+  direcao: string | null;
+  texto?: string | null;
+}
+
+/** Respostas automáticas e de cortesia: não pedem nada a ninguém. */
+const SEM_PEDIDO =
+  /(resposta autom[áa]tica|automatic reply|auto[- ]?reply|out of office|fora do escrit[óo]rio|ausente|de f[ée]rias|n[ãa]o se encontra dispon[íi]vel)/i;
+const CORTESIA = /^\W*(muito\s+)?(obrigad[oa]s?|grat[oa]|ok|recebid[oa]|recebi|bom dia|boa tarde|cumprimentos)\b/i;
+
+/** A mensagem do cliente pede alguma coisa? Uma curta de agradecimento não pede. */
+function pedeAlgo(m: MensagemDoTicket, fechadoEm: Date): boolean {
+  // Segundos depois do email de fecho é uma resposta automática.
+  if (m.quando.getTime() - fechadoEm.getTime() < 10 * 60_000) return false;
+  const texto = (m.texto ?? "").trim();
+  if (SEM_PEDIDO.test(texto)) return false;
+  if (texto.length < 120 && CORTESIA.test(texto)) return false;
+  return true;
+}
+
+/**
+ * Quando o cliente escreveu num ticket já fechado e ninguém lhe respondeu.
+ *
+ * O Desk nem sempre reabre o ticket quando o cliente responde a um email
+ * antigo. O ticket fica "Fechado", a mensagem fica lá dentro, e sem isto
+ * ninguém a via. Devolve a hora da primeira mensagem do cliente depois do
+ * fecho, desde que não haja uma resposta nossa a seguir a ela.
+ */
+export function clienteEscreveuDepoisDeFechar(
+  fechadoEm: Date,
+  mensagens: readonly MensagemDoTicket[],
+): Date | null {
+  const ordenadas = [...mensagens].sort((a, b) => a.quando.getTime() - b.quando.getTime());
+  let doCliente: Date | null = null;
+  for (const m of ordenadas) {
+    if (m.quando.getTime() <= fechadoEm.getTime()) continue;
+    const autor = (m.autorTipo ?? "").toUpperCase();
+    const direcao = (m.direcao ?? "").toLowerCase();
+    if (autor === "END_USER") {
+      if (pedeAlgo(m, fechadoEm)) doCliente ??= m.quando;
+    } else if (autor === "AGENT" && direcao !== "in" && doCliente) {
+      // Respondemos depois de o cliente escrever: já não é trabalho por fazer.
+      doCliente = null;
+    }
+  }
+  return doCliente;
+}
+
+/**
+ * Tickets fechados deste agente onde o cliente voltou a escrever e ainda não
+ * teve resposta. Entram na lista como "à espera de nós", contados a partir da
+ * mensagem do cliente.
+ */
+async function listTicketsFechadosComMensagem(zid: string, now: Date): Promise<TicketEmRisco[]> {
+  const desde = new Date(now.getTime() - DIAS_DEPOIS_DE_FECHAR * 86_400_000);
+  const fechados = await db
+    .select({
+      id: ticketsTable.id,
+      ticketNumber: ticketsTable.ticketNumber,
+      subject: ticketsTable.subject,
+      status: ticketsTable.status,
+      closedTime: ticketsTable.closedTime,
+      contactName: ticketsTable.contactName,
+      contactPhone: ticketsTable.contactPhone,
+      rawJson: ticketsTable.rawJson,
+    })
+    .from(ticketsTable)
+    .where(
+      and(
+        eq(ticketsTable.assigneeId, zid),
+        eq(ticketsTable.statusType, "Closed"),
+        gte(ticketsTable.closedTime, desde),
+      ),
+    );
+  const candidatos = fechados.filter((t) => t.closedTime && !deOutroDepartamento(t.rawJson));
+  if (candidatos.length === 0) return [];
+
+  const mensagens = await db
+    .select({
+      ticketId: ticketCommentsTable.ticketId,
+      quando: ticketCommentsTable.commentedTime,
+      autorTipo: ticketCommentsTable.authorType,
+      direcao: ticketCommentsTable.direction,
+      texto: ticketCommentsTable.contentSanitized,
+    })
+    .from(ticketCommentsTable)
+    .where(inArray(ticketCommentsTable.ticketId, candidatos.map((t) => t.id)));
+  const porTicket = new Map<string, MensagemDoTicket[]>();
+  for (const m of mensagens) {
+    if (!m.quando) continue;
+    const lista = porTicket.get(m.ticketId) ?? [];
+    lista.push({ quando: m.quando, autorTipo: m.autorTipo, direcao: m.direcao, texto: m.texto });
+    porTicket.set(m.ticketId, lista);
+  }
+
+  return candidatos.flatMap((t) => {
+    const quando = clienteEscreveuDepoisDeFechar(t.closedTime as Date, porTicket.get(t.id) ?? []);
+    // Só depois de 24 horas, como um ticket aberto: antes disso está dentro do prazo.
+    if (!quando || now.getTime() - quando.getTime() < RISCO_THRESHOLD_HOURS * 3_600_000) return [];
+    return [
+      {
+        id: t.id,
+        ticketNumber: t.ticketNumber,
+        subject: `Cliente escreveu num ticket fechado: ${t.subject?.trim() || "sem assunto"}`,
+        status: t.status,
+        idadeHoras: idadeEmHoras(quando, now),
+        criadoEm: quando.toISOString(),
+        deskUrl: urlDoDesk(t.id, t.rawJson),
+        contactName: t.contactName,
+        contactPhone: t.contactPhone,
+        contactEmail: emailDoTicket(t.rawJson),
+        negocio: null,
       },
     ];
   });
@@ -258,7 +420,7 @@ export async function ticketsDoClientePorFingerprint(
     );
 
   return escolherTicketDoCliente(
-    rows.map((r) => ({
+    rows.filter((r) => !deOutroDepartamento(r.rawJson)).map((r) => ({
       id: r.id,
       numero: r.ticketNumber,
       fp: r.fp,

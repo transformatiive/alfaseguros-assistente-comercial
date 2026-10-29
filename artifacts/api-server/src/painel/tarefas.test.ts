@@ -664,3 +664,19 @@ describe("último ticket fechado, para contexto", () => {
     expect(t.ticketFechado).toBe(false);
   });
 });
+
+describe("recado a um colega", () => {
+  it("lê o colega e muda o título", async () => {
+    const { colegaDoRecado, resumirPromessa } = await import("./tarefas.js");
+    const texto = "Recado para Cármen: devolver a chamada à Ana Abel sobre as propostas de seguro auto.";
+    expect(colegaDoRecado(texto)).toBe("Cármen");
+    expect(resumirPromessa(texto)).toBe("Confirmar que Cármen tratou o recado");
+    expect(colegaDoRecado("**Recado para o Ricardo**: ligar ao cliente.")).toBe("Ricardo");
+  });
+
+  it("uma promessa normal não é um recado", async () => {
+    const { colegaDoRecado } = await import("./tarefas.js");
+    expect(colegaDoRecado("Enviar a simulação até sexta-feira.")).toBeNull();
+    expect(colegaDoRecado("Confirmar se o recado foi dado.")).toBeNull();
+  });
+});

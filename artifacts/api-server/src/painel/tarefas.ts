@@ -347,7 +347,25 @@ const PREAMBULOS = [
   /^agendar uma tarefa para\s*/i,
 ];
 
+/**
+ * "Recado para Cármen: devolver a chamada…" — o recado que o operador passou a
+ * um colega. Devolve o nome do colega, ou null.
+ *
+ * A análise escreve assim desde 30/10/2026. Um recado é uma promessa como as
+ * outras e sai da mesma maneira — o cliente atende uma chamada, ou alguém lhe
+ * responde no ticket — mas o título diz a quem foi passado, porque é isso que
+ * quem o passou tem de confirmar.
+ */
+export function colegaDoRecado(descricao: string | null | undefined): string | null {
+  const m = /^\s*(?:\*\*)?[Rr]ecado\s+para\s+(?:o\s+|a\s+)?(\p{Lu}[\p{L}'-]+(?:\s+\p{Lu}[\p{L}'-]+)?)\s*(?:\*\*)?\s*:/u.exec(
+    descricao ?? "",
+  );
+  return m ? m[1].trim() : null;
+}
+
 export function resumirPromessa(descricao: string, maximo = 72): string {
+  const colega = colegaDoRecado(descricao);
+  if (colega) return `Confirmar que ${colega} tratou o recado`;
   let t = descricao.trim();
   for (const p of PREAMBULOS) t = t.replace(p, "");
 
@@ -526,6 +544,7 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
     // with a number nobody said to anybody.
     const prazo = derivarPrazo({
       texto: f.follow_up_descricao,
+      textoEPromessa: true,
       referencia: detectado,
       desde: detectado,
       tipo: simulacao ? "simulacao_pedida" : "compromisso",
@@ -650,7 +669,11 @@ export function derivarTarefas(entrada: EntradaTarefas): Tarefa[] {
     // answered a week ago and then left is not twenty days late, it is a
     // week late, and saying otherwise makes the oldest row the loudest
     // rather than the most neglected.
-    const desde = nosso?.ultimo ? new Date(nosso.ultimo) : criado;
+    // O mais recente dos dois: num ticket fechado onde o cliente voltou a
+    // escrever, `criado` é a mensagem do cliente, e a nossa última resposta é
+    // de antes do fecho.
+    const desde =
+      nosso?.ultimo && Date.parse(nosso.ultimo) > criado.getTime() ? new Date(nosso.ultimo) : criado;
     const prazo = derivarPrazo({
       mensagens: mensagensPorTicket.get(t.id),
       texto: assunto,

@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { escolherTicketDoCliente, idadeEmHoras, RISCO_THRESHOLD_HOURS, urlDoDesk } from "./tickets-risco.js";
+import {
+  DEPARTAMENTO_360,
+  clienteEscreveuDepoisDeFechar,
+  deOutroDepartamento,
+  escolherTicketDoCliente,
+  idadeEmHoras,
+  RISCO_THRESHOLD_HOURS,
+  telefoneDoTicket,
+  urlDoDesk,
+} from "./tickets-risco.js";
 
 describe("idadeEmHoras", () => {
   const now = new Date("2026-08-28T12:00:00Z");
@@ -85,5 +94,90 @@ describe("escolherTicketDoCliente", () => {
       { ...c("T2", false, 2), fp: null },
     ]);
     expect(m.size).toBe(0);
+  });
+});
+
+describe("deOutroDepartamento", () => {
+  it("a Corporate e a Contratação Pública ficam de fora do painel 360", () => {
+    expect(deOutroDepartamento({ departmentId: "367662000097048676" })).toBe(true);
+    expect(deOutroDepartamento({ departmentId: "367662000128357813" })).toBe(true);
+  });
+
+  it("Alfa Seguros, ou sem departamento conhecido, fica", () => {
+    expect(deOutroDepartamento({ departmentId: DEPARTAMENTO_360 })).toBe(false);
+    expect(deOutroDepartamento({})).toBe(false);
+    expect(deOutroDepartamento(null)).toBe(false);
+  });
+});
+
+describe("telefoneDoTicket", () => {
+  it("lê o campo Telefone do ticket em qualquer formato", () => {
+    expect(telefoneDoTicket({ phone: "+351 939 148 441" })).toBe("939148441");
+    expect(telefoneDoTicket({ phone: "939148441" })).toBe("939148441");
+  });
+
+  it("sem número válido, nada", () => {
+    expect(telefoneDoTicket({ phone: "123" })).toBeNull();
+    expect(telefoneDoTicket({ phone: null })).toBeNull();
+    expect(telefoneDoTicket(undefined)).toBeNull();
+  });
+});
+
+describe("clienteEscreveuDepoisDeFechar", () => {
+  const fechou = new Date("2026-10-10T10:00:00Z");
+  const msg = (iso: string, autorTipo: string, direcao: string | null, texto = "Podem enviar-me a apólice?") => ({
+    quando: new Date(iso),
+    autorTipo,
+    direcao,
+    texto,
+  });
+
+  it("o cliente escreveu depois do fecho e ninguém respondeu: volta ao painel", () => {
+    expect(
+      clienteEscreveuDepoisDeFechar(fechou, [
+        msg("2026-10-09T10:00:00Z", "AGENT", "out"),
+        msg("2026-10-12T09:00:00Z", "END_USER", "in"),
+      ])?.toISOString(),
+    ).toBe("2026-10-12T09:00:00.000Z");
+  });
+
+  it("respondemos depois da mensagem do cliente: nada a fazer", () => {
+    expect(
+      clienteEscreveuDepoisDeFechar(fechou, [
+        msg("2026-10-12T09:00:00Z", "END_USER", "in"),
+        msg("2026-10-12T15:00:00Z", "AGENT", "out"),
+      ]),
+    ).toBeNull();
+  });
+
+  it("um email que entrou atribuído a um agente não é resposta nossa", () => {
+    expect(
+      clienteEscreveuDepoisDeFechar(fechou, [
+        msg("2026-10-12T09:00:00Z", "END_USER", "in"),
+        msg("2026-10-12T15:00:00Z", "AGENT", "in"),
+      ])?.toISOString(),
+    ).toBe("2026-10-12T09:00:00.000Z");
+  });
+
+  it("mensagens do cliente antes do fecho não contam", () => {
+    expect(clienteEscreveuDepoisDeFechar(fechou, [msg("2026-10-09T09:00:00Z", "END_USER", "in")])).toBeNull();
+  });
+
+  it("respostas automáticas e agradecimentos não trazem o ticket de volta", () => {
+    expect(
+      clienteEscreveuDepoisDeFechar(fechou, [msg("2026-10-10T10:00:30Z", "END_USER", "in")]),
+    ).toBeNull();
+    expect(
+      clienteEscreveuDepoisDeFechar(fechou, [
+        msg("2026-10-12T09:00:00Z", "END_USER", "in", "Resposta automática: estou fora do escritório até dia 20."),
+      ]),
+    ).toBeNull();
+    expect(
+      clienteEscreveuDepoisDeFechar(fechou, [msg("2026-10-12T09:00:00Z", "END_USER", "in", "Muito obrigado, recebi.")]),
+    ).toBeNull();
+  });
+
+  it("sem mensagens, nada", () => {
+    expect(clienteEscreveuDepoisDeFechar(fechou, [])).toBeNull();
   });
 });

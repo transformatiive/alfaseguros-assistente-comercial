@@ -121,11 +121,213 @@ describe("lerContexto", () => {
     expect(ctx.principal?.id).toBe("ligado");
   });
 
-  it("um ticket do dia anterior à chamada não conta", () => {
+  it("um ticket de antes da chamada que já estava fechado não conta", () => {
     const fp = "911111111";
     const ctx = lerContexto(
       { linkedTicketId: null, descricao: "Ligar.", fingerprint: fp, chamadaEm: "2026-09-03T09:00:00.000Z" },
-      [ticket({ id: "ontem", statusType: "Closed", phoneFingerprint: fp, createdTime: "2026-09-02T22:00:00.000Z" })],
+      [
+        ticket({ id: "ontem", statusType: "Closed", phoneFingerprint: fp, createdTime: "2026-09-02T22:00:00.000Z",
+          closedTime: "2026-09-02T23:00:00.000Z" }),
+        // Fechado sem data: não se pode provar que fechou depois da chamada.
+        ticket({ id: "sem-data", statusType: "Closed", phoneFingerprint: fp, createdTime: "2026-09-01T10:00:00.000Z" }),
+      ],
+    );
+    expect(ctx.relacionados).toEqual([]);
+  });
+});
+
+/**
+ * Os casos que o Tiago marcou no PDF "Assist Virtual 28/10": promessas que o
+ * painel dava em atraso com o ticket do cliente já tratado no Desk.
+ */
+describe("lerContexto: tickets abertos antes da chamada (Tiago, 28/10)", () => {
+  it("#166416: aberto a 06/08, chamada a 03/09, fechado depois da chamada; a promessa sai", () => {
+    // O contacto é o parceiro (915769762); o número do cliente está no campo
+    // Telefone do ticket, quando o formulário o preencheu.
+    const fp = "211219354";
+    const t = ticket({ id: "166416", ticketNumber: "166416", statusType: "Closed", phoneFingerprint: "915769762",
+      telefoneDoTicket: fp,
+      createdTime: "2026-08-06T12:43:00.000Z", closedTime: "2026-09-03T11:26:00.000Z" });
+    const ctx = lerContexto(
+      { linkedTicketId: null, descricao: "Contactar António até ao final da semana.", fingerprint: fp,
+        zidDoAgente: TIAGO, chamadaEm: "2026-09-03T10:45:00.000Z" },
+      [t],
+    );
+    expect(ctx.principal?.ticketNumber).toBe("166416");
+    expect(ctx.fechadoPor?.ticketNumber).toBe("166416");
+  });
+
+  it("#177770: aberto antes da chamada e ainda em espera; a promessa fica e o ticket é o da prova", () => {
+    const fp = "964016910";
+    const t = ticket({ id: "177770", ticketNumber: "177770", statusType: "On Hold", phoneFingerprint: fp,
+      createdTime: "2026-09-23T14:04:00.000Z" });
+    const ctx = lerContexto(
+      { linkedTicketId: null, descricao: "Enviar simulação de saúde.", fingerprint: fp,
+        zidDoAgente: TIAGO, chamadaEm: "2026-09-24T12:28:00.000Z" },
+      [t],
+    );
+    expect(ctx.fechadoPor).toBeNull();
+    expect(ctx.principal?.id).toBe("177770");
+    // De quem fez a chamada: um ticket anterior não muda a promessa de painel.
+    expect(ctx.dono).toBeNull();
+  });
+
+  it("ticket de formulário com o telefone do parceiro: liga pelo campo Telefone do ticket", () => {
+    const t = ticket({ id: "173882", ticketNumber: "173882", statusType: "Closed", phoneFingerprint: "915769762",
+      telefoneDoTicket: "939148441", createdTime: "2026-09-07T16:50:00.000Z", closedTime: "2026-09-10T16:33:00.000Z" });
+    const ctx = lerContexto(
+      { linkedTicketId: null, descricao: "Enviar simulação auto.", fingerprint: "939148441",
+        zidDoAgente: TIAGO, chamadaEm: "2026-09-08T13:34:00.000Z" },
+      [t],
+    );
+    expect(ctx.fechadoPor?.ticketNumber).toBe("173882");
+  });
+
+  it("ticket sem o telefone do cliente: liga pelo email", () => {
+    const t = ticket({ id: "177438", ticketNumber: "177438", statusType: "Closed", phoneFingerprint: null,
+      email: "cliente@example.com", createdTime: "2026-09-22T15:42:00.000Z", closedTime: "2026-10-21T10:37:00.000Z" });
+    const ctx = lerContexto(
+      { linkedTicketId: null, descricao: "Enviar simulação multirriscos.", fingerprint: "964234472",
+        zidDoAgente: TIAGO, chamadaEm: "2026-09-24T10:29:00.000Z", emails: new Set(["cliente@example.com"]) },
+      [t],
+    );
+    expect(ctx.fechadoPor?.ticketNumber).toBe("177438");
+  });
+
+  it("dois tickets anteriores do mesmo contacto: é ambíguo e nenhum conta", () => {
+    // O #172398 e o #172399 vieram do mesmo parceiro, para clientes diferentes.
+    const fp = "939083215";
+    const ctx = lerContexto(
+      { linkedTicketId: null, descricao: "Enviar o email com o pedido de dados.", fingerprint: fp,
+        zidDoAgente: TIAGO, chamadaEm: "2026-09-03T08:22:00.000Z" },
+      [
+        ticket({ id: "172398", ticketNumber: "172398", statusType: "Closed", phoneFingerprint: fp,
+          createdTime: "2026-09-01T17:31:00.000Z", closedTime: "2026-09-16T14:53:00.000Z" }),
+        ticket({ id: "172399", ticketNumber: "172399", statusType: "On Hold", phoneFingerprint: fp,
+          createdTime: "2026-09-01T17:37:00.000Z" }),
+      ],
+    );
+    expect(ctx.fechadoPor).toBeNull();
+    expect(ctx.relacionados).toEqual([]);
+  });
+
+  it("um ticket anterior de outro agente não conta: pode ser outro assunto", () => {
+    const fp = "911111111";
+    const ctx = lerContexto(
+      { linkedTicketId: null, descricao: "Enviar simulação de saúde.", fingerprint: fp,
+        zidDoAgente: TIAGO, chamadaEm: "2026-09-03T09:00:00.000Z" },
+      [ticket({ id: "renovacao", statusType: "Closed", assigneeId: VANIA, phoneFingerprint: fp,
+        createdTime: "2026-08-20T09:00:00.000Z", closedTime: "2026-09-04T09:00:00.000Z" })],
+    );
+    expect(ctx.relacionados).toEqual([]);
+    expect(ctx.fechadoPor).toBeNull();
+    expect(ctx.principal).toBeNull();
+  });
+
+  it("sem saber quem fez a chamada, um ticket anterior não conta", () => {
+    const fp = "911111111";
+    const ctx = lerContexto(
+      { linkedTicketId: null, descricao: "Ligar.", fingerprint: fp, zidDoAgente: null,
+        chamadaEm: "2026-09-03T09:00:00.000Z" },
+      [ticket({ id: "x", statusType: "Closed", phoneFingerprint: fp, createdTime: "2026-08-20T09:00:00.000Z",
+        closedTime: "2026-09-04T09:00:00.000Z" })],
+    );
+    expect(ctx.relacionados).toEqual([]);
+  });
+
+  it("um ticket anterior aberto não muda a promessa de painel", () => {
+    const fp = "911111111";
+    const ctx = lerContexto(
+      { linkedTicketId: null, descricao: "Ligar.", fingerprint: fp, zidDoAgente: TIAGO,
+        chamadaEm: "2026-09-03T09:00:00.000Z" },
+      [ticket({ id: "x", statusType: "Open", phoneFingerprint: fp, createdTime: "2026-08-20T09:00:00.000Z" })],
+    );
+    expect(ctx.principal?.id).toBe("x");
+    expect(ctx.dono).toBeNull();
+  });
+
+  it("um ticket do próprio dia, aberto e fechado antes da chamada, não conta", () => {
+    const fp = "911111111";
+    const ctx = lerContexto(
+      { linkedTicketId: null, descricao: "Ligar.", fingerprint: fp, zidDoAgente: TIAGO,
+        chamadaEm: "2026-09-03T14:00:00.000Z" },
+      [ticket({ id: "manha", statusType: "Closed", phoneFingerprint: fp, createdTime: "2026-09-03T07:00:00.000Z",
+        closedTime: "2026-09-03T07:30:00.000Z" })],
+    );
+    expect(ctx.relacionados).toEqual([]);
+  });
+
+  it("o email não liga tickets de outro agente", () => {
+    const ctx = lerContexto(
+      { linkedTicketId: null, descricao: "Ligar.", fingerprint: "964234472", zidDoAgente: TIAGO,
+        chamadaEm: "2026-09-24T10:29:00.000Z", emails: new Set(["partilhado@example.com"]) },
+      [ticket({ id: "z", statusType: "Closed", assigneeId: VANIA, email: "partilhado@example.com",
+        createdTime: "2026-09-26T10:00:00.000Z", closedTime: "2026-09-28T10:00:00.000Z" })],
+    );
+    expect(ctx.fechadoPor).toBeNull();
+  });
+
+  it("o ticket ligado pelos casos, já fechado antes da chamada, não fecha a promessa", () => {
+    const fp = "911111111";
+    const ctx = lerContexto(
+      { linkedTicketId: "velho", descricao: "Enviar simulação casa.", fingerprint: fp, zidDoAgente: TIAGO,
+        chamadaEm: "2026-09-10T09:00:00.000Z" },
+      [ticket({ id: "velho", statusType: "Closed", phoneFingerprint: fp, createdTime: "2026-08-20T09:00:00.000Z",
+        closedTime: "2026-09-05T09:00:00.000Z" })],
+    );
+    expect(ctx.fechadoPor).toBeNull();
+    expect(ctx.relacionados).toEqual([]);
+  });
+
+  it("um ticket do próprio dia, antes da chamada e de outra pessoa, já não muda a promessa de painel", () => {
+    // Mudança deliberada (30/10/2026): antes contava a partir das 00:00 do dia
+    // da chamada, mesmo sendo de outro agente.
+    const fp = "911111111";
+    const ctx = lerContexto(
+      { linkedTicketId: null, descricao: "Ligar.", fingerprint: fp, zidDoAgente: TIAGO,
+        chamadaEm: "2026-09-03T15:00:00.000Z" },
+      [ticket({ id: "manha", statusType: "Open", assigneeId: VANIA, phoneFingerprint: fp,
+        createdTime: "2026-09-03T08:00:00.000Z" })],
+    );
+    expect(ctx.relacionados).toEqual([]);
+    expect(ctx.dono).toBeNull();
+  });
+
+  it("mais de 60 dias antes da chamada não conta, mesmo aberto", () => {
+    const fp = "911111111";
+    const ctx = lerContexto(
+      { linkedTicketId: null, descricao: "Ligar.", fingerprint: fp, zidDoAgente: TIAGO, chamadaEm: "2026-09-03T09:00:00.000Z" },
+      [ticket({ id: "velho", statusType: "Open", phoneFingerprint: fp, createdTime: "2026-07-03T09:00:00.000Z" })],
+    );
+    expect(ctx.relacionados).toEqual([]);
+  });
+
+  it("aberto antes da chamada com o negócio já decidido não conta: não se sabe quando decidiu", () => {
+    const fp = "911111111";
+    const ctx = lerContexto(
+      { linkedTicketId: null, descricao: "Ligar.", fingerprint: fp, zidDoAgente: TIAGO, chamadaEm: "2026-09-03T09:00:00.000Z" },
+      [ticket({ id: "ganho", statusType: "Open", estadoNegocio: "GANHO", phoneFingerprint: fp,
+        createdTime: "2026-08-20T09:00:00.000Z" })],
+    );
+    expect(ctx.relacionados).toEqual([]);
+    expect(ctx.fechadoPor).toBeNull();
+  });
+
+  it("apagado antes da chamada não conta", () => {
+    const fp = "911111111";
+    const ctx = lerContexto(
+      { linkedTicketId: null, descricao: "Ligar.", fingerprint: fp, zidDoAgente: TIAGO, chamadaEm: "2026-09-03T09:00:00.000Z" },
+      [ticket({ id: "lixo", statusType: "Deleted", phoneFingerprint: fp, createdTime: "2026-08-20T09:00:00.000Z" })],
+    );
+    expect(ctx.relacionados).toEqual([]);
+  });
+
+  it("sem hora da chamada, só o ticket ligado ou citado conta", () => {
+    const fp = "911111111";
+    const ctx = lerContexto(
+      { linkedTicketId: null, descricao: "Ligar.", fingerprint: fp, chamadaEm: null },
+      [ticket({ id: "x", statusType: "Closed", phoneFingerprint: fp, createdTime: "2026-08-20T09:00:00.000Z",
+        closedTime: "2026-09-10T09:00:00.000Z" })],
     );
     expect(ctx.relacionados).toEqual([]);
   });

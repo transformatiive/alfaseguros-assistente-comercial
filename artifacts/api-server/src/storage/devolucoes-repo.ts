@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm
 import { db, devolucoesTable, colaboradoresTable, ticketsTable, type Devolucao } from "@workspace/db";
 import { gte, lte } from "drizzle-orm";
 import type { DevolucaoCandidate } from "../painel/devolucoes.js";
+import { deOutroDepartamento } from "../painel/tickets-risco.js";
 import {
   atribuirPorHistorico,
   atribuirPorTicket,
@@ -46,11 +47,14 @@ export async function upsertDevolucoes(candidates: readonly DevolucaoCandidate[]
       phoneFingerprint: ticketsTable.phoneFingerprint,
       createdTime: ticketsTable.createdTime,
       assigneeId: ticketsTable.assigneeId,
+      rawJson: ticketsTable.rawJson,
     })
     .from(ticketsTable)
     .where(
       and(gte(ticketsTable.createdTime, janelaDe), lte(ticketsTable.createdTime, janelaAte)),
-    );
+    )
+    // A Corporate e a Contratação Pública não entram no painel da equipa 360.
+    .then((rows) => rows.filter((r) => !deOutroDepartamento(r.rawJson)));
 
   const chamadas: ChamadaParaAtribuir[] = candidates.map((c) => ({
     ringoverCallId: c.ringoverCallId,
@@ -85,6 +89,7 @@ export async function upsertDevolucoes(candidates: readonly DevolucaoCandidate[]
       .select({
         phoneFingerprint: ticketsTable.phoneFingerprint,
         assigneeId: ticketsTable.assigneeId,
+        rawJson: ticketsTable.rawJson,
       })
       .from(ticketsTable)
       .where(
@@ -95,6 +100,7 @@ export async function upsertDevolucoes(candidates: readonly DevolucaoCandidate[]
       )
       .orderBy(desc(ticketsTable.createdTime));
     for (const h of historicos) {
+      if (deOutroDepartamento(h.rawJson)) continue;
       // Ordered newest first, so the first row per number is the latest ticket.
       if (!h.phoneFingerprint || !h.assigneeId) continue;
       if (!ultimoTicketPorFingerprint.has(h.phoneFingerprint)) {

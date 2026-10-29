@@ -201,3 +201,114 @@ describe("hora do prazo", () => {
     expect(p.porque).toBe("combinado no ticket a 05/09");
   });
 });
+
+/** As datas marcadas pelo cliente, com frases dos casos do Tiago (Outubro de 2026). */
+const P = { promessa: true };
+
+describe("lerPrazoEscrito — datas marcadas pelo cliente", () => {
+  it("'a partir de 17 de novembro' é esse dia, não um atraso", () => {
+    const ref = new Date("2026-09-25T08:23:00Z");
+    expect(
+      lisboa(
+        lerPrazoEscrito(
+          "Contactar o Sr. Pedro Costa a partir de 17 de novembro para recolher os dados finais.",
+          ref, P),
+      ),
+    ).toBe("2026-11-17 18:00");
+  });
+
+  it("'a partir de 17/11' e 'depois do dia 17/11'", () => {
+    const ref = new Date("2026-09-25T08:23:00Z");
+    expect(lisboa(lerPrazoEscrito("Ligar a partir de 17/11.", ref, P))).toBe("2026-11-17 18:00");
+    expect(lisboa(lerPrazoEscrito("Ligar depois do dia 17/11.", ref, P))).toBe("2026-11-17 18:00");
+  });
+
+  it("'na quarta-feira às 15h30' lê o dia e a hora, e não lê 'na segunda chamada'", () => {
+    // 07/09/2026 é uma segunda-feira.
+    const ref = new Date("2026-09-07T12:48:00Z");
+    const r = lerPrazoComHora(
+      "Contactar a Suzana Vilela na quarta-feira às 15h30, conforme agendado na segunda chamada.",
+      ref,
+      P,
+    );
+    expect(lisboa(r?.quando ?? null)).toBe("2026-09-09 15:30");
+    expect(r?.hora).toBe("combinada");
+    expect(lerPrazoEscrito("Conforme combinado na segunda chamada.", ref, P)).toBeNull();
+  });
+
+  it("'antes do final de outubro' é o último dia de outubro", () => {
+    const ref = new Date("2026-09-24T12:28:00Z");
+    expect(
+      lisboa(lerPrazoEscrito("Preparar proposta alternativa antes do final de outubro.", ref, P)),
+    ).toBe("2026-10-31 18:00");
+  });
+
+  it("'até ao final do mês' é o último dia do mês da chamada", () => {
+    expect(lisboa(lerPrazoEscrito("Enviar a proposta até ao final do mês.", SEXTA, P))).toBe(
+      "2026-09-30 18:00",
+    );
+  });
+
+  it("'na próxima semana' é a sexta da semana seguinte", () => {
+    expect(lisboa(lerPrazoEscrito("Voltar a ligar na próxima semana.", SEXTA, P))).toBe(
+      "2026-09-11 18:00",
+    );
+  });
+
+  it("um mês de janeiro dito em dezembro é do ano seguinte", () => {
+    const ref = new Date("2026-12-20T10:00:00Z");
+    expect(lisboa(lerPrazoEscrito("Ligar a partir de 5 de janeiro.", ref, P))).toBe("2027-01-05 18:00");
+  });
+});
+
+describe("lerPrazoEscrito — o que NÃO é uma data marcada", () => {
+  const SEG = new Date("2026-11-02T10:00:00Z"); // segunda-feira
+
+  it("um dia da semana no passado não é prazo", () => {
+    expect(
+      lisboa(lerPrazoEscrito("Na sexta-feira passada o cliente enviou documentos; confirmar até amanhã.", SEG, P)),
+    ).toBe("2026-11-03 18:00");
+    expect(lerPrazoEscrito("No sábado o cliente teve o acidente; abrir sinistro.", SEG, P)).toBeNull();
+    expect(
+      lisboa(lerPrazoEscrito("Cliente ligou na quinta-feira e pediu para ligar até amanhã.", SEG, P)),
+    ).toBe("2026-11-03 18:00");
+  });
+
+  it("o início de uma apólice não é prazo", () => {
+    expect(
+      lisboa(lerPrazoEscrito("Cliente quer o seguro a partir de 01/01; enviar simulação até amanhã.", SEG, P)),
+    ).toBe("2026-11-03 18:00");
+    expect(lerPrazoEscrito("Seguro termina no dia 31/12.", SEG, P)).toBeNull();
+  });
+
+  it("uma data passada contada na frase não é prazo", () => {
+    expect(lerPrazoEscrito("No dia 03/09 o cliente ligou a pedir simulação.", SEG, P)).toBeNull();
+  });
+
+  it("frações e decimais não são datas", () => {
+    expect(lerPrazoEscrito("Ligar depois de 2/3 dias.", SEG, P)).toBeNull();
+    expect(lerPrazoEscrito("Voltar a ligar após 1/2 hora.", SEG, P)).toBeNull();
+    expect(lerPrazoEscrito("Ligar após 1.5 anos.", SEG, P)).toBeNull();
+  });
+
+  it("'a 5 de novembro' não é uma hora combinada", () => {
+    const r = lerPrazoComHora("Ligar na quarta-feira a 5 de novembro.", SEG, P);
+    expect(r?.hora).not.toBe("combinada");
+  });
+
+  it("'fim do mês de novembro' é novembro", () => {
+    expect(lisboa(lerPrazoEscrito("Enviar até ao fim do mês de novembro.", new Date("2026-10-29T10:00:00Z"), P))).toBe(
+      "2026-11-30 18:00",
+    );
+  });
+
+  it("'final de janeiro' dito em junho é do ano seguinte se já passou", () => {
+    expect(lisboa(lerPrazoEscrito("Enviar antes do final de janeiro.", new Date("2027-06-30T10:00:00Z"), P))).toBe(
+      "2028-01-31 18:00",
+    );
+  });
+
+  it("nas mensagens de um ticket, estas regras não se aplicam", () => {
+    expect(lerPrazoEscrito("Contactar a partir de 1 de dezembro.", SEG)).toBeNull();
+  });
+});

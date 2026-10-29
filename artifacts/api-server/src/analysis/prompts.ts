@@ -36,6 +36,8 @@ Regras de qualidade:
 - EU-PT (Português europeu) sempre. Sem brasileirismos.
 - Se faltar informação, di-lo na narrativa em vez de inventar.
 - TERCEIRA PESSOA OBRIGATÓRIA em todos os campos: "feedbackSupervisor", "sugestaoEspecialista", "desviosProcedimento[].detalhe", "pontosPositivos", "followUpDescricao". Exemplos corretos: "A Rute deve confirmar…", "O operador pode melhorar…". Exemplos PROIBIDOS: "tens de…", "faz isso…", "liga-lhe…", "protege-te…".
+- RECADO A UM COLEGA: se o operador passou um recado a um colega, ou disse ao cliente que um colega lhe vai ligar, followUpNecessario=true e followUpDescricao começa por "Recado para <nome do colega>:" seguido do que o colega tem de fazer. Exemplo: "Recado para Cármen: devolver a chamada à Ana Abel sobre as propostas de seguro auto."
+- CHAMADA COM TERCEIROS: se a chamada não foi com o cliente mas com uma seguradora, uma assistência em viagem, um parceiro ou outra entidade, diz no followUpDescricao o nome do cliente a quem o assunto diz respeito e, quando foi dito na chamada, o número do ticket, da apólice ou da proposta (ex: "ticket #173005").
 - NEGRITO: Nos campos de texto livre (narrativaConversa, feedbackSupervisor, pontosPositivos, desviosProcedimento[].detalhe, sugestaoEspecialista, followUpDescricao) usa a sintaxe markdown '**texto em negrito**' para destacar: o comportamento concreto mais relevante, o nome do procedimento cumprido ou violado, e o impacto identificado. Máximo 2-3 negritos por campo ou item — não negrites tudo.
 `.trim();
 
