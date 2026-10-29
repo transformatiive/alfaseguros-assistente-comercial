@@ -141,6 +141,32 @@ type Regra = {
  * "no prazo de" in front means the text has to be *stating a deadline* before
  * anything is read out of it.
  */
+const MESES: Record<string, number> = {
+  janeiro: 1,
+  fevereiro: 2,
+  marco: 3,
+  março: 3,
+  abril: 4,
+  maio: 5,
+  junho: 6,
+  julho: 7,
+  agosto: 8,
+  setembro: 9,
+  outubro: 10,
+  novembro: 11,
+  dezembro: 12,
+};
+const MES_RE = "(janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)";
+
+/** O último dia do mês `m` (1-12), no ano que faz sentido a partir de `dia`. */
+function ultimoDiaDoMes(dia: string, m: number): string | null {
+  const primeiro = dataCurta(dia, 1, m);
+  if (!primeiro) return null;
+  const [y, mm] = primeiro.split("-").map(Number);
+  const ultimo = new Date(Date.UTC(y, mm, 0)).getUTCDate();
+  return `${y}-${String(mm).padStart(2, "0")}-${String(ultimo).padStart(2, "0")}`;
+}
+
 const REGRAS: Regra[] = [
   // "até ao final do dia 03/09"
   {
@@ -223,6 +249,67 @@ const REGRAS: Regra[] = [
       const n = +m[1];
       if (/hora/i.test(m[2])) return lisbonInstant(dia, FIM_DO_DIA + Math.min(n, 6));
       return lisbonInstant(m[3] ? somarDiasUteis(dia, n) : somarDias(dia, n), FIM_DO_DIA);
+    },
+  },
+
+  // As datas que o cliente marca. "a partir de 17 de novembro" quer dizer que
+  // antes disso não há nada a fazer: o prazo é esse dia, e até lá a linha não
+  // está em atraso (o #178260 do Tiago aparecia com 29 dias de atraso).
+
+  // "a partir de 17 de novembro", "até 3 de outubro", "no dia 5 de dezembro de 2026"
+  {
+    re: new RegExp(
+      `(?:at[ée]|a\\s+partir\\s+d[eo]|depois\\s+d[eo]|ap[óo]s|antes\\s+d[eo]|no\\s+dia|para\\s+o\\s+dia)\\s+(?:(?:o|ao)\\s+)?(?:dia\\s+)?(\\d{1,2})\\s+de\\s+${MES_RE}(?:\\s+de\\s+(\\d{4}))?`,
+      "gi",
+    ),
+    ler: (m, dia) => {
+      const mes = MESES[m[2].toLowerCase()];
+      if (!mes) return null;
+      const d = dataCurta(dia, +m[1], mes, m[3] ? +m[3] : undefined);
+      return d ? lisbonInstant(d, FIM_DO_DIA) : null;
+    },
+  },
+  // "a partir de 17/11", "depois do dia 17/11", "no dia 17/11", "antes de 30/10"
+  {
+    re: /(?:a\s+partir\s+d[eo]|depois\s+d[eo]|ap[óo]s|antes\s+d[eo]|no\s+dia|para\s+o\s+dia)\s+(?:(?:o|ao)\s+)?(?:dia\s+)?(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2,4}))?/gi,
+    ler: (m, dia) => {
+      const d = dataCurta(dia, +m[1], +m[2], m[3] ? +m[3] : undefined);
+      return d ? lisbonInstant(d, FIM_DO_DIA) : null;
+    },
+  },
+  // "na quarta-feira às 15h30", "na segunda-feira de manhã", "no sábado".
+  // Pede "-feira" nos dias úteis: "na segunda chamada" não é uma data.
+  {
+    re: /\b(?:na|no)\s+(?:pr[óo]xim[ao]\s+)?(?:(segunda|ter[cç]a|quarta|quinta|sexta)[-\s]feira|(s[áa]bado|domingo))(\s+de\s+manh[ãa])?(?:\s+[àa]s?\s+(\d{1,2})(?:[h:](\d{2}))?\s*h?)?/gi,
+    hora: (m) => (m[4] ? "combinada" : m[3] ? "manha" : "dia"),
+    ler: (m, dia) => {
+      const alvo = DIAS_DA_SEMANA[(m[1] ?? m[2]).toLowerCase()];
+      if (alvo === undefined) return null;
+      const d = proximoDiaDaSemana(dia, alvo);
+      if (m[4]) {
+        const h = +m[4];
+        if (h > 23) return null;
+        return lisbonInstant(d, h, m[5] ? +m[5] : 0);
+      }
+      return lisbonInstant(d, m[3] ? FIM_DA_MANHA : FIM_DO_DIA);
+    },
+  },
+  // "na próxima semana", "na semana seguinte", "para a semana"
+  {
+    re: /(?:na\s+pr[óo]xima\s+semana|na\s+semana\s+seguinte|para\s+a\s+semana\b)/gi,
+    ler: (_m, dia) => lisbonInstant(sextaDaSemana(somarDias(dia, 7)), FIM_DO_DIA),
+  },
+  // "até ao final do mês", "antes do final de outubro", "até ao fim de novembro"
+  {
+    re: new RegExp(
+      `(?:at[ée]|antes)\\s+(?:(?:ao|do|da|o|a)\\s+)?(?:final|fim)\\s+d[oe]\\s+(?:(m[êe]s)|${MES_RE})`,
+      "gi",
+    ),
+    ler: (m, dia) => {
+      const mes = m[1] ? Number(dia.slice(5, 7)) : MESES[(m[2] ?? "").toLowerCase()];
+      if (!mes) return null;
+      const d = ultimoDiaDoMes(dia, mes);
+      return d ? lisbonInstant(d, FIM_DO_DIA) : null;
     },
   },
 ];
