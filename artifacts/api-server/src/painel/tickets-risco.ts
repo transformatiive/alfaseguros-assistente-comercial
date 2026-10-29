@@ -1,5 +1,5 @@
-import { and, asc, eq, inArray, isNull, lt, notInArray, or } from "drizzle-orm";
-import { db, ticketsTable } from "@workspace/db";
+import { and, asc, eq, gte, inArray, isNull, lt, notInArray, or } from "drizzle-orm";
+import { db, ticketCommentsTable, ticketsTable } from "@workspace/db";
 import { estadoDoNegocio, negocioDecidido, nomeDoNegocio } from "./followups-contexto.js";
 
 /**
@@ -161,7 +161,7 @@ export async function listTicketsEmRisco(params: {
     )
     .orderBy(asc(ticketsTable.createdTime));
 
-  return rows.flatMap((t) => {
+  const abertos = rows.flatMap((t) => {
     // The `lt` above already excludes nulls, but the column is nullable and
     // the type says so — narrow rather than assert.
     if (!t.createdTime) return [];
@@ -184,6 +184,108 @@ export async function listTicketsEmRisco(params: {
         contactPhone: t.contactPhone,
         contactEmail: emailDoTicket(t.rawJson),
         negocio: [nome, estado].filter(Boolean).join(" · ") || null,
+      },
+    ];
+  });
+
+  // Um ticket fechado onde o cliente voltou a escrever é tão trabalho como um
+  // aberto. Uma falha aqui não pode esvaziar a lista dos abertos.
+  const reabertos = await listTicketsFechadosComMensagem(params.zid, now).catch(() => []);
+  return [...abertos, ...reabertos];
+}
+
+/** Quantos dias depois de fechar um ticket uma mensagem do cliente ainda o traz de volta. */
+export const DIAS_DEPOIS_DE_FECHAR = 30;
+
+/** Uma mensagem num ticket, só com o que decide de quem é a vez. */
+export interface MensagemDoTicket {
+  quando: Date;
+  autorTipo: string | null;
+  direcao: string | null;
+}
+
+/**
+ * Quando o cliente escreveu num ticket já fechado e ninguém lhe respondeu.
+ *
+ * O Desk nem sempre reabre o ticket quando o cliente responde a um email
+ * antigo. O ticket fica "Fechado", a mensagem fica lá dentro, e sem isto
+ * ninguém a via. Devolve a hora da primeira mensagem do cliente depois do
+ * fecho, desde que não haja uma resposta nossa a seguir a ela.
+ */
+export function clienteEscreveuDepoisDeFechar(
+  fechadoEm: Date,
+  mensagens: readonly MensagemDoTicket[],
+): Date | null {
+  const ordenadas = [...mensagens].sort((a, b) => a.quando.getTime() - b.quando.getTime());
+  let doCliente: Date | null = null;
+  for (const m of ordenadas) {
+    if (m.quando.getTime() <= fechadoEm.getTime()) continue;
+    const autor = (m.autorTipo ?? "").toUpperCase();
+    const direcao = (m.direcao ?? "").toLowerCase();
+    if (autor === "END_USER") {
+      doCliente ??= m.quando;
+    } else if (autor === "AGENT" && direcao !== "in" && doCliente) {
+      // Respondemos depois de o cliente escrever: já não é trabalho por fazer.
+      doCliente = null;
+    }
+  }
+  return doCliente;
+}
+
+/**
+ * Tickets fechados deste agente onde o cliente voltou a escrever e ainda não
+ * teve resposta. Entram na lista como "à espera de nós", contados a partir da
+ * mensagem do cliente.
+ */
+async function listTicketsFechadosComMensagem(zid: string, now: Date): Promise<TicketEmRisco[]> {
+  const desde = new Date(now.getTime() - DIAS_DEPOIS_DE_FECHAR * 86_400_000);
+  const fechados = await db
+    .select()
+    .from(ticketsTable)
+    .where(
+      and(
+        eq(ticketsTable.assigneeId, zid),
+        eq(ticketsTable.statusType, "Closed"),
+        gte(ticketsTable.closedTime, desde),
+      ),
+    );
+  const candidatos = fechados.filter((t) => t.closedTime && !deOutroDepartamento(t.rawJson));
+  if (candidatos.length === 0) return [];
+
+  const mensagens = await db
+    .select({
+      ticketId: ticketCommentsTable.ticketId,
+      quando: ticketCommentsTable.commentedTime,
+      autorTipo: ticketCommentsTable.authorType,
+      direcao: ticketCommentsTable.direction,
+    })
+    .from(ticketCommentsTable)
+    .where(inArray(ticketCommentsTable.ticketId, candidatos.map((t) => t.id)));
+  const porTicket = new Map<string, MensagemDoTicket[]>();
+  for (const m of mensagens) {
+    if (!m.quando) continue;
+    const lista = porTicket.get(m.ticketId) ?? [];
+    lista.push({ quando: m.quando, autorTipo: m.autorTipo, direcao: m.direcao });
+    porTicket.set(m.ticketId, lista);
+  }
+
+  return candidatos.flatMap((t) => {
+    const quando = clienteEscreveuDepoisDeFechar(t.closedTime as Date, porTicket.get(t.id) ?? []);
+    // Só depois de 24 horas, como um ticket aberto: antes disso está dentro do prazo.
+    if (!quando || now.getTime() - quando.getTime() < RISCO_THRESHOLD_HOURS * 3_600_000) return [];
+    return [
+      {
+        id: t.id,
+        ticketNumber: t.ticketNumber,
+        subject: `Cliente escreveu num ticket fechado: ${t.subject?.trim() || "sem assunto"}`,
+        status: t.status,
+        idadeHoras: idadeEmHoras(quando, now),
+        criadoEm: quando.toISOString(),
+        deskUrl: urlDoDesk(t.id, t.rawJson),
+        contactName: t.contactName,
+        contactPhone: t.contactPhone,
+        contactEmail: emailDoTicket(t.rawJson),
+        negocio: null,
       },
     ];
   });

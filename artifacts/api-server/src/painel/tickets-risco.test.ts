@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   DEPARTAMENTO_360,
+  clienteEscreveuDepoisDeFechar,
   deOutroDepartamento,
   escolherTicketDoCliente,
   idadeEmHoras,
@@ -119,5 +120,49 @@ describe("telefoneDoTicket", () => {
     expect(telefoneDoTicket({ phone: "123" })).toBeNull();
     expect(telefoneDoTicket({ phone: null })).toBeNull();
     expect(telefoneDoTicket(undefined)).toBeNull();
+  });
+});
+
+describe("clienteEscreveuDepoisDeFechar", () => {
+  const fechou = new Date("2026-10-10T10:00:00Z");
+  const msg = (iso: string, autorTipo: string, direcao: string | null) => ({
+    quando: new Date(iso),
+    autorTipo,
+    direcao,
+  });
+
+  it("o cliente escreveu depois do fecho e ninguém respondeu: volta ao painel", () => {
+    expect(
+      clienteEscreveuDepoisDeFechar(fechou, [
+        msg("2026-10-09T10:00:00Z", "AGENT", "out"),
+        msg("2026-10-12T09:00:00Z", "END_USER", "in"),
+      ])?.toISOString(),
+    ).toBe("2026-10-12T09:00:00.000Z");
+  });
+
+  it("respondemos depois da mensagem do cliente: nada a fazer", () => {
+    expect(
+      clienteEscreveuDepoisDeFechar(fechou, [
+        msg("2026-10-12T09:00:00Z", "END_USER", "in"),
+        msg("2026-10-12T15:00:00Z", "AGENT", "out"),
+      ]),
+    ).toBeNull();
+  });
+
+  it("um email que entrou atribuído a um agente não é resposta nossa", () => {
+    expect(
+      clienteEscreveuDepoisDeFechar(fechou, [
+        msg("2026-10-12T09:00:00Z", "END_USER", "in"),
+        msg("2026-10-12T15:00:00Z", "AGENT", "in"),
+      ])?.toISOString(),
+    ).toBe("2026-10-12T09:00:00.000Z");
+  });
+
+  it("mensagens do cliente antes do fecho não contam", () => {
+    expect(clienteEscreveuDepoisDeFechar(fechou, [msg("2026-10-09T09:00:00Z", "END_USER", "in")])).toBeNull();
+  });
+
+  it("sem mensagens, nada", () => {
+    expect(clienteEscreveuDepoisDeFechar(fechou, [])).toBeNull();
   });
 });
