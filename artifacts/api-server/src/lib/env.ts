@@ -65,6 +65,16 @@ const envSchema = z.object({
    * phone numbers and ticket subjects.
    */
   PAINEL_PREVIEW_ENABLED: z.string().optional(),
+  /** Chave da API do noCRM (equipa Vida). Sem ela, a sincronização do pipeline Vida recusa correr. */
+  NOCRM_API_KEY: z.string().optional(),
+  /** Subdomínio da conta noCRM: https://<subdominio>.nocrm.io */
+  NOCRM_SUBDOMAIN: z.string().default("alfa-seguros"),
+  /**
+   * Teto de pedidos à API do noCRM por dia, contado por esta app. O noCRM corta
+   * aos 2.000 por conta e a integração dos Protocolos (n8n) usa a mesma chave,
+   * por isso a app fica-se bem abaixo disso.
+   */
+  NOCRM_PEDIDOS_POR_DIA: z.coerce.number().int().positive().default(1500),
 });
 
 let cached: z.infer<typeof envSchema> | null = null;

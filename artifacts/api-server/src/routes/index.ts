@@ -17,6 +17,7 @@ import leadsRouter from "./leads.js";
 import agenteRouter from "./agente.js";
 import painelRefreshRouter from "./painel-refresh.js";
 import preVisualizacaoRouter from "./pre-visualizacao.js";
+import vidaPipelineRouter, { vidaPipelineSyncRouter } from "./vida-pipeline.js";
 import { requireAuth } from "../middleware/require-auth.js";
 
 const router: IRouter = Router();
@@ -41,6 +42,8 @@ router.use(agenteRouter);
 // Panel refresh — cron-secret guarded like /api/run, so it must sit before
 // requireAuth. Never calls the LLM.
 router.use(painelRefreshRouter);
+// noCRM sync for the Vida pipeline panel — cron-secret guarded, called by n8n.
+router.use(vidaPipelineSyncRouter);
 // Panel preview — read-only, no token, and 404s unless PAINEL_PREVIEW_ENABLED
 // is exactly "1". Mounted before requireAuth because the whole point is to be
 // reachable without a session; the env flag is what keeps it shut.
@@ -55,5 +58,6 @@ router.use(operatorsRouter);
 router.use(casesRouter);
 router.use(actionsRouter);
 router.use(statsRouter);
+router.use(vidaPipelineRouter);
 
 export default router;

@@ -18,6 +18,9 @@ export const colaboradoresTable = pgTable("colaboradores", {
   // Zoho CRM user id — the CRM-side identity join for the agent panel.
   // Nullable: only the 360 team that gets the panel needs one.
   crmUserId: text("crm_user_id").unique(),
+  // noCRM user id — the pipeline identity for the Vida team. Filled by the
+  // noCRM sync by matching email; created at startup by setup-nocrm.ts.
+  nocrmUserId: text("nocrm_user_id"),
   email: text("email"),
   telefone: text("telefone"),
   equipa: text("equipa", {

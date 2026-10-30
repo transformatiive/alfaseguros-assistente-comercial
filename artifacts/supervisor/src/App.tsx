@@ -12,6 +12,7 @@ import ConversaDetalhe from "@/pages/conversa-detalhe";
 import Operadores from "@/pages/operadores";
 import Checklist from "@/pages/checklist";
 import Pipeline from "@/pages/pipeline";
+import VidaPipeline from "@/pages/vida-pipeline";
 import AdminUtilizadores from "@/pages/admin-utilizadores";
 import Perfil from "@/pages/perfil";
 import Login from "@/pages/login";
@@ -101,6 +102,7 @@ function AppRoutes() {
         <Route path="/operadores" component={Operadores} />
         <Route path="/checklist" component={Checklist} />
         <Route path="/pipeline" component={Pipeline} />
+        <Route path="/vida/pipeline" component={VidaPipeline} />
         <Route path="/perfil" component={Perfil} />
         {user.role === "admin" && (
           <Route path="/admin/utilizadores" component={AdminUtilizadores} />
