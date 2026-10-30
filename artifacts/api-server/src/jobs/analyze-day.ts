@@ -30,6 +30,7 @@ import { env } from "../lib/env.js";
 import { logger } from "../lib/logger.js";
 import { publishRunEvent } from "./bus.js";
 import { syncTickets } from "./sync-tickets.js";
+import { guardarChamadasDoDia } from "./sync-chamadas-ringover.js";
 import { buildCases, CASE_PROXIMITY_DAYS } from "../cases/linker.js";
 import { runVidaChecklistPass } from "./vida-checklist.js";
 import type { ConversationAnalysis } from "../analysis/schema.js";
@@ -100,6 +101,14 @@ export async function analyzeDay(opts: AnalyzeDayOptions): Promise<void> {
   try {
     const [start, end] = lisbonDayBoundsISO(date);
     const calls = await ringover.listCallsBetween(start, end);
+
+    // Análise de Chamadas (visão geral): keep every call of the day, answered
+    // or not. Best effort — a failure here must never stop the analysis.
+    try {
+      await guardarChamadasDoDia(date, calls);
+    } catch (err) {
+      logger.warn({ date, err }, "análise de chamadas: não foi possível guardar as chamadas do dia");
+    }
 
     // Fetch the FULL transcription for each analyzable call and use it instead
     // of Ringover's short AI `note` summary (applies to all teams). Falls back

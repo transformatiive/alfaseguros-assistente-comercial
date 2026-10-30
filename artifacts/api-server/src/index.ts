@@ -3,6 +3,8 @@ import { logger } from "./lib/logger.js";
 import { seedAdminUser } from "./lib/seed.js";
 import { setupSessionStore } from "./lib/setup-session-store.js";
 import { setupPainelAcessos } from "./lib/setup-painel-acessos.js";
+import { setupChamadasRingover } from "./lib/setup-chamadas-ringover.js";
+import { sincronizarHistoricoEmFalta } from "./jobs/sync-chamadas-ringover.js";
 
 const rawPort = process.env["PORT"];
 
@@ -33,5 +35,15 @@ app.listen(port, (err?: Error) => {
     // estrangeira para `colaboradores`, e arrancar as duas coisas ao mesmo
     // tempo numa base vazia é uma corrida que não precisa de existir.
     .then(() => setupPainelAcessos())
+    // Análise de Chamadas: tabelas e, em fundo, os últimos dias que faltarem.
+    // Não espera pela sincronização — pode levar alguns minutos na 1.ª vez.
+    .then(() => setupChamadasRingover())
+    .then((pronto) => {
+      if (pronto) {
+        void sincronizarHistoricoEmFalta().catch((err) =>
+          logger.warn({ err }, "análise de chamadas: histórico em falta não sincronizado"),
+        );
+      }
+    })
     .catch((err) => logger.error({ err }, "Startup DB setup failed"));
 });
