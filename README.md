@@ -32,7 +32,7 @@ pnpm workspace monorepo · Node 24 · TypeScript 5.9 strict · Express 5 · Post
    - `RINGOVER_API_KEY` — find in n8n credentials or Ringover dashboard → Settings → API
    - `OPENROUTER_API_KEY` — from https://openrouter.ai/keys
    - `CRON_SECRET` — any random string (used by the n8n cron trigger; verified via `X-Cron-Secret` header)
-   - `PUBLIC_APP_URL` — e.g. `https://alfaseguros-supervisor.replit.app`
+   - `PUBLIC_APP_URL` — e.g. `https://supervisor-production-f030.up.railway.app`
    - **Phase 2A** (when wiring Zoho Desk): `ZOHO_DESK_CLIENT_ID`, `ZOHO_DESK_CLIENT_SECRET`, `ZOHO_DESK_REFRESH_TOKEN`, `ZOHO_DESK_ORG_ID=683863304`
 4. **Run setup once**: `pnpm install && pnpm --filter @workspace/db run push` to install dependencies and apply the Drizzle schema.
 5. **Click Run**. Replit boots the API + UI.

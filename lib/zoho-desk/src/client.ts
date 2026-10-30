@@ -132,6 +132,8 @@ export class ZohoDeskClient {
     createdTimeFrom: string;
     createdTimeTo: string;
     departmentId?: string;
+    /** Filtro de campo personalizado do Desk, no formato `cf_nome:valor`. */
+    customField?: string;
   }): Promise<ZohoTicket[]> {
     const all: ZohoTicket[] = [];
     let from = 0;
@@ -143,6 +145,7 @@ export class ZohoDeskClient {
         from: String(from),
         limit: "100",
         ...(params.departmentId ? { departmentId: params.departmentId } : {}),
+        ...(params.customField ? { customField1: params.customField } : {}),
       });
       const parsed = ticketsListResponseSchema.parse(json);
       const batch = parsed.data ?? [];

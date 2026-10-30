@@ -1,4 +1,4 @@
-import { and, eq, gte, lte, or, sql, isNull, type SQL } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, or, sql, isNull, type SQL } from "drizzle-orm";
 import {
   db,
   conversationsTable,
@@ -7,6 +7,7 @@ import {
   checklistItemsTable,
   callChecklistResultsTable,
   alertLogTable,
+  ticketsTable,
   type Colaborador,
 } from "@workspace/db";
 import type { ChecklistItemForPrompt } from "../analysis/checklist-prompt.js";
@@ -491,4 +492,31 @@ export async function confirmarAlertas(data: string): Promise<number> {
       target: [alertLogTable.conversationId, alertLogTable.itemId],
     });
   return pendentes.length;
+}
+
+/**
+ * Estado e responsável de tickets, tal como o Supervisor Virtual os guarda
+ * (espelho do Desk). O painel de leads usa isto para saber que leads ainda
+ * estão por tratar. Tickets que nunca foram sincronizados não vêm no mapa.
+ */
+export async function loadTicketStates(
+  ids: string[],
+): Promise<Map<string, { statusType: string | null; assigneeId: string | null; assigneeName: string | null }>> {
+  const out = new Map<string, { statusType: string | null; assigneeId: string | null; assigneeName: string | null }>();
+  if (ids.length === 0) return out;
+  // Chunked so a 90-day window never builds one huge IN list.
+  for (let i = 0; i < ids.length; i += 500) {
+    const chunk = ids.slice(i, i + 500);
+    const rows = await db
+      .select({
+        id: ticketsTable.id,
+        statusType: ticketsTable.statusType,
+        assigneeId: ticketsTable.assigneeId,
+        assigneeName: ticketsTable.assigneeName,
+      })
+      .from(ticketsTable)
+      .where(inArray(ticketsTable.id, chunk));
+    for (const r of rows) out.set(r.id, { statusType: r.statusType, assigneeId: r.assigneeId, assigneeName: r.assigneeName });
+  }
+  return out;
 }

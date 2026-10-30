@@ -6,9 +6,13 @@
 import { ZohoAuth, ZohoDeskClient } from "@workspace/zoho-desk";
 import { env } from "../lib/env.js";
 import { logger } from "../lib/logger.js";
-import { CHANNELS, matchChannel } from "./channels.js";
+import { CHANNELS, isLeadOf } from "./channels.js";
 import { dayLisbon } from "./compute.js";
+import { classifyTipo } from "./tipo.js";
+import { loadTicketStates } from "../storage/repo.js";
 import type { LeadRow } from "./types.js";
+
+export const SEM_RESPONSAVEL = "Sem responsável";
 
 const DATA_TTL_MS = 15 * 60 * 1000;
 const DESK_TIMEOUT_MS = 10_000;
@@ -46,6 +50,23 @@ interface CacheEntry {
 }
 const cache = new Map<string, CacheEntry>();
 
+// Agent names change rarely; one Desk call per hour is plenty.
+const AGENTS_TTL_MS = 60 * 60 * 1000;
+let agentsCache: { names: Map<string, string>; fetchedAtMs: number } | null = null;
+
+async function agentNames(c: ZohoDeskClient): Promise<Map<string, string>> {
+  if (agentsCache && Date.now() - agentsCache.fetchedAtMs < AGENTS_TTL_MS) return agentsCache.names;
+  const agents = await c.listAgents();
+  const names = new Map(agents.map((a) => [a.id, `${a.firstName ?? ""} ${a.lastName ?? ""}`.trim() || a.id]));
+  agentsCache = { names, fetchedAtMs: Date.now() };
+  return names;
+}
+
+/** Desk ticket fields the search does not always declare in our schema. */
+function str(v: unknown): string | null {
+  return typeof v === "string" && v.trim() !== "" ? v : null;
+}
+
 /**
  * Fetch + filter leads created in [from, to] (inclusive YYYY-MM-DD, Lisbon).
  * Uses the Desk Search API per channel (server-side channel + date filtering),
@@ -66,28 +87,38 @@ export async function fetchLeads(from: string, to: string): Promise<LeadRow[]> {
 
   // Fetch all channels concurrently — the slowest channel sets the wall-clock,
   // instead of the sum of all of them (cold loads were ~6x slower sequentially).
-  // Each channel still paginates internally; 6 in flight is well within Desk limits.
-  const perChannel = await Promise.all(
-    CHANNELS.map((ch) =>
-      c.searchTicketsByChannel({ channel: ch.deskValue, createdTimeFrom, createdTimeTo, departmentId }),
+  // Each channel still paginates internally; 9 in flight is within Desk limits.
+  const [perChannel, names] = await Promise.all([
+    Promise.all(
+      CHANNELS.map((ch) =>
+        c.searchTicketsByChannel({
+          channel: ch.deskValue,
+          createdTimeFrom,
+          createdTimeTo,
+          departmentId,
+          ...(ch.customField ? { customField: ch.customField } : {}),
+        }),
+      ),
     ),
-  );
-
-  // Exclude tickets whose subject contains "APRIL" (case-insensitive) right
-  // after the fetch, before any aggregation — applies to every channel, so it
-  // flows into KPIs, weekly chart, channel breakdown, table and the Δ vs prev.
-  const filtered = perChannel.map((tickets) =>
-    tickets.filter((t) => !(t.subject || "").toUpperCase().includes("APRIL")),
-  );
+    // A failed agents call must not take the whole dashboard down: names fall
+    // back to the Supervisor Virtual's copy, then to the Desk id.
+    agentNames(c).catch((err: unknown) => {
+      logger.warn({ err: err instanceof Error ? err.message : String(err) }, "leads.agents_failed");
+      return new Map<string, string>();
+    }),
+  ]);
 
   const byId = new Map<string, LeadRow>();
   let fetched = 0;
-  for (const tickets of filtered) {
-    fetched += tickets.length;
-    for (const t of tickets) {
+  CHANNELS.forEach((def, i) => {
+    for (const t of perChannel[i]) {
+      fetched++;
+      // Exclude tickets whose subject contains "APRIL" (case-insensitive) right
+      // after the fetch, before any aggregation — applies to every channel.
+      if ((t.subject || "").toUpperCase().includes("APRIL")) continue;
       if (!t.createdTime || byId.has(t.id)) continue;
-      const def = matchChannel(t.channel, t.subject); // applies the SITE "SITE:" subject rule
-      if (!def) continue;
+      if (!isLeadOf(def, t.channel, t.subject)) continue;
+      const assigneeId = str(t.assigneeId);
       byId.set(t.id, {
         id: t.id,
         ticketNumber: String(t.ticketNumber ?? ""),
@@ -98,8 +129,33 @@ export async function fetchLeads(from: string, to: string): Promise<LeadRow[]> {
         channelColor: def.color,
         createdTime: t.createdTime,
         day: dayLisbon(t.createdTime),
+        tipo: classifyTipo(def, t.subject, t.productName),
+        assigneeId,
+        assigneeName: assigneeId ? (names.get(assigneeId) ?? assigneeId) : SEM_RESPONSAVEL,
+        aberto: (t.statusType ?? "") !== "Closed",
       });
     }
+  });
+
+  // Open / closed and the owner come from the Supervisor Virtual's copy of the
+  // Desk when it has the ticket (it is refreshed by the sync job and also sees
+  // changes made after the ticket was created). The live Desk value is the
+  // fallback. A DB failure degrades to the Desk values instead of failing.
+  try {
+    const states = await loadTicketStates([...byId.keys()]);
+    for (const [id, row] of byId) {
+      const st = states.get(id);
+      if (!st) continue;
+      if (st.statusType) row.aberto = st.statusType !== "Closed" && st.statusType !== "Deleted";
+      if (!row.assigneeId && st.assigneeId) {
+        row.assigneeId = st.assigneeId;
+        row.assigneeName = st.assigneeName || names.get(st.assigneeId) || st.assigneeId;
+      } else if (row.assigneeId && row.assigneeName === row.assigneeId && st.assigneeName) {
+        row.assigneeName = st.assigneeName;
+      }
+    }
+  } catch (err) {
+    logger.warn({ err: err instanceof Error ? err.message : String(err) }, "leads.db_states_failed");
   }
 
   const rows = [...byId.values()];
