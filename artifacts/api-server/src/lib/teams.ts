@@ -39,3 +39,8 @@ export function getTeam(operatorName: string | null | undefined): TeamId {
   if (!operatorName) return "vida";
   return TEAM_360_NORMALIZED.has(normalizeOperatorName(operatorName)) ? "360" : "vida";
 }
+
+/** True when the name belongs to the 360 roster above (accent/case-insensitive). */
+export function isTeam360Name(operatorName: string | null | undefined): boolean {
+  return Boolean(operatorName) && TEAM_360_NORMALIZED.has(normalizeOperatorName(operatorName as string));
+}

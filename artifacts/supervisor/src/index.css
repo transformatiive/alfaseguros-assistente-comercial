@@ -186,3 +186,14 @@
     @apply font-sans antialiased bg-background text-foreground;
   }
 }
+
+/* Análise de Chamadas: bars grow in, cards fade in, other bars dim on hover. */
+@keyframes ac-grow-y { from { transform: scaleY(0); } }
+@keyframes ac-grow-x { from { transform: scaleX(0); } }
+.ac-grow-y { transform-origin: bottom; animation: ac-grow-y .6s cubic-bezier(.2,.7,.2,1) both; }
+.ac-grow-x { transform-origin: left; animation: ac-grow-x .6s cubic-bezier(.2,.7,.2,1) both; }
+.ac-chart:hover > .ac-bar:not(:hover) { filter: opacity(.45) saturate(.5); }
+.ac-bar { transition: filter .15s; }
+@media (prefers-reduced-motion: reduce) {
+  .ac-grow-y, .ac-grow-x { animation: none; }
+}
