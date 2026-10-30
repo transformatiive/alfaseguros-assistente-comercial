@@ -13,3 +13,4 @@ export * from "./checklist_results";
 export * from "./devolucoes";
 export * from "./painel_acessos";
 export * from "./chamadas_ringover";
+export * from "./chamadas_sftp";

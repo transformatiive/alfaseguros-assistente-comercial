@@ -3,8 +3,12 @@ import { format, parseISO, subDays } from "date-fns";
 import { pt } from "date-fns/locale";
 import { AlertTriangle, Loader2, PhoneIncoming, RefreshCw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Link } from "wouter";
+import CampanhaVida from "./campanha-vida";
 import {
+  useEquipa360,
   useVisaoGeral,
+  type Equipa360Response,
   type EquipaAnalise,
   type FiltroEquipa,
   type Totais,
@@ -46,6 +50,9 @@ const METAS = {
   espera: (v: number | null) => nivelMenor(v, 20, 30),
   insistentes: (v: number | null) => nivelMenor(v, 3, 6),
   conversasReais: (v: number | null) => nivelMaior(v, 50, 35),
+  /** AI quality is 1–5; 85% / 70% of the scale, same as the guião targets. */
+  qualidade: (v: number | null) => nivelMaior(v, 4.25, 3.5),
+  semTicket: (v: number | null) => nivelMenor(v, 5, 10),
 };
 
 /* ------------------------------------------------------------------ */
@@ -95,9 +102,9 @@ const EQUIPAS: { id: FiltroEquipa; nome: string }[] = [
 
 const SUBMENU = [
   { id: "geral", nome: "Visão geral", fase: null },
-  { id: "e360", nome: "Equipa 360", fase: 3 },
+  { id: "e360", nome: "Equipa 360", fase: null },
   { id: "vida", nome: "Equipa Vida", fase: 5 },
-  { id: "campanha", nome: "Campanha Vida", fase: 4 },
+  { id: "campanha", nome: "Campanha Vida", fase: null },
   { id: "chamadas", nome: "Chamadas", fase: 6 },
 ] as const;
 type Ecra = (typeof SUBMENU)[number]["id"];
@@ -115,6 +122,7 @@ export default function AnaliseChamadas() {
   const periodo = atalho === "datas" ? datas : periodoDoAtalho(atalho);
   const datasInvalidas = atalho === "datas" && (!datas.de || !datas.ate || datas.de > datas.ate);
   const q = useVisaoGeral(periodo.de, periodo.ate, equipa);
+  const q360 = useEquipa360(periodo.de, periodo.ate, ecra === "e360" && !datasInvalidas);
   const atual = SUBMENU.find((s) => s.id === ecra)!;
 
   return (
@@ -124,7 +132,7 @@ export default function AnaliseChamadas() {
         <div className="flex flex-wrap items-end gap-3">
           <div className="mr-auto">
             <h1 className="text-xl font-semibold text-stone-900">Análise de Chamadas</h1>
-            <p className="text-sm text-stone-500">Todas as chamadas do Ringover, por equipa.</p>
+            <p className="text-sm text-stone-500">Chamadas do Ringover por equipa e da campanha Vida (SolidNetworks).</p>
           </div>
           <div role="group" aria-label="Período" className="flex flex-wrap gap-1">
             {ATALHOS.map((a) => (
@@ -193,10 +201,14 @@ export default function AnaliseChamadas() {
           ))}
         </nav>
 
-        {ecra !== "geral" ? (
-          <EmConstrucao nome={atual.nome} fase={atual.fase} />
-        ) : datasInvalidas ? null : (
+        {datasInvalidas ? null : ecra === "geral" ? (
           <VisaoGeral q={q} equipa={equipa} setEquipa={setEquipa} />
+        ) : ecra === "e360" ? (
+          <Equipa360 q={q360} />
+        ) : ecra === "campanha" ? (
+          <CampanhaVida de={periodo.de} ate={periodo.ate} />
+        ) : (
+          <EmConstrucao nome={atual.nome} fase={atual.fase} />
         )}
       </div>
     </div>
@@ -651,5 +663,223 @@ function PorColaborador({ d }: { d: VisaoGeralResponse }) {
         </button>
       )}
     </Bloco>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Equipa 360                                                          */
+/* ------------------------------------------------------------------ */
+
+const fmtNota = (n: number | null) => (n === null ? "—" : `${n.toLocaleString("pt-PT", { minimumFractionDigits: 1 })} / 5`);
+
+const COR_SEVERIDADE: Record<"alta" | "media" | "baixa", string> = {
+  alta: "bg-red-600",
+  media: "bg-amber-500",
+  baixa: "bg-stone-400",
+};
+
+const COR_RESULTADO_360: Record<Equipa360Response["resultados"][number]["id"], string> = {
+  won: "bg-green-600",
+  open: "bg-sky-600",
+  unknown: "bg-stone-400",
+  lost: "bg-red-600",
+  sem_ticket: "bg-amber-500",
+};
+
+function Equipa360({ q }: { q: ReturnType<typeof useEquipa360> }) {
+  if (q.isPending) {
+    return (
+      <div className="flex items-center gap-2 text-stone-500 py-16 justify-center">
+        <Loader2 className="h-4 w-4 animate-spin" /> A carregar a análise da equipa 360…
+      </div>
+    );
+  }
+  if (q.isError) {
+    return (
+      <Card className="border-red-200 bg-red-50">
+        <CardContent className="p-5 flex items-start gap-3 text-sm text-red-800">
+          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+          <div>
+            <div className="font-medium">Não foi possível carregar a análise.</div>
+            <div className="mt-1">{q.error.message}</div>
+            <button type="button" onClick={() => q.refetch()} className="mt-2 underline">
+              Tentar outra vez
+            </button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+  const d = q.data;
+  const k = d.kpis;
+  if (k.conversas === 0) {
+    return (
+      <Card className="border-stone-200">
+        <CardContent className="p-8 text-center text-stone-600 text-sm">
+          A IA não analisou conversas da equipa 360 neste período.
+        </CardContent>
+      </Card>
+    );
+  }
+  const tiles: { nome: string; valor: string; nivel: Nivel; nota: string }[] = [
+    { nome: "Conversas", valor: fmtN(k.conversas), nivel: "neutro", nota: `${fmtN(k.analisadas)} analisadas pela IA` },
+    { nome: "Qualidade média", valor: fmtNota(k.qualidadeMedia), nivel: METAS.qualidade(k.qualidadeMedia), nota: "Nota da IA · meta 4,3 · alerta abaixo de 3,5" },
+    { nome: "Com falha grave", valor: fmtPct(k.comDesvioAltoPct), nivel: "neutro", nota: "Falha de severidade alta" },
+    { nome: "Sem ticket no Desk", valor: fmtPct(k.semTicketPct), nivel: METAS.semTicket(k.semTicketPct), nota: "Meta 5% · alerta acima de 10%" },
+    { nome: "Risco alto de perder", valor: fmtPct(k.riscoAltoPct), nivel: "neutro", nota: "Segundo a IA" },
+    { nome: "Precisam de seguimento", valor: fmtPct(k.followUpPct), nivel: "neutro", nota: "A IA pede um contacto de volta" },
+  ];
+  const totalRes = d.resultados.reduce((s, r) => s + r.conversas, 0);
+
+  return (
+    <div className={`space-y-4 transition-opacity ${q.isFetching ? "opacity-70" : ""}`}>
+      <p className="text-xs text-stone-500">
+        {fmtDiaCurto(d.de)} a {fmtDiaCurto(d.ate)} · conversas analisadas pela IA na corrida diária · inclui Sinistros
+      </p>
+      <section aria-label="Indicadores da equipa 360" className="grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+        {tiles.map((t, i) => (
+          <Card
+            key={t.nome}
+            className="border-stone-200 animate-in fade-in slide-in-from-bottom-1 duration-500 fill-mode-both hover:shadow-md transition-shadow"
+            style={{ animationDelay: `${i * 60}ms` }}
+          >
+            <CardContent className="p-4">
+              <div className="text-[11px] uppercase tracking-wide text-stone-500">{t.nome}</div>
+              <div className={`mt-1 text-2xl sm:text-3xl tabular-nums ${COR_TEXTO[t.nivel]}`} style={{ fontFamily: "Georgia, serif" }}>
+                {t.valor}
+              </div>
+              <div className="mt-1.5 text-[11px] text-stone-500 leading-snug">{t.nota}</div>
+            </CardContent>
+          </Card>
+        ))}
+      </section>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Bloco titulo="Falhas mais comuns ao procedimento" sub="% das conversas analisadas em que a IA encontrou a falha" atraso={100}>
+          {d.falhas.length === 0 ? (
+            <p className="text-sm text-stone-500">A IA não encontrou falhas neste período.</p>
+          ) : (
+            <div className="ac-chart space-y-2">
+              {d.falhas.map((f, i) => (
+                <div key={f.titulo} tabIndex={0} className="ac-bar group relative flex items-center gap-2 outline-none">
+                  <Dica texto={`${f.titulo}: ${fmtN(f.conversas)} conversas (${fmtPct(f.pct)}) · gravidade ${f.severidade}`} lado="esq" />
+                  <span className="w-40 sm:w-56 shrink-0 text-[13px] text-stone-800 leading-tight">{f.titulo}</span>
+                  <span className="flex-1 h-3 rounded bg-stone-100 overflow-hidden">
+                    <span
+                      className={`block h-full ac-grow-x ${COR_SEVERIDADE[f.severidade]}`}
+                      style={{ width: `${f.pct ?? 0}%`, animationDelay: `${i * 40}ms` }}
+                    />
+                  </span>
+                  <b className="w-11 text-right tabular-nums text-sm">{fmtPct(f.pct)}</b>
+                </div>
+              ))}
+              <Legenda
+                itens={[
+                  { cor: COR_SEVERIDADE.alta, nome: "Grave" },
+                  { cor: COR_SEVERIDADE.media, nome: "Média" },
+                  { cor: COR_SEVERIDADE.baixa, nome: "Leve" },
+                ]}
+              />
+            </div>
+          )}
+        </Bloco>
+
+        <Bloco titulo="Como acabaram as conversas" sub="Ligação entre a conversa e o ticket do Desk" atraso={150}>
+          <div className="ac-chart flex h-6 rounded overflow-hidden">
+            {d.resultados
+              .filter((r) => r.conversas > 0)
+              .map((r, i, arr) => (
+                <div
+                  key={r.id}
+                  tabIndex={0}
+                  className={`ac-bar ac-grow-x group relative outline-none ${COR_RESULTADO_360[r.id]}`}
+                  style={{ width: `${(r.conversas / Math.max(1, totalRes)) * 100}%` }}
+                >
+                  <Dica texto={`${r.nome}: ${fmtN(r.conversas)} (${fmtPct(r.pct)})`} lado={i === 0 ? "esq" : i === arr.length - 1 ? "dir" : "meio"} />
+                </div>
+              ))}
+          </div>
+          <div className="mt-3 space-y-1.5">
+            {d.resultados.map((r) => (
+              <div key={r.id} className="flex items-center gap-2 text-sm">
+                <span className={`h-2.5 w-2.5 rounded-sm shrink-0 ${COR_RESULTADO_360[r.id]}`} />
+                <span className="flex-1 text-stone-700">{r.nome}</span>
+                <span className="tabular-nums text-stone-500">{fmtN(r.conversas)}</span>
+                <b className="tabular-nums w-12 text-right">{fmtPct(r.pct)}</b>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-stone-100 mt-4 pt-3">
+            <div className="text-[11px] uppercase tracking-wide text-stone-500 mb-2">Porque ligam os clientes</div>
+            <div className="ac-chart space-y-1.5">
+              {d.motivos.map((m, i) => (
+                <div key={m.nome} tabIndex={0} className="ac-bar group relative flex items-center gap-2 outline-none">
+                  <Dica texto={`${m.nome}: ${fmtN(m.conversas)} conversas (${fmtPct(m.pct)})`} lado="esq" />
+                  <span className="w-32 shrink-0 text-[13px] text-stone-800">{m.nome}</span>
+                  <span className="flex-1 h-3 rounded bg-stone-100 overflow-hidden">
+                    <span className="block h-full ac-grow-x bg-stone-700" style={{ width: `${m.pct ?? 0}%`, animationDelay: `${i * 40}ms` }} />
+                  </span>
+                  <b className="w-11 text-right tabular-nums text-sm">{fmtPct(m.pct)}</b>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Bloco>
+      </div>
+
+      <Bloco titulo="Por colaborador · Equipa 360" sub="Ordenado por número de conversas" atraso={200}>
+        <div className="overflow-x-auto -mx-1">
+          <table className="w-full text-sm min-w-[560px]">
+            <thead>
+              <tr className="text-[11px] uppercase tracking-wide text-stone-500 border-b border-stone-200">
+                <th className="text-left py-2 px-2 font-medium">Colaborador</th>
+                <th className="text-right py-2 px-2 font-medium">Conversas</th>
+                <th className="text-right py-2 px-2 font-medium">Qualidade</th>
+                <th className="text-right py-2 px-2 font-medium">Falhas graves</th>
+                <th className="text-right py-2 px-2 font-medium">Sem ticket</th>
+                <th className="text-right py-2 px-2 font-medium">Risco alto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.porColaborador.map((p) => (
+                <tr key={p.agenteId} className="border-b border-stone-100 hover:bg-stone-50">
+                  <td className="py-2 px-2 font-medium text-stone-900">{p.nome}</td>
+                  <td className="py-2 px-2 text-right tabular-nums">{fmtN(p.conversas)}</td>
+                  <td className={`py-2 px-2 text-right tabular-nums whitespace-nowrap font-semibold ${COR_TEXTO[METAS.qualidade(p.qualidadeMedia)]}`}>
+                    {fmtNota(p.qualidadeMedia)}
+                  </td>
+                  <td className="py-2 px-2 text-right tabular-nums">{fmtN(p.desviosAltos)}</td>
+                  <td className={`py-2 px-2 text-right tabular-nums ${COR_TEXTO[METAS.semTicket(p.semTicketPct)]}`}>{fmtPct(p.semTicketPct)}</td>
+                  <td className="py-2 px-2 text-right tabular-nums">{fmtN(p.riscoAlto)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Bloco>
+
+      {d.piores.length > 0 && (
+        <Bloco titulo="Conversas para rever na reunião" sub="Nota da IA de 3 ou menos, as mais baixas primeiro" atraso={250}>
+          <ul className="divide-y divide-stone-100">
+            {d.piores.map((p) => (
+              <li key={p.id}>
+                <Link href={`/conversas/${p.id}`} className="block py-2.5 hover:bg-stone-50 rounded px-1">
+                  <div className="flex flex-wrap items-center gap-x-2 text-sm">
+                    <span className={`font-semibold tabular-nums ${COR_TEXTO[METAS.qualidade(p.qualidade)]}`}>{p.qualidade}/5</span>
+                    <span className="font-medium text-stone-900">{p.agente}</span>
+                    <span className="text-stone-500 text-xs">
+                      {fmtDiaCurto(p.dia)} · {p.categoria}
+                    </span>
+                  </div>
+                  <p className="text-[13px] text-stone-600 mt-0.5 line-clamp-2" style={{ fontFamily: "Georgia, serif" }}>
+                    {p.resumo}
+                  </p>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Bloco>
+      )}
+    </div>
   );
 }

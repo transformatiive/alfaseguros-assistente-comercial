@@ -1,12 +1,17 @@
-import { and, asc, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import {
   db,
+  casesTable,
+  caseCallsTable,
+  caseTicketsTable,
+  conversationsTable,
   chamadasRingoverTable,
   chamadasRingoverDiasTable,
   colaboradoresTable,
   type InsertChamadaRingover,
 } from "@workspace/db";
 import type { EquipaColaborador } from "../analise-chamadas/agregar.js";
+import type { ConversaPara360 } from "../analise-chamadas/agregar-360.js";
 
 /**
  * Storage for the Análise de Chamadas tables. Per CLAUDE.md this is the only
@@ -97,4 +102,36 @@ export async function carregarRosterEquipas(): Promise<Map<string, EquipaColabor
     .from(colaboradoresTable)
     .where(isNotNull(colaboradoresTable.ringoverUserId));
   return new Map(rows.filter((r) => r.id).map((r) => [r.id as string, r.equipa]));
+}
+
+/**
+ * Analysed conversations of a period with the Desk case each one belongs to.
+ * A conversation linked to several cases keeps the one that has a ticket.
+ * Team filtering happens in the caller (it needs the roster).
+ */
+export async function carregarConversasComCaso(de: string, ate: string): Promise<ConversaPara360[]> {
+  const temTicket = sql<boolean>`exists (select 1 from ${caseTicketsTable} where ${caseTicketsTable.caseId} = ${casesTable.id})`;
+  const rows = await db
+    .select({
+      id: conversationsTable.id,
+      dia: conversationsTable.runDate,
+      agenteId: conversationsTable.agentId,
+      agenteNome: conversationsTable.agentName,
+      analise: conversationsTable.analysisJson,
+      resultado: casesTable.outcomeStatus,
+      temTicket,
+    })
+    .from(conversationsTable)
+    .leftJoin(caseCallsTable, eq(caseCallsTable.conversationId, conversationsTable.id))
+    .leftJoin(casesTable, eq(casesTable.id, caseCallsTable.caseId))
+    .where(and(gte(conversationsTable.runDate, de), lte(conversationsTable.runDate, ate)))
+    .orderBy(asc(conversationsTable.id));
+
+  const porId = new Map<number, ConversaPara360>();
+  for (const r of rows) {
+    const atual = porId.get(r.id);
+    const linha: ConversaPara360 = { ...r, temTicket: r.temTicket === true };
+    if (!atual || (!atual.temTicket && linha.temTicket)) porId.set(r.id, linha);
+  }
+  return [...porId.values()];
 }

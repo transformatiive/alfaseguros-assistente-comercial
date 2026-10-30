@@ -64,3 +64,41 @@ export function useVisaoGeral(de: string, ate: string, equipa: FiltroEquipa) {
     placeholderData: (prev) => prev,
   });
 }
+
+/** Mirrors GET /api/analise-chamadas/equipa-360 (artifacts/api-server/src/analise-chamadas/agregar-360.ts). */
+export interface Equipa360Response {
+  de: string;
+  ate: string;
+  kpis: {
+    conversas: number;
+    analisadas: number;
+    qualidadeMedia: number | null;
+    comDesvioAltoPct: number | null;
+    semTicketPct: number | null;
+    riscoAltoPct: number | null;
+    followUpPct: number | null;
+  };
+  falhas: { titulo: string; conversas: number; pct: number | null; severidade: "alta" | "media" | "baixa" }[];
+  motivos: { nome: string; conversas: number; pct: number | null }[];
+  resultados: { id: "won" | "lost" | "open" | "unknown" | "sem_ticket"; nome: string; conversas: number; pct: number | null }[];
+  porColaborador: {
+    agenteId: string;
+    nome: string;
+    conversas: number;
+    analisadas: number;
+    qualidadeMedia: number | null;
+    desviosAltos: number;
+    semTicketPct: number | null;
+    riscoAlto: number;
+  }[];
+  piores: { id: number; dia: string; agente: string; qualidade: number; categoria: string; resumo: string }[];
+}
+
+export function useEquipa360(de: string, ate: string, ativo: boolean) {
+  return useQuery({
+    queryKey: ["analise-chamadas-360", de, ate],
+    queryFn: () => getJson<Equipa360Response>(`/api/analise-chamadas/equipa-360?de=${de}&ate=${ate}`),
+    enabled: ativo && Boolean(de && ate && de <= ate),
+    placeholderData: (prev) => prev,
+  });
+}

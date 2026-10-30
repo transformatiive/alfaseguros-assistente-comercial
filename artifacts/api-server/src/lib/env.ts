@@ -31,6 +31,30 @@ const envSchema = z.object({
    */
   OPENROUTER_MODEL_CHECKLIST: z.string().default("anthropic/claude-haiku-4.5"),
   CRON_WEBHOOK_SECRET: z.string().optional(),
+  /**
+   * Bucket `sftp-files` da Railway (projeto Alfaseguros-SFTP): gravações da
+   * campanha Vida (SolidNetworks) e as transcrições do Whisper. Sem estas
+   * variáveis o separador "Campanha Vida" abre vazio e o job não corre.
+   */
+  SFTP_S3_ENDPOINT: z.string().optional(),
+  SFTP_S3_BUCKET: z.string().optional(),
+  SFTP_S3_REGION: z.string().default("auto"),
+  SFTP_S3_ACCESS_KEY_ID: z.string().optional(),
+  SFTP_S3_SECRET_ACCESS_KEY: z.string().optional(),
+  /** Modelo da análise das chamadas do SFTP; o mesmo que o portal SFTP usava. */
+  OPENROUTER_MODEL_SFTP: z.string().default("anthropic/claude-sonnet-5.5"),
+  /**
+   * "1" liga a análise de hora a hora das gravações. Desligada por defeito:
+   * enquanto o portal SFTP ainda analisa, ligá-la aqui pagava cada chamada duas
+   * vezes. Liga-se aqui no mesmo dia em que se desliga lá (ANALISE_AUTOMATICA=0).
+   */
+  SFTP_ANALISE_AUTOMATICA: z.string().default("0"),
+  /**
+   * Migração das análises já feitas no portal SFTP: o endereço do export JSON
+   * (ex.: https://<portal>/analise/exportar.json) e o token partilhado.
+   */
+  PORTAL_SFTP_EXPORT_URL: z.string().optional(),
+  PORTAL_SFTP_EXPORT_TOKEN: z.string().optional(),
   PUBLIC_APP_URL: z.string().optional(),
   ANALYSIS_CONCURRENCY: z.coerce.number().int().positive().default(4),
   ZOHO_DESK_CLIENT_ID: z.string().optional(),
