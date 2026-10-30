@@ -4,6 +4,7 @@ import { pt } from "date-fns/locale";
 import { AlertTriangle, Loader2, PhoneIncoming, RefreshCw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Link } from "wouter";
+import CampanhaVida from "./campanha-vida";
 import {
   useEquipa360,
   useVisaoGeral,
@@ -103,7 +104,7 @@ const SUBMENU = [
   { id: "geral", nome: "Visão geral", fase: null },
   { id: "e360", nome: "Equipa 360", fase: null },
   { id: "vida", nome: "Equipa Vida", fase: 5 },
-  { id: "campanha", nome: "Campanha Vida", fase: 4 },
+  { id: "campanha", nome: "Campanha Vida", fase: null },
   { id: "chamadas", nome: "Chamadas", fase: 6 },
 ] as const;
 type Ecra = (typeof SUBMENU)[number]["id"];
@@ -131,7 +132,7 @@ export default function AnaliseChamadas() {
         <div className="flex flex-wrap items-end gap-3">
           <div className="mr-auto">
             <h1 className="text-xl font-semibold text-stone-900">Análise de Chamadas</h1>
-            <p className="text-sm text-stone-500">Todas as chamadas do Ringover, por equipa.</p>
+            <p className="text-sm text-stone-500">Chamadas do Ringover por equipa e da campanha Vida (SolidNetworks).</p>
           </div>
           <div role="group" aria-label="Período" className="flex flex-wrap gap-1">
             {ATALHOS.map((a) => (
@@ -204,6 +205,8 @@ export default function AnaliseChamadas() {
           <VisaoGeral q={q} equipa={equipa} setEquipa={setEquipa} />
         ) : ecra === "e360" ? (
           <Equipa360 q={q360} />
+        ) : ecra === "campanha" ? (
+          <CampanhaVida de={periodo.de} ate={periodo.ate} />
         ) : (
           <EmConstrucao nome={atual.nome} fase={atual.fase} />
         )}

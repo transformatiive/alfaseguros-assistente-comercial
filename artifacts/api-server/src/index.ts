@@ -5,6 +5,9 @@ import { setupSessionStore } from "./lib/setup-session-store.js";
 import { setupPainelAcessos } from "./lib/setup-painel-acessos.js";
 import { setupChamadasRingover } from "./lib/setup-chamadas-ringover.js";
 import { sincronizarHistoricoEmFalta } from "./jobs/sync-chamadas-ringover.js";
+import { setupChamadasSftp } from "./lib/setup-chamadas-sftp.js";
+import { iniciarAgendadorChamadasSftp } from "./jobs/chamadas-sftp.js";
+import { importarDoPortalSftp } from "./jobs/importar-portal-sftp.js";
 
 const rawPort = process.env["PORT"];
 
@@ -44,6 +47,16 @@ app.listen(port, (err?: Error) => {
           logger.warn({ err }, "análise de chamadas: histórico em falta não sincronizado"),
         );
       }
+    })
+    // Campanha Vida (gravações SolidNetworks no SFTP): tabelas, migração das
+    // análises do portal SFTP (só se configurada) e o agendador de hora a hora
+    // (só se SFTP_ANALISE_AUTOMATICA=1).
+    .then(() => setupChamadasSftp())
+    .then(() => {
+      void importarDoPortalSftp().catch((err) =>
+        logger.warn({ err }, "chamadas-sftp: importação do portal falhou"),
+      );
+      iniciarAgendadorChamadasSftp();
     })
     .catch((err) => logger.error({ err }, "Startup DB setup failed"));
 });

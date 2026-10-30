@@ -98,6 +98,20 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     cacheWriteUsdPerMillion: 2.5,
     cacheReadUsdPerMillion: 0.2,
   },
+  // Used by the SFTP call analysis (OPENROUTER_MODEL_SFTP). Prices from the
+  // OpenRouter catalogue, 22/10/2026.
+  "anthropic/claude-sonnet-5.5": {
+    inputUsdPerMillion: 2,
+    outputUsdPerMillion: 10,
+    cacheWriteUsdPerMillion: 2.5,
+    cacheReadUsdPerMillion: 0.2,
+  },
+  "anthropic/claude-haiku-5.5": {
+    inputUsdPerMillion: 0.1,
+    outputUsdPerMillion: 0.5,
+    cacheWriteUsdPerMillion: 0.125,
+    cacheReadUsdPerMillion: 0.01,
+  },
   "anthropic/claude-haiku-4.5": {
     inputUsdPerMillion: 1,
     outputUsdPerMillion: 5,
