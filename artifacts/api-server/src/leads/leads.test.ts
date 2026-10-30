@@ -68,6 +68,9 @@ describe("classifyTipo", () => {
     expect(classifyTipo(ch("SITE"), "SITE: Seguro de Saúde familiar")).toBe("Saúde");
     expect(classifyTipo(ch("EMAIL"), "Seguro vida crédito habitação")).toBe("Vida");
     expect(classifyTipo(ch("SITE"), "SITE: Acidentes de Trabalho")).toBe("Empresas");
+    expect(classifyTipo(ch("EMAIL"), "VCVIDA - Simulação Seguro MR, Maria M.")).toBe("Habitação");
+    expect(classifyTipo(ch("EMAIL"), "Fwd: Seguro AT - Guilherme T.")).toBe("Empresas");
+    expect(classifyTipo(ch("EMAIL"), "seguro de trabalho")).toBe("Empresas");
     expect(classifyTipo(ch("BLOG"), "Seguro de animais")).toBe("Outros");
     expect(classifyTipo(ch("BLOG"), null)).toBe("Outros");
   });

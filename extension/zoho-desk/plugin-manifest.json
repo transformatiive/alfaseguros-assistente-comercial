@@ -5,7 +5,7 @@
   "service": "DESK",
   "storage": false,
   "whiteListedDomains": [
-    "https://supervisor-production-f030.up.railway.app"
+    "https://alfa-supervisor-virtual.up.railway.app"
   ],
   "modules": {
     "widgets": [
@@ -20,7 +20,7 @@
   },
   "cspDomains": {
     "connect-src": [
-      "https://supervisor-production-f030.up.railway.app"
+      "https://alfa-supervisor-virtual.up.railway.app"
     ]
   },
   "zohoAuthorisation": {},
@@ -35,7 +35,7 @@
       "userdefined": false,
       "secure": false,
       "authType": "org",
-      "default": "https://supervisor-production-f030.up.railway.app"
+      "default": "https://alfa-supervisor-virtual.up.railway.app"
     },
     {
       "displayName": "Token do widget",
