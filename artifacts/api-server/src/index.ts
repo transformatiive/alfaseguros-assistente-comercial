@@ -3,6 +3,7 @@ import { logger } from "./lib/logger.js";
 import { seedAdminUser } from "./lib/seed.js";
 import { setupSessionStore } from "./lib/setup-session-store.js";
 import { setupPainelAcessos } from "./lib/setup-painel-acessos.js";
+import { setupNocrm } from "./lib/setup-nocrm.js";
 import { setupChamadasRingover } from "./lib/setup-chamadas-ringover.js";
 import { sincronizarHistoricoEmFalta } from "./jobs/sync-chamadas-ringover.js";
 import { setupChamadasSftp } from "./lib/setup-chamadas-sftp.js";
@@ -32,7 +33,10 @@ app.listen(port, (err?: Error) => {
   }
   logger.info({ port }, "Server listening");
 
-  setupSessionStore()
+  // A coluna colaboradores.nocrm_user_id vai à frente de tudo: o Drizzle
+  // pede-a em qualquer leitura de colaboradores a partir deste deploy.
+  setupNocrm()
+    .then(() => setupSessionStore())
     .then(() => seedAdminUser())
     // Depois do seed e não em paralelo: a tabela dos acessos tem uma chave
     // estrangeira para `colaboradores`, e arrancar as duas coisas ao mesmo

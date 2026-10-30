@@ -22,6 +22,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/", label: "Resumo Diário" },
     { href: "/analise-chamadas", label: "Análise de Chamadas" },
     { href: "/checklist", label: "Checklist Vida" },
+    { href: "/vida/pipeline", label: "Equipa Vida · Pipeline" },
   ];
 
   const handleLogout = async () => {
