@@ -34,7 +34,10 @@ function ligado(): boolean {
   return env().PAINEL_PREVIEW_ENABLED === "1";
 }
 
-router.use((req, res, next) => {
+// Scoped to its own path: mounted without one, this guard would answer 404 to
+// every /api route registered after it (stats, conversations, …) whenever the
+// preview is off, and log every one of them as a preview access when it is on.
+router.use("/agente/pre-visualizacao", (req, res, next) => {
   if (!ligado()) {
     // 404 rather than 403: a disabled preview should look like a route that
     // does not exist, not like one worth attacking.

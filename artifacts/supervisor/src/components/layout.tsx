@@ -20,6 +20,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const navLinks = [
     { href: "/", label: "Resumo Diário" },
+    { href: "/analise-chamadas", label: "Análise de Chamadas" },
     { href: "/checklist", label: "Checklist Vida" },
     { href: "/vida/pipeline", label: "Equipa Vida · Pipeline" },
   ];
@@ -37,14 +38,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <span className="font-semibold text-sm tracking-tight">Alfaseguros</span>
         </div>
 
-        <nav className="flex items-center gap-1 ml-6">
+        <nav className="flex items-center gap-1 ml-6 min-w-0 overflow-x-auto">
           {navLinks.map((l) => {
             const active = l.href === "/" ? location === "/" : location.startsWith(l.href);
             return (
               <Link
                 key={l.href}
                 href={l.href}
-                className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
+                className={`text-xs px-2.5 py-1 rounded-md transition-colors whitespace-nowrap ${
                   active
                     ? "bg-sidebar-accent text-sidebar-foreground font-medium"
                     : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
