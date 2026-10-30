@@ -2,6 +2,7 @@
  * Análise de Chamadas · Visão geral — every Ringover call, by team.
  *
  *   GET  /api/analise-chamadas/geral?de=…&ate=…&equipa=…   (session)
+ *   GET  /api/analise-chamadas/equipa-360?de=…&ate=…       (session)
  *   POST /api/analise-chamadas/sincronizar                 (X-Cron-Secret)
  *
  * The GET also starts, in the background, the pull of any day in the period
@@ -24,7 +25,9 @@ import {
   carregarRosterEquipas,
   diasSincronizados,
   limitesSincronizados,
+  carregarConversasComCaso,
 } from "../storage/chamadas-ringover-repo.js";
+import { agregarEquipa360 } from "../analise-chamadas/agregar-360.js";
 import { sincronizarPeriodo } from "../jobs/sync-chamadas-ringover.js";
 
 export const MAX_DIAS_PERIODO = 366;
@@ -144,6 +147,17 @@ router.get("/analise-chamadas/geral", async (req, res): Promise<void> => {
       ultimoDia: limites.ultimo,
     },
   });
+});
+
+/** Equipa 360: what the daily AI analysis found, joined with the Desk cases. */
+router.get("/analise-chamadas/equipa-360", async (req, res): Promise<void> => {
+  const p = lerPeriodo({ de: req.query.de, ate: req.query.ate });
+  if (!p.ok) {
+    res.status(400).json({ error: p.erro });
+    return;
+  }
+  const [conversas, roster] = await Promise.all([carregarConversasComCaso(p.de, p.ate), carregarRosterEquipas()]);
+  res.json(agregarEquipa360(conversas, roster, p.de, p.ate));
 });
 
 export default router;
