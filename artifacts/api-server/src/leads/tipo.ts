@@ -14,9 +14,9 @@ export type Tipo = (typeof TIPOS)[number];
 const RULES: Array<[Tipo, RegExp]> = [
   ["Vida", /\bVIDA\b|CREDITO (A )?HABITACAO/],
   ["Saúde", /SAUDE|DENTAL|ASISA|MEDIS|MULTICARE/],
-  ["Empresas", /EMPRES|ACIDENTES DE TRABALHO|RECIBOS VERDES|RESPONSABILIDADE CIVIL|\bRC\b|OBRAS|MONTAGENS|FROTA/],
+  ["Empresas", /EMPRES|ACIDENTES DE TRABALHO|RECIBOS VERDES|RESPONSABILIDADE CIVIL|\bRC\b|OBRAS|MONTAGENS|FROTA|\bAT\b|SEGURO DE TRABALHO/],
   ["Auto", /\bAUTO|VIATURA|\bCARRO|\bMOTA\b|MOTOCICLO|TVDE|MATRICULA/],
-  ["Habitação", /HABITACAO|MULTI ?RRISCO|MULTI RISCO|\bCASA\b|CONDOMINIO|RECHEIO|\bMRH\b/],
+  ["Habitação", /HABITACAO|MULTI ?RRISCO|MULTI RISCO|\bCASA\b|CONDOMINIO|RECHEIO|\bMRH?\b/],
 ];
 
 export function classifyTipo(def: ChannelDef, subject: string | null | undefined, productName?: string | null): Tipo {

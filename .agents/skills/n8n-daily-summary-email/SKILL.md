@@ -9,7 +9,7 @@ Sends a concise management briefing email every weekday morning. Design principl
 
 ## API Details
 
-**Base URL (production):** `https://supervisor-production-f030.up.railway.app`
+**Base URL (production):** `https://alfa-supervisor-virtual.up.railway.app`
 
 **Endpoint:** `GET /api/email/summary?date=YYYY-MM-DD`
 
@@ -64,7 +64,7 @@ return [{ json: { date: yesterday } }];
 
 ### Node 3 — HTTP Request — Fetch Summary
 - **Method:** GET
-- **URL:** `https://supervisor-production-f030.up.railway.app/api/email/summary`
+- **URL:** `https://alfa-supervisor-virtual.up.railway.app/api/email/summary`
 - **Headers:** `Authorization: Bearer <FOLLOWUP_API_TOKEN>`
 - **Query params:** `date` = `{{ $json.date }}`
 - **Response format:** JSON
@@ -84,7 +84,7 @@ Design: stats bar → executive hook (2 sentences) → 3 columns (bem / melhorar
 
 ```javascript
 const d = $input.first().json;
-const BASE = 'https://supervisor-production-f030.up.railway.app';
+const BASE = 'https://alfa-supervisor-virtual.up.railway.app';
 
 // Take at most N items from an array
 const top = (arr = [], n = 3) => arr.slice(0, n);
