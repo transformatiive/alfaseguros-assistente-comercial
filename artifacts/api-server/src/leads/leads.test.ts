@@ -162,4 +162,17 @@ describe("buildEmailSummary", () => {
     expect(s.canais).toHaveLength(10);
     expect(s.periodo).toEqual({ from: "2026-09-30", to: "2026-10-28" });
   });
+
+  it("lists people over the last 30 days, unassigned last", () => {
+    const rows = [
+      row({ day: "2026-10-28", channelKey: "EMAIL", assigneeName: "Vânia", aberto: true }),
+      row({ day: "2026-10-20", channelKey: "SITE", assigneeName: "Vânia", aberto: false }),
+      row({ day: "2026-10-27", channelKey: "SITE", assigneeName: "Sem responsável", assigneeId: null }),
+      row({ day: "2026-10-28", channelKey: "SITE", assigneeName: "Ana" }),
+      row({ day: "2026-09-10", channelKey: "SITE", assigneeName: "Rui" }), // outside 30 days
+    ];
+    const s = buildEmailSummary(rows, "2026-10-29", "https://x/api/leads", "Sem responsável");
+    expect(s.pessoas.map((p) => p.name)).toEqual(["Vânia", "Ana", "Sem responsável"]);
+    expect(s.pessoas[0]).toMatchObject({ total: 2, abertos: 1, ontem: 1, porCanal: { EMAIL: 1, SITE: 1 } });
+  });
 });
