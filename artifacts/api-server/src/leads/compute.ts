@@ -303,8 +303,8 @@ export function buildView(
 }
 
 /**
- * Compact, count-only summary for the daily leads email (n8n). No names, no
- * subjects: the email only shows channels and lead types.
+ * Compact summary for the daily leads email (n8n): counts per channel, per
+ * lead type and per person (Nuno, 02/11/2026). No subjects, no client data.
  */
 export interface EmailSummary {
   hoje: string;
@@ -313,10 +313,12 @@ export interface EmailSummary {
   totais: { ontem: number; d7: number; d30: number; prev30: number; prev30Comparavel: number; d30Comparavel: number };
   canais: Array<{ key: string; label: string; color: string; ontem: number; d7: number; d30: number; prev30: number; novo: boolean }>;
   tipos: TipoTotal[];
+  /** Last 30 days per assignee, same rules as the dashboard's people table. */
+  pessoas: Array<PersonLoad & { ontem: number }>;
   painelUrl: string;
 }
 
-export function buildEmailSummary(rows: LeadRow[], today: string, painelUrl: string): EmailSummary {
+export function buildEmailSummary(rows: LeadRow[], today: string, painelUrl: string, semResponsavelLabel = "Sem responsável"): EmailSummary {
   const yesterday = addDays(today, -1);
   const d7From = addDays(today, -6);
   const d30From = addDays(today, -29);
@@ -359,6 +361,10 @@ export function buildEmailSummary(rows: LeadRow[], today: string, painelUrl: str
       tipo,
       total: d30Rows.filter((r) => r.tipo === tipo).length,
       ontem: rows.filter((r) => r.tipo === tipo && r.day === yesterday).length,
+    })),
+    pessoas: buildPeople(d30Rows, semResponsavelLabel).pessoas.map((p) => ({
+      ...p,
+      ontem: rows.filter((r) => r.assigneeName === p.name && r.day === yesterday).length,
     })),
     painelUrl,
   };

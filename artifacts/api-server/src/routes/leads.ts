@@ -47,7 +47,7 @@ router.get("/leads", async (req, res): Promise<void> => {
 /**
  * GET /leads/resumo.json — counts per channel and per lead type for the daily
  * leads email (n8n builds the HTML). Same data and rules as the dashboard, so
- * the email and the panel never disagree. Counts only: no names, no subjects.
+ * the email and the panel never disagree. Counts and assignee names only, no subjects.
  */
 router.get("/leads/resumo.json", async (req, res): Promise<void> => {
   const today = todayLisbon();
@@ -56,7 +56,7 @@ router.get("/leads/resumo.json", async (req, res): Promise<void> => {
   try {
     const rows = await fetchLeads(from, today);
     const painelUrl = `${req.protocol}://${req.get("host")}${req.baseUrl}/leads`;
-    res.json(buildEmailSummary(rows, today, painelUrl));
+    res.json(buildEmailSummary(rows, today, painelUrl, SEM_RESPONSAVEL));
   } catch (err) {
     const isConfig = err instanceof LeadsConfigError;
     logger.error({ err: err instanceof Error ? err.message : String(err) }, "leads.resumo_failed");
