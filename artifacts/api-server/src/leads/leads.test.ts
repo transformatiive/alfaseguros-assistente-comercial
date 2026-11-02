@@ -32,8 +32,17 @@ describe("isLeadOf", () => {
     expect(isLeadOf(ch("ALICE"), "Phone", "Alice: Pedido sem resposta")).toBe(false);
   });
 
-  it("keeps Alice tickets out of the phone simulation channel", () => {
+  it("counts Alice simulations in any Desk channel and subject format", () => {
+    expect(isLeadOf(ch("ALICE"), "Email", "Alice — Simulação · Automóvel · Rui")).toBe(true);
+    expect(isLeadOf(ch("ALICE"), "Web", "Fwd: Alice - pedido de simulação")).toBe(true);
+    expect(isLeadOf(ch("ALICE"), null, "Alice: Simulação")).toBe(true);
+    expect(isLeadOf(ch("ALICE"), "Email", "Simulação auto - Alicerces Lda")).toBe(false);
+  });
+
+  it("keeps Alice tickets out of every other channel", () => {
     expect(isLeadOf(ch("TELEFONE"), "Phone", "Alice: Simulação - Fátima")).toBe(false);
+    expect(isLeadOf(ch("EMAIL"), "Email", "Alice — Simulação · Saúde")).toBe(false);
+    expect(isLeadOf(ch("EMAIL"), "Email", "Simulação auto - Alicerces Lda")).toBe(true);
     expect(isLeadOf(ch("TELEFONE"), "Phone", "Chamada perdida de 912345678")).toBe(true);
   });
 
