@@ -39,6 +39,12 @@ describe("isLeadOf", () => {
     expect(isLeadOf(ch("ALICE"), "Email", "Simulação auto - Alicerces Lda")).toBe(false);
   });
 
+  it("counts shop-counter simulations but not staff insurance", () => {
+    expect(ch("PRESENCIAL").customField).toBe("cf_negocio:SIMULAÇÃO");
+    expect(isLeadOf(ch("PRESENCIAL"), "PRESENCIAL", "Simulação Auto - Maria")).toBe(true);
+    expect(isLeadOf(ch("PRESENCIAL"), "PRESENCIAL", "Emissão AP Lusitânia - Rui Almeida")).toBe(false);
+    expect(isLeadOf(ch("PRESENCIAL"), "Email", "Simulação Auto - Maria")).toBe(false);
+  });
   it("keeps Alice tickets out of every other channel", () => {
     expect(isLeadOf(ch("TELEFONE"), "Phone", "Alice: Simulação - Fátima")).toBe(false);
     expect(isLeadOf(ch("EMAIL"), "Email", "Alice — Simulação · Saúde")).toBe(false);
@@ -61,7 +67,7 @@ describe("isLeadOf", () => {
   it("filters phone and email searches by Tipo de Pedido = SIMULAÇÃO", () => {
     expect(ch("TELEFONE").customField).toBe("cf_negocio:SIMULAÇÃO");
     expect(ch("EMAIL").customField).toBe("cf_negocio:SIMULAÇÃO");
-    expect(CHANNELS).toHaveLength(9);
+    expect(CHANNELS).toHaveLength(10);
   });
 });
 
@@ -153,7 +159,7 @@ describe("buildEmailSummary", () => {
     expect(alice).toMatchObject({ ontem: 1, d30: 1, prev30: 0, novo: true });
     expect(s.totais).toMatchObject({ ontem: 2, d30: 3, prev30: 1, d30Comparavel: 2, prev30Comparavel: 1 });
     expect(s.tipos.find((t) => t.tipo === "Auto")).toEqual({ tipo: "Auto", total: 2, ontem: 1 });
-    expect(s.canais).toHaveLength(9);
+    expect(s.canais).toHaveLength(10);
     expect(s.periodo).toEqual({ from: "2026-09-30", to: "2026-10-28" });
   });
 });
