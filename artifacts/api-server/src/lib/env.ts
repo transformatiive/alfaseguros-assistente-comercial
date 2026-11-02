@@ -54,6 +54,14 @@ const envSchema = z.object({
    * (ex.: https://<portal>/analise/exportar.json) e o token partilhado.
    */
   PORTAL_SFTP_EXPORT_URL: z.string().optional(),
+  /**
+   * Equipa Vida no Ringover avaliada com o guião (Análise de Chamadas, fase 5).
+   * "1" (defeito) liga a avaliação automática; "0" desliga. Os dias para trás que
+   * cada execução olha e o máximo de chamadas por execução seguram o custo.
+   */
+  VIDA_GUIAO_AUTOMATICO: z.string().default("1"),
+  VIDA_GUIAO_DIAS: z.coerce.number().int().min(1).max(60).default(30),
+  VIDA_GUIAO_MAX_POR_EXECUCAO: z.coerce.number().int().min(1).max(2000).default(300),
   PORTAL_SFTP_EXPORT_TOKEN: z.string().optional(),
   PUBLIC_APP_URL: z.string().optional(),
   ANALYSIS_CONCURRENCY: z.coerce.number().int().positive().default(4),

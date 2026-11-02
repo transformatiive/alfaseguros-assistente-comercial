@@ -1,4 +1,4 @@
-import type { ChamadaSftp, ChamadaSftpResultado } from "@workspace/db";
+import type { ChamadaSftp, ChamadaSftpResultado, FonteChamada } from "@workspace/db";
 import { chamadasDoPeriodo, resultadosDasChamadas } from "../storage/chamadas-sftp-repo.js";
 import { agregar, periodoUtc, type Agregado } from "./agregar.js";
 import { PONTOS } from "./catalogo.js";
@@ -11,8 +11,8 @@ export interface DadosPeriodo {
   agregado: Agregado;
 }
 
-export async function carregarPeriodo(de: string, ate: string): Promise<DadosPeriodo> {
-  const chamadas = await chamadasDoPeriodo(periodoUtc(de, ate));
+export async function carregarPeriodo(de: string, ate: string, fonte: FonteChamada = "sftp"): Promise<DadosPeriodo> {
+  const chamadas = await chamadasDoPeriodo(periodoUtc(de, ate), fonte);
   const resultados = await resultadosDasChamadas(chamadas.filter((c) => c.estado === "analisada").map((c) => c.id));
   return { chamadas, resultados, agregado: agregar(chamadas, resultados) };
 }

@@ -3,6 +3,8 @@
  *
  *   GET  /api/analise-chamadas/geral?de=…&ate=…&equipa=…   (session)
  *   GET  /api/analise-chamadas/equipa-360?de=…&ate=…       (session)
+ *   GET  /api/analise-chamadas/equipa-vida?de=…&ate=…      (session)
+ *   GET  /api/analise-chamadas/lista?de=…&ate=…&fonte=…&equipa=…&pessoa=…  (session)
  *   POST /api/analise-chamadas/sincronizar                 (X-Cron-Secret)
  *
  * The GET also starts, in the background, the pull of any day in the period
@@ -26,7 +28,14 @@ import {
   diasSincronizados,
   limitesSincronizados,
   carregarConversasComCaso,
+  carregarNomesColaboradores,
 } from "../storage/chamadas-ringover-repo.js";
+import { agregarEquipaVida } from "../analise-chamadas/agregar-vida.js";
+import { FONTES_LISTA, montarLista, type FiltroFonteLista } from "../analise-chamadas/lista.js";
+import { carregarPeriodo } from "../chamadas-sftp/painel.js";
+import { periodoUtc } from "../chamadas-sftp/agregar.js";
+import { chamadasDoPeriodo, resultadosDasChamadas } from "../storage/chamadas-sftp-repo.js";
+import { gravacoesNoCrmEntre } from "../storage/nocrm-repo.js";
 import { agregarEquipa360 } from "../analise-chamadas/agregar-360.js";
 import { sincronizarPeriodo } from "../jobs/sync-chamadas-ringover.js";
 
@@ -158,6 +167,90 @@ router.get("/analise-chamadas/equipa-360", async (req, res): Promise<void> => {
   }
   const [conversas, roster] = await Promise.all([carregarConversasComCaso(p.de, p.ate), carregarRosterEquipas()]);
   res.json(agregarEquipa360(conversas, roster, p.de, p.ate));
+});
+
+/** Equipa Vida: Ringover + nota do guião + chamadas sem lead no noCRM. */
+router.get("/analise-chamadas/equipa-vida", async (req, res): Promise<void> => {
+  const p = lerPeriodo({ de: req.query.de, ate: req.query.ate });
+  if (!p.ok) {
+    res.status(400).json({ error: p.erro });
+    return;
+  }
+  const utc = periodoUtc(p.de, p.ate);
+  const [linhas, roster, nomes, guiao, gravacoes] = await Promise.all([
+    carregarChamadasPeriodo(p.de, p.ate),
+    carregarRosterEquipas(),
+    carregarNomesColaboradores(),
+    carregarPeriodo(p.de, p.ate, "ringover"),
+    gravacoesNoCrmEntre(utc.de, utc.ate).catch((err) => {
+      logger.warn({ err }, "equipa vida: noCRM indisponível");
+      return null;
+    }),
+  ]);
+  const chamadas = linhas
+    .map((l) => ({ ...l, direcao: l.direcao as "in" | "out", equipa: resolverEquipa(l.agenteId, l.agenteNome, roster) }))
+    .filter((c) => c.equipa === "vida");
+  res.json(
+    agregarEquipaVida({
+      de: p.de,
+      ate: p.ate,
+      chamadas,
+      nomes,
+      avaliacoes: guiao.chamadas,
+      resultados: guiao.resultados,
+      gravacoesNoCrm: gravacoes,
+    }),
+  );
+});
+
+const MAX_LINHAS_LISTA = 1000;
+
+/** Chamadas: lista única (Supervisor 360, guião Vida Ringover, campanha SFTP). */
+router.get("/analise-chamadas/lista", async (req, res): Promise<void> => {
+  const p = lerPeriodo(req.query as Record<string, unknown>);
+  if (!p.ok) {
+    res.status(400).json({ error: p.erro });
+    return;
+  }
+  const fonteRaw = typeof req.query.fonte === "string" ? req.query.fonte : "todas";
+  if (!(FONTES_LISTA as readonly string[]).includes(fonteRaw)) {
+    res.status(400).json({ error: "Fonte inválida" });
+    return;
+  }
+  const fonte = fonteRaw as FiltroFonteLista;
+  const pessoa = typeof req.query.pessoa === "string" && req.query.pessoa ? req.query.pessoa : null;
+
+  const querConversas = fonte === "todas" || fonte === "supervisor";
+  const fonteGuiao = fonte === "ringover" || fonte === "sftp" ? fonte : fonte === "todas" ? "todas" : null;
+  const [conversas, guiao, roster] = await Promise.all([
+    querConversas ? carregarConversasComCaso(p.de, p.ate) : Promise.resolve([]),
+    fonteGuiao ? chamadasDoPeriodo(periodoUtc(p.de, p.ate), fonteGuiao) : Promise.resolve([]),
+    carregarRosterEquipas(),
+  ]);
+  const resultados = await resultadosDasChamadas(guiao.filter((c) => c.estado === "analisada").map((c) => c.id));
+  const contas = new Map<number, { cumpriu: number; nao: number }>();
+  for (const r of resultados) {
+    if (r.rever || r.estado === "nao_aplicavel") continue;
+    const c = contas.get(r.chamadaId) ?? { cumpriu: 0, nao: 0 };
+    if (r.estado === "cumprido") c.cumpriu += 1;
+    else if (r.estado === "nao_cumprido") c.nao += 1;
+    contas.set(r.chamadaId, c);
+  }
+  const { linhas, pessoas } = montarLista({
+    conversas,
+    guiao: guiao.filter((c) => c.estado === "analisada"),
+    contas,
+    roster,
+    filtros: { fonte, equipa: p.equipa, pessoa },
+  });
+  res.json({
+    de: p.de,
+    ate: p.ate,
+    total: linhas.length,
+    truncado: linhas.length > MAX_LINHAS_LISTA,
+    linhas: linhas.slice(0, MAX_LINHAS_LISTA),
+    pessoas,
+  });
 });
 
 export default router;

@@ -325,3 +325,42 @@ export async function lerTitulos(ids: number[]): Promise<Map<number, { titulo: s
     .where(inArray(nocrmLeadsTable.id, [...new Set(ids)]));
   return new Map(rows.map((r) => [r.id, { titulo: r.titulo, passo: r.passo, estado: r.estado }]));
 }
+
+// ---------------------------------------------------------------- Análise de Chamadas · Equipa Vida
+
+/**
+ * Nomes dos mp3 das chamadas que o Ringover escreveu em leads do noCRM entre
+ * duas datas (com um dia de folga de cada lado). null quando o espelho do
+ * noCRM não tem nenhuma chamada nesse intervalo: a ligação ainda não corre e
+ * "sem lead" não pode ser contado.
+ */
+export async function gravacoesNoCrmEntre(de: Date, ate: Date): Promise<Set<string> | null> {
+  const rows = await db
+    .select({ url: nocrmEventosTable.gravacaoUrl })
+    .from(nocrmEventosTable)
+    .where(
+      and(
+        eq(nocrmEventosTable.tipo, "chamada"),
+        gte(nocrmEventosTable.ocorreuEm, new Date(de.getTime() - 86_400_000)),
+        lt(nocrmEventosTable.ocorreuEm, new Date(ate.getTime() + 86_400_000)),
+      ),
+    );
+  if (rows.length === 0) return null;
+  const out = new Set<string>();
+  for (const r of rows) {
+    const m = r.url ? /([^/?#]+\.mp3)/i.exec(r.url) : null;
+    if (m) out.add(m[1].toLowerCase());
+  }
+  return out;
+}
+
+/** A lead do noCRM onde o Ringover escreveu esta gravação, se houver. */
+export async function leadDaGravacao(nomeMp3: string): Promise<{ id: number; titulo: string } | null> {
+  const [row] = await db
+    .select({ id: nocrmLeadsTable.id, titulo: nocrmLeadsTable.titulo })
+    .from(nocrmEventosTable)
+    .innerJoin(nocrmLeadsTable, eq(nocrmLeadsTable.id, nocrmEventosTable.leadId))
+    .where(and(eq(nocrmEventosTable.tipo, "chamada"), sql`lower(${nocrmEventosTable.gravacaoUrl}) like ${"%" + nomeMp3}`))
+    .limit(1);
+  return row ?? null;
+}
