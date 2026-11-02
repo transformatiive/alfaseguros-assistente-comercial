@@ -128,24 +128,28 @@ export class ZohoDeskClient {
    * Newest first; paginated at 100 (Zoho's max).
    */
   async searchTicketsByChannel(params: {
+    /** Vazio = todos os canais. */
     channel: string;
     createdTimeFrom: string;
     createdTimeTo: string;
     departmentId?: string;
     /** Filtro de campo personalizado do Desk, no formato `cf_nome:valor`. */
     customField?: string;
+    /** Filtro do assunto, com `*` como coringa (ex.: `*Alice*`). */
+    subject?: string;
   }): Promise<ZohoTicket[]> {
     const all: ZohoTicket[] = [];
     let from = 0;
     for (let page = 0; page < 40; page++) {
       const json = await this.request("/tickets/search", {
-        channel: params.channel,
+        ...(params.channel ? { channel: params.channel } : {}),
         createdTimeRange: `${params.createdTimeFrom},${params.createdTimeTo}`,
         sortBy: "-createdTime",
         from: String(from),
         limit: "100",
         ...(params.departmentId ? { departmentId: params.departmentId } : {}),
         ...(params.customField ? { customField1: params.customField } : {}),
+        ...(params.subject ? { subject: params.subject } : {}),
       });
       const parsed = ticketsListResponseSchema.parse(json);
       const batch = parsed.data ?? [];

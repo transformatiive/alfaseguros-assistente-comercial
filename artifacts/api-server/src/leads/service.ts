@@ -97,6 +97,7 @@ export async function fetchLeads(from: string, to: string): Promise<LeadRow[]> {
           createdTimeTo,
           departmentId,
           ...(ch.customField ? { customField: ch.customField } : {}),
+          ...(ch.subjectSearch ? { subject: ch.subjectSearch } : {}),
         }),
       ),
     ),
