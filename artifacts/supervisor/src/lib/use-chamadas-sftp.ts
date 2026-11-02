@@ -2,6 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 
 /** Tipos das respostas de /api/chamadas-sftp/* (Análise de Chamadas · Campanha Vida, SolidNetworks). */
 
+/** sftp = Campanha Vida (SolidNetworks); ringover = equipa Vida no Ringover. */
+export type FonteGuiao = "sftp" | "ringover";
+
 export type TipoChamada = "primeiro" | "seguinte" | "proposta" | "pos_venda";
 
 export const NOMES_TIPO: Record<TipoChamada, string> = {
@@ -51,6 +54,7 @@ export interface Destaque {
 }
 
 export interface ResumoResponse {
+  fonte?: FonteGuiao;
   configurado: boolean;
   de: string;
   ate: string;
@@ -86,6 +90,7 @@ export interface ResumoResponse {
 
 export interface ChamadaLinha {
   id: number;
+  fonte?: FonteGuiao;
   dataHora: string;
   duracaoS: number | null;
   estado: string;
@@ -104,6 +109,8 @@ export interface ChamadaLinha {
 
 export interface ChamadaDetalhe extends Omit<ChamadaLinha, "cumprimentoPct" | "pontosRever" | "item"> {
   modelo: string | null;
+  temGravacao?: boolean;
+  lead?: { id: number; titulo: string; url: string } | null;
   resultados: Array<{
     item: string;
     seccao: string;
@@ -126,10 +133,10 @@ async function getJson<T>(url: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export function useResumo(de: string, ate: string, ativo = true) {
+export function useResumo(de: string, ate: string, ativo = true, fonte: FonteGuiao = "sftp") {
   return useQuery({
-    queryKey: ["chamadas-sftp-resumo", de, ate],
-    queryFn: () => getJson<ResumoResponse>(`/api/chamadas-sftp/resumo?de=${de}&ate=${ate}`),
+    queryKey: ["chamadas-sftp-resumo", fonte, de, ate],
+    queryFn: () => getJson<ResumoResponse>(`/api/chamadas-sftp/resumo?de=${de}&ate=${ate}&fonte=${fonte}`),
     enabled: ativo && Boolean(de && ate && de <= ate),
     placeholderData: (prev) => prev,
   });
@@ -142,8 +149,8 @@ export interface FiltroChamadas {
   estado?: "analisada" | "todas";
 }
 
-export function useChamadas(de: string, ate: string, f: FiltroChamadas, ativo = true) {
-  const q = new URLSearchParams({ de, ate });
+export function useChamadas(de: string, ate: string, f: FiltroChamadas, ativo = true, fonte: FonteGuiao = "sftp") {
+  const q = new URLSearchParams({ de, ate, fonte });
   if (f.tipo) q.set("tipo", f.tipo);
   if (f.item) q.set("item", f.item);
   if (f.res) q.set("res", f.res);

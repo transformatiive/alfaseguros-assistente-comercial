@@ -102,3 +102,86 @@ export function useEquipa360(de: string, ate: string, ativo: boolean) {
     placeholderData: (prev) => prev,
   });
 }
+
+/** Mirrors GET /api/analise-chamadas/equipa-vida (artifacts/api-server/src/analise-chamadas/agregar-vida.ts). */
+export interface PessoaVida {
+  agenteId: string;
+  nome: string;
+  feitas: number;
+  recebidas: number;
+  conversasReais: number;
+  conversasReaisPct: number | null;
+  minutos: number;
+  avaliadas: number;
+  guiaoPct: number | null;
+  pontoMaisFraco: { item: string; validacao: string; tipo: string; pct: number } | null;
+  semLead: number | null;
+}
+
+export interface EquipaVidaResponse {
+  de: string;
+  ate: string;
+  kpis: {
+    feitas: number;
+    recebidas: number;
+    conversasReais: number;
+    conversasReaisPct: number | null;
+    minutos: number;
+    avaliadas: number;
+    guiaoPct: number | null;
+    semLead: number | null;
+    semLeadPct: number | null;
+  };
+  porColaborador: PessoaVida[];
+}
+
+export function useEquipaVida(de: string, ate: string, ativo: boolean) {
+  return useQuery({
+    queryKey: ["analise-chamadas-vida", de, ate],
+    queryFn: () => getJson<EquipaVidaResponse>(`/api/analise-chamadas/equipa-vida?de=${de}&ate=${ate}`),
+    enabled: ativo && Boolean(de && ate && de <= ate),
+    placeholderData: (prev) => prev,
+  });
+}
+
+/** Mirrors GET /api/analise-chamadas/lista (artifacts/api-server/src/analise-chamadas/lista.ts). */
+export type FonteLista = "todas" | "supervisor" | "ringover" | "sftp";
+
+export interface LinhaLista {
+  chave: string;
+  fonte: Exclude<FonteLista, "todas">;
+  id: number;
+  data: string;
+  equipa: EquipaAnalise | "campanha";
+  pessoa: string;
+  tema: string;
+  notaPct: number | null;
+  notaTexto: string;
+  resumo: string;
+  estado: string;
+}
+
+export interface ListaResponse {
+  de: string;
+  ate: string;
+  total: number;
+  truncado: boolean;
+  linhas: LinhaLista[];
+  pessoas: string[];
+}
+
+export function useListaChamadas(
+  de: string,
+  ate: string,
+  f: { fonte: FonteLista; equipa: FiltroEquipa; pessoa: string | null },
+  ativo: boolean,
+) {
+  const q = new URLSearchParams({ de, ate, fonte: f.fonte, equipa: f.equipa });
+  if (f.pessoa) q.set("pessoa", f.pessoa);
+  return useQuery({
+    queryKey: ["analise-chamadas-lista", q.toString()],
+    queryFn: () => getJson<ListaResponse>(`/api/analise-chamadas/lista?${q}`),
+    enabled: ativo && Boolean(de && ate && de <= ate),
+    placeholderData: (prev) => prev,
+  });
+}

@@ -8,8 +8,12 @@
  *   GET /api/chamadas-sftp/chamadas/:id/transcricao   — conversa transcrita
  *   GET /api/chamadas-sftp/chamadas/:id/audio         — a gravação (aceita Range)
  *
+ * `fonte=ringover` nas duas primeiras dá a equipa Vida no Ringover (mesmo guião);
+ * `fonte=todas` na lista junta as duas. Sem `fonte`, é a campanha SFTP.
+ *
  * Com X-Cron-Secret:
  *   POST /api/chamadas-sftp/processar?limite=N        — corre a análise agora
+ *   POST /api/chamadas-sftp/processar-vida?dias=&limite= — avalia já as chamadas Vida do Ringover
  */
 import { importarDoPortalSftp } from "../jobs/importar-portal-sftp.js";
 import { Router, type IRouter, type RequestHandler } from "express";
@@ -22,12 +26,17 @@ import { PONTOS, type TipoChamada } from "../chamadas-sftp/catalogo.js";
 import { carregarPeriodo, periodoAnterior } from "../chamadas-sftp/painel.js";
 import { destaquesSchema } from "../chamadas-sftp/destaques.js";
 import { emExecucao, processarChamadasSftp } from "../jobs/chamadas-sftp.js";
+import { idChamadaRingover, processarGuiaoVida, transcricaoVida, vidaEmExecucao } from "../jobs/guiao-vida-ringover.js";
+import { chaveGravacao } from "../analise-chamadas/agregar-vida.js";
+import { leadDaGravacao } from "../storage/nocrm-repo.js";
+import type { FonteChamada } from "@workspace/db";
 import {
   chamadaPorId,
   chamadasDoPeriodo,
   destaquesMaisRecentes,
   resultadosDasChamadas,
   ultimaAnalise,
+  type FiltroFonte,
 } from "../storage/chamadas-sftp-repo.js";
 
 const DATA_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -37,6 +46,14 @@ function periodo(q: Record<string, unknown>): { de: string; ate: string } | null
   const ate = typeof q.ate === "string" && DATA_RE.test(q.ate) ? q.ate : null;
   if (!de || !ate || de > ate) return null;
   return { de, ate };
+}
+
+function lerFonte(q: Record<string, unknown>): FonteChamada {
+  return q.fonte === "ringover" ? "ringover" : "sftp";
+}
+
+function lerFiltroFonte(q: Record<string, unknown>): FiltroFonte {
+  return q.fonte === "todas" ? "todas" : lerFonte(q);
 }
 
 /** Só os últimos dígitos: chega para reconhecer a chamada sem expor o número. */
@@ -83,6 +100,20 @@ chamadasSftpAdminRouter.post("/chamadas-sftp/importar-portal", requireCronSecret
   }
 });
 
+chamadasSftpAdminRouter.post("/chamadas-sftp/processar-vida", requireCronSecret, async (req, res): Promise<void> => {
+  if (vidaEmExecucao()) {
+    res.status(409).json({ error: "Já há uma execução em curso" });
+    return;
+  }
+  const dias = Number(req.query.dias);
+  const limite = Number(req.query.limite);
+  const resumo = await processarGuiaoVida({
+    dias: Number.isInteger(dias) && dias > 0 && dias <= 60 ? dias : undefined,
+    limite: Number.isInteger(limite) && limite > 0 ? limite : undefined,
+  });
+  res.json({ ok: true, ...resumo });
+});
+
 const router: IRouter = Router();
 
 router.get("/chamadas-sftp/resumo", async (req, res): Promise<void> => {
@@ -91,16 +122,18 @@ router.get("/chamadas-sftp/resumo", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Parâmetros 'de' e 'ate' (YYYY-MM-DD) são obrigatórios" });
     return;
   }
+  const fonte = lerFonte(req.query);
   const ant = periodoAnterior(p.de, p.ate);
   const [atual, anterior, destaques, ultima] = await Promise.all([
-    carregarPeriodo(p.de, p.ate),
-    carregarPeriodo(ant.de, ant.ate),
-    destaquesMaisRecentes(),
-    ultimaAnalise(),
+    carregarPeriodo(p.de, p.ate, fonte),
+    carregarPeriodo(ant.de, ant.ate, fonte),
+    destaquesMaisRecentes(fonte),
+    ultimaAnalise(fonte),
   ]);
   const d = destaques ? destaquesSchema.safeParse(destaques.conteudo) : null;
   res.json({
-    configurado: bucket() !== null,
+    fonte,
+    configurado: fonte === "ringover" ? Boolean(env().RINGOVER_API_KEY) : bucket() !== null,
     de: p.de,
     ate: p.ate,
     ultimaAnalise: ultima?.toISOString() ?? null,
@@ -134,10 +167,12 @@ router.get("/chamadas-sftp/chamadas", async (req, res): Promise<void> => {
   const item = typeof req.query.item === "string" && PONTOS.has(req.query.item) ? req.query.item : null;
   const resFiltro = typeof req.query.res === "string" ? req.query.res : null; // cumpriu | nao | rever
   const estado = typeof req.query.estado === "string" ? req.query.estado : "analisada"; // analisada | todas
+  const pessoa = typeof req.query.pessoa === "string" && req.query.pessoa ? req.query.pessoa : null;
 
-  let chamadas = await chamadasDoPeriodo(periodoUtc(p.de, p.ate));
+  let chamadas = await chamadasDoPeriodo(periodoUtc(p.de, p.ate), lerFiltroFonte(req.query));
   if (estado !== "todas") chamadas = chamadas.filter((c) => c.estado === "analisada");
   if (tipo) chamadas = chamadas.filter((c) => c.tipo === tipo);
+  if (pessoa) chamadas = chamadas.filter((c) => c.colaborador === pessoa);
 
   const resultados = await resultadosDasChamadas(chamadas.filter((c) => c.estado === "analisada").map((c) => c.id));
   const porChamada = new Map<number, typeof resultados>();
@@ -162,6 +197,7 @@ router.get("/chamadas-sftp/chamadas", async (req, res): Promise<void> => {
       }
       return {
         id: c.id,
+        fonte: c.fonte,
         dataHora: c.dataHora.toISOString(),
         duracaoS: c.duracaoS,
         estado: c.estado,
@@ -172,7 +208,7 @@ router.get("/chamadas-sftp/chamadas", async (req, res): Promise<void> => {
         objecoes: c.objecoes ?? [],
         motivoDescarte: c.motivoDescarte,
         telefone: telefoneCurto(c.telefone),
-        ficheiro: nomeBase(c.ficheiro),
+        ficheiro: c.fonte === "ringover" ? "Ringover" : nomeBase(c.ficheiro),
         cumprimentoPct: percentagem({ cumpriu, nao }),
         pontosRever: rever,
         item: doItem
@@ -210,8 +246,13 @@ router.get("/chamadas-sftp/chamadas/:id", async (req, res): Promise<void> => {
     return;
   }
   const rs = await resultadosDasChamadas([c.id]);
+  const mp3 = c.fonte === "ringover" ? chaveGravacao(c.gravacaoUrl) : null;
+  const lead = mp3 ? await leadDaGravacao(mp3).catch(() => null) : null;
   res.json({
     id: c.id,
+    fonte: c.fonte,
+    temGravacao: c.fonte === "ringover" ? Boolean(c.gravacaoUrl) : true,
+    lead: lead ? { id: lead.id, titulo: lead.titulo, url: `https://${env().NOCRM_SUBDOMAIN}.nocrm.io/leads/${lead.id}` } : null,
     dataHora: c.dataHora.toISOString(),
     duracaoS: c.duracaoS,
     estado: c.estado,
@@ -222,7 +263,7 @@ router.get("/chamadas-sftp/chamadas/:id", async (req, res): Promise<void> => {
     objecoes: c.objecoes ?? [],
     motivoDescarte: c.motivoDescarte,
     telefone: telefoneCurto(c.telefone),
-    ficheiro: nomeBase(c.ficheiro),
+    ficheiro: c.fonte === "ringover" ? "Ringover" : nomeBase(c.ficheiro),
     modelo: c.modelo,
     resultados: rs.map((r) => {
       const pt = PONTOS.get(r.item);
@@ -243,6 +284,17 @@ router.get("/chamadas-sftp/chamadas/:id", async (req, res): Promise<void> => {
 router.get("/chamadas-sftp/chamadas/:id/transcricao", async (req, res): Promise<void> => {
   const id = idValido(req.params.id);
   const c = id ? await chamadaPorId(id) : null;
+  if (c && c.fonte === "ringover" && idChamadaRingover(c.ficheiro)) {
+    try {
+      const texto = await transcricaoVida(c.ficheiro, 200_000);
+      if (!texto) throw new Error("sem transcrição");
+      res.json({ linhas: texto.split("\n") });
+    } catch (err) {
+      logger.warn({ err, id }, "guião Vida: transcrição indisponível");
+      res.status(404).json({ error: "Transcrição indisponível" });
+    }
+    return;
+  }
   if (!c || !bucket()) {
     res.status(404).json({ error: "Chamada não encontrada" });
     return;
@@ -260,6 +312,12 @@ router.get("/chamadas-sftp/chamadas/:id/transcricao", async (req, res): Promise<
 router.get("/chamadas-sftp/chamadas/:id/audio", async (req, res): Promise<void> => {
   const id = idValido(req.params.id);
   const c = id ? await chamadaPorId(id) : null;
+  // Ringover: a gravação está no CDN do Ringover; o navegador vai lá buscá-la.
+  if (c && c.fonte === "ringover") {
+    if (c.gravacaoUrl && /^https:\/\//.test(c.gravacaoUrl)) res.redirect(302, c.gravacaoUrl);
+    else res.status(404).json({ error: "Gravação não encontrada" });
+    return;
+  }
   if (!c || !bucket()) {
     res.status(404).json({ error: "Gravação não encontrada" });
     return;

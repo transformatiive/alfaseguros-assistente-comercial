@@ -104,6 +104,15 @@ export async function carregarRosterEquipas(): Promise<Map<string, EquipaColabor
   return new Map(rows.filter((r) => r.id).map((r) => [r.id as string, r.equipa]));
 }
 
+/** Ringover user_id → nome do colaborador, para pôr nomes nas chamadas. */
+export async function carregarNomesColaboradores(): Promise<Map<string, string>> {
+  const rows = await db
+    .select({ id: colaboradoresTable.ringoverUserId, nome: colaboradoresTable.nome })
+    .from(colaboradoresTable)
+    .where(isNotNull(colaboradoresTable.ringoverUserId));
+  return new Map(rows.filter((r) => r.id).map((r) => [r.id as string, r.nome]));
+}
+
 /**
  * Analysed conversations of a period with the Desk case each one belongs to.
  * A conversation linked to several cases keeps the one that has a ticket.

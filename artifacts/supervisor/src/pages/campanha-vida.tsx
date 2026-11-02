@@ -16,7 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import {
   exportarExcel, NOMES_DESFECHO, NOMES_OBJECAO, NOMES_TIPO, TIPOS, urlAudio,
-  useChamada, useChamadas, useResumo, useTranscricao,
+  useChamada, useChamadas, useResumo, useTranscricao, type FonteGuiao,
   type ChamadaLinha, type PontoAgregado, type ResumoResponse, type TipoChamada,
 } from "@/lib/use-chamadas-sftp";
 
@@ -108,20 +108,20 @@ function Seccao({ titulo, children, acao }: { titulo: string; children: React.Re
 
 interface Filtro { titulo: string; tipo?: TipoChamada | null; item?: string | null; res?: Res | null }
 
-export default function CampanhaVida({ de, ate }: { de: string; ate: string }) {
+export default function CampanhaVida({ de, ate, fonte = "sftp", embutido = false }: { de: string; ate: string; fonte?: FonteGuiao; embutido?: boolean }) {
   const [vista, setVista] = useState<Vista>("geral");
   const [filtro, setFiltro] = useState<Filtro | null>(null);
   const [chamadaId, setChamadaId] = useState<number | null>(null);
-  const resumo = useResumo(de, ate);
+  const resumo = useResumo(de, ate, true, fonte);
   const r = resumo.data;
 
   const abrir = (f: Filtro) => { setChamadaId(null); setFiltro(f); };
 
   return (
-    <div className="space-y-5">
+    <div className={cn("space-y-5", embutido && "space-y-4")}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <p className="mr-auto text-sm text-stone-500">
-          Gravações da SolidNetworks avaliadas contra o guião
+          {fonte === "ringover" ? "Chamadas Ringover da equipa Vida avaliadas contra o mesmo guião" : "Gravações da SolidNetworks avaliadas contra o guião"}
           {r?.ultimaAnalise && <> · última análise {dataHora(r.ultimaAnalise)}</>}
         </p>
         <div role="group" aria-label="Guião" className="flex max-w-full gap-1 overflow-x-auto">
@@ -147,14 +147,16 @@ export default function CampanhaVida({ de, ate }: { de: string; ate: string }) {
 
       {r && !r.configurado && r.kpis.recebidas === 0 && (
         <div className="rounded-md border border-dashed bg-card p-8 text-center text-sm text-muted-foreground">
-          A ligação ao arquivo de gravações ainda não está configurada. Assim que estiver, as chamadas aparecem aqui no dia seguinte.
+          {fonte === "ringover"
+            ? "Ainda não há chamadas da equipa Vida avaliadas neste período. A avaliação corre de 3 em 3 horas."
+            : "A ligação ao arquivo de gravações ainda não está configurada. Assim que estiver, as chamadas aparecem aqui no dia seguinte."}
         </div>
       )}
       {r && (r.configurado || r.kpis.recebidas > 0) && (
         <>
           {vista === "geral" && <VisaoGeral r={r} abrir={abrir} />}
           {TIPOS.includes(vista as TipoChamada) && <VistaTipo r={r} tipo={vista as TipoChamada} abrir={abrir} />}
-          {vista === "chamadas" && <ListaChamadas de={de} ate={ate} onAbrir={setChamadaId} />}
+          {vista === "chamadas" && <ListaChamadas de={de} ate={ate} fonte={fonte} onAbrir={setChamadaId} />}
         </>
       )}
 
@@ -163,7 +165,7 @@ export default function CampanhaVida({ de, ate }: { de: string; ate: string }) {
           {chamadaId !== null ? (
             <DetalheChamada id={chamadaId} voltar={filtro ? () => setChamadaId(null) : undefined} />
           ) : filtro ? (
-            <ChamadasDoFiltro de={de} ate={ate} filtro={filtro} onAbrir={setChamadaId} />
+            <ChamadasDoFiltro de={de} ate={ate} fonte={fonte} filtro={filtro} onAbrir={setChamadaId} />
           ) : null}
         </SheetContent>
       </Sheet>
@@ -462,8 +464,8 @@ function LinhaChamada({ c, onAbrir, mostrarItem }: { c: ChamadaLinha; onAbrir: (
   );
 }
 
-function ChamadasDoFiltro({ de, ate, filtro, onAbrir }: { de: string; ate: string; filtro: Filtro; onAbrir: (id: number) => void }) {
-  const q = useChamadas(de, ate, { tipo: filtro.tipo, item: filtro.item, res: filtro.res });
+function ChamadasDoFiltro({ de, ate, fonte, filtro, onAbrir }: { de: string; ate: string; fonte: FonteGuiao; filtro: Filtro; onAbrir: (id: number) => void }) {
+  const q = useChamadas(de, ate, { tipo: filtro.tipo, item: filtro.item, res: filtro.res }, true, fonte);
   return (
     <>
       <SheetHeader>
@@ -482,9 +484,9 @@ function ChamadasDoFiltro({ de, ate, filtro, onAbrir }: { de: string; ate: strin
   );
 }
 
-function ListaChamadas({ de, ate, onAbrir }: { de: string; ate: string; onAbrir: (id: number) => void }) {
+function ListaChamadas({ de, ate, fonte, onAbrir }: { de: string; ate: string; fonte: FonteGuiao; onAbrir: (id: number) => void }) {
   const [todas, setTodas] = useState(false);
-  const q = useChamadas(de, ate, { estado: todas ? "todas" : "analisada" });
+  const q = useChamadas(de, ate, { estado: todas ? "todas" : "analisada" }, true, fonte);
   return (
     <Seccao
       titulo={q.data ? `${q.data.total} chamadas` : "Chamadas"}
@@ -509,7 +511,7 @@ function ListaChamadas({ de, ate, onAbrir }: { de: string; ate: string; onAbrir:
 
 // ---------------------------------------------------------------------------
 
-function DetalheChamada({ id, voltar }: { id: number; voltar?: () => void }) {
+export function DetalheChamada({ id, voltar }: { id: number; voltar?: () => void }) {
   const q = useChamada(id);
   const [verTranscricao, setVerTranscricao] = useState(false);
   const t = useTranscricao(id, verTranscricao);
@@ -530,7 +532,16 @@ function DetalheChamada({ id, voltar }: { id: number; voltar?: () => void }) {
       {q.isLoading && <Loader2 className="mx-auto mt-8 h-5 w-5 animate-spin text-muted-foreground" />}
       {c && (
         <div className="mt-4 space-y-4">
-          <audio controls preload="none" src={urlAudio(c.id)} className="w-full" />
+          {c.temGravacao !== false
+            ? <audio controls preload="none" src={urlAudio(c.id)} className="w-full" />
+            : <p className="text-xs text-muted-foreground">Gravação indisponível.</p>}
+          {(c.fonte === "ringover" || c.lead) && (
+            <p className="text-xs">
+              {c.lead
+                ? <a href={c.lead.url} target="_blank" rel="noreferrer" className="text-blue-700 underline underline-offset-2">Abrir lead no noCRM: {c.lead.titulo}</a>
+                : <span className="text-muted-foreground">Esta chamada não aparece em nenhuma lead do noCRM.</span>}
+            </p>
+          )}
 
           <div>
             <p className="text-sm leading-relaxed" style={{ fontFamily: "Georgia, serif" }}>{c.resumo || c.motivoDescarte || "Sem resumo."}</p>

@@ -9,6 +9,7 @@ import { sincronizarHistoricoEmFalta } from "./jobs/sync-chamadas-ringover.js";
 import { setupChamadasSftp } from "./lib/setup-chamadas-sftp.js";
 import { iniciarAgendadorChamadasSftp } from "./jobs/chamadas-sftp.js";
 import { importarDoPortalSftp } from "./jobs/importar-portal-sftp.js";
+import { iniciarAgendadorGuiaoVida } from "./jobs/guiao-vida-ringover.js";
 
 const rawPort = process.env["PORT"];
 
@@ -61,6 +62,8 @@ app.listen(port, (err?: Error) => {
         logger.warn({ err }, "chamadas-sftp: importação do portal falhou"),
       );
       iniciarAgendadorChamadasSftp();
+      // Equipa Vida no Ringover, mesmo guião (desliga com VIDA_GUIAO_AUTOMATICO=0).
+      iniciarAgendadorGuiaoVida();
     })
     .catch((err) => logger.error({ err }, "Startup DB setup failed"));
 });

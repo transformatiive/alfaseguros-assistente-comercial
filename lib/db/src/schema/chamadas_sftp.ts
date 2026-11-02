@@ -23,6 +23,15 @@ export const ESTADOS_CHAMADA_SFTP = [
   "erro", // a análise falhou; volta a ser tentada na próxima execução
 ] as const;
 
+/**
+ * De onde vem a chamada. "sftp" = gravação da SolidNetworks (Campanha Vida);
+ * "ringover" = chamada da equipa Vida interna no Ringover, avaliada com o
+ * mesmo guião (decisão de 30/10/2026). As duas partilham estas tabelas para a
+ * lista única de chamadas e as mesmas contas.
+ */
+export const FONTES_CHAMADA = ["sftp", "ringover"] as const;
+export type FonteChamada = (typeof FONTES_CHAMADA)[number];
+
 /** Os 4 tipos de chamada do guião da campanha. */
 export const TIPOS_CHAMADA_SFTP = ["primeiro", "seguinte", "proposta", "pos_venda"] as const;
 
@@ -30,7 +39,9 @@ export const chamadasSftpTable = pgTable(
   "chamadas_sftp",
   {
     id: serial("id").primaryKey(),
-    // Chave completa do mp3 no bucket (ex.: shared/2026_10_21_..._uuid.mp3).
+    fonte: text("fonte", { enum: FONTES_CHAMADA }).notNull().default("sftp"),
+    // SFTP: chave completa do mp3 no bucket (ex.: shared/2026_10_21_..._uuid.mp3).
+    // Ringover: "ringover:<cdr_id>".
     ficheiro: text("ficheiro").notNull(),
     // Data e hora da chamada (do nome do ficheiro; senão, da data de upload).
     dataHora: timestamp("data_hora", { withTimezone: true }).notNull(),
@@ -41,6 +52,9 @@ export const chamadasSftpTable = pgTable(
     estado: text("estado", { enum: ESTADOS_CHAMADA_SFTP }).notNull().default("pendente"),
     // Só há um colaborador na campanha (confirmado pela Soraia a 21/10/2026).
     colaborador: text("colaborador").notNull().default("Colaborador Vida"),
+    // Só Ringover: o user_id do Ringover (liga a `colaboradores`) e o link da gravação.
+    agenteId: text("agente_id"),
+    gravacaoUrl: text("gravacao_url"),
     tipo: text("tipo", { enum: TIPOS_CHAMADA_SFTP }),
     resumo: text("resumo"),
     // Como acabou a chamada: proposta | novo_contacto | recusou | outro.
@@ -56,6 +70,7 @@ export const chamadasSftpTable = pgTable(
   (t) => ({
     ficheiroUniq: uniqueIndex("chamadas_sftp_ficheiro_uniq").on(t.ficheiro),
     dataIdx: index("chamadas_sftp_data_idx").on(t.dataHora),
+    fonteDataIdx: index("chamadas_sftp_fonte_data_idx").on(t.fonte, t.dataHora),
   }),
 );
 
@@ -90,6 +105,7 @@ export type ChamadaSftpResultado = typeof chamadasSftpResultadosTable.$inferSele
 /** Destaques escritos pela IA sobre os números de um período. */
 export const chamadasSftpDestaquesTable = pgTable("chamadas_sftp_destaques", {
   id: serial("id").primaryKey(),
+  fonte: text("fonte", { enum: FONTES_CHAMADA }).notNull().default("sftp"),
   periodoDe: text("periodo_de").notNull(), // YYYY-MM-DD
   periodoAte: text("periodo_ate").notNull(),
   conteudo: jsonb("conteudo").notNull(),

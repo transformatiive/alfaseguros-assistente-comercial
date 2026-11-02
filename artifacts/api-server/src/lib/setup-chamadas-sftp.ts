@@ -55,6 +55,13 @@ const CRIAR_TABELAS = `
     "modelo"      text,
     "gerado_em"   timestamp with time zone NOT NULL DEFAULT now()
   );
+
+  -- Equipa Vida (Ringover) avaliada com o mesmo guião: mesma tabela, outra fonte.
+  ALTER TABLE "chamadas_sftp" ADD COLUMN IF NOT EXISTS "fonte" text NOT NULL DEFAULT 'sftp';
+  ALTER TABLE "chamadas_sftp" ADD COLUMN IF NOT EXISTS "agente_id" text;
+  ALTER TABLE "chamadas_sftp" ADD COLUMN IF NOT EXISTS "gravacao_url" text;
+  CREATE INDEX IF NOT EXISTS "chamadas_sftp_fonte_data_idx" ON "chamadas_sftp" ("fonte", "data_hora");
+  ALTER TABLE "chamadas_sftp_destaques" ADD COLUMN IF NOT EXISTS "fonte" text NOT NULL DEFAULT 'sftp';
 `;
 
 export async function setupChamadasSftp(): Promise<void> {

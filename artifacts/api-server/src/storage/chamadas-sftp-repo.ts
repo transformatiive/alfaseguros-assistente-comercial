@@ -6,6 +6,7 @@ import {
   chamadasSftpDestaquesTable,
   type ChamadaSftp,
   type ChamadaSftpResultado,
+  type FonteChamada,
 } from "@workspace/db";
 import type { ResultadoPonto } from "../chamadas-sftp/analisar.js";
 import type { TipoChamada } from "../chamadas-sftp/catalogo.js";
@@ -16,10 +17,13 @@ import { ESTADOS_FINAIS, type ChamadaImportada } from "../chamadas-sftp/importar
  * em `repo.ts`, é o único sítio que toca nestas tabelas.
  */
 
-export async function ficheirosRegistados(): Promise<Map<string, { id: number; estado: ChamadaSftp["estado"] }>> {
+export async function ficheirosRegistados(
+  fonte: FonteChamada = "sftp",
+): Promise<Map<string, { id: number; estado: ChamadaSftp["estado"] }>> {
   const rows = await db
     .select({ id: chamadasSftpTable.id, ficheiro: chamadasSftpTable.ficheiro, estado: chamadasSftpTable.estado })
-    .from(chamadasSftpTable);
+    .from(chamadasSftpTable)
+    .where(eq(chamadasSftpTable.fonte, fonte));
   return new Map(rows.map((r) => [r.ficheiro, { id: r.id, estado: r.estado }]));
 }
 
@@ -121,11 +125,15 @@ export interface PeriodoUtc {
   ate: Date; // exclusive
 }
 
-export async function chamadasDoPeriodo(p: PeriodoUtc): Promise<ChamadaSftp[]> {
+/** "todas" junta as duas fontes (lista única de chamadas). */
+export type FiltroFonte = FonteChamada | "todas";
+
+export async function chamadasDoPeriodo(p: PeriodoUtc, fonte: FiltroFonte = "sftp"): Promise<ChamadaSftp[]> {
+  const periodo = and(gte(chamadasSftpTable.dataHora, p.de), lt(chamadasSftpTable.dataHora, p.ate));
   return db
     .select()
     .from(chamadasSftpTable)
-    .where(and(gte(chamadasSftpTable.dataHora, p.de), lt(chamadasSftpTable.dataHora, p.ate)))
+    .where(fonte === "todas" ? periodo : and(periodo, eq(chamadasSftpTable.fonte, fonte)))
     .orderBy(desc(chamadasSftpTable.dataHora));
 }
 
@@ -148,10 +156,11 @@ export async function chamadaPorId(id: number): Promise<ChamadaSftp | null> {
   return row ?? null;
 }
 
-export async function ultimaAnalise(): Promise<Date | null> {
+export async function ultimaAnalise(fonte: FonteChamada = "sftp"): Promise<Date | null> {
   const [row] = await db
     .select({ m: sql<Date | null>`max(${chamadasSftpTable.analisadaEm})` })
-    .from(chamadasSftpTable);
+    .from(chamadasSftpTable)
+    .where(eq(chamadasSftpTable.fonte, fonte));
   return row?.m ? new Date(row.m) : null;
 }
 
@@ -160,11 +169,12 @@ export async function guardarDestaques(dados: {
   periodoAte: string;
   conteudo: unknown;
   modelo: string;
+  fonte?: FonteChamada;
 }): Promise<void> {
   await db.insert(chamadasSftpDestaquesTable).values(dados);
 }
 
-export async function destaquesMaisRecentes(): Promise<{
+export async function destaquesMaisRecentes(fonte: FonteChamada = "sftp"): Promise<{
   periodoDe: string;
   periodoAte: string;
   conteudo: unknown;
@@ -173,6 +183,7 @@ export async function destaquesMaisRecentes(): Promise<{
   const [row] = await db
     .select()
     .from(chamadasSftpDestaquesTable)
+    .where(eq(chamadasSftpDestaquesTable.fonte, fonte))
     .orderBy(desc(chamadasSftpDestaquesTable.geradoEm))
     .limit(1);
   return row ?? null;
@@ -215,6 +226,54 @@ export async function importarChamadaPortal(c: ChamadaImportada): Promise<"inser
 
 /** True when at least one set of highlights is stored. */
 export async function haDestaques(): Promise<boolean> {
-  const [row] = await db.select({ id: chamadasSftpDestaquesTable.id }).from(chamadasSftpDestaquesTable).limit(1);
+  const [row] = await db
+    .select({ id: chamadasSftpDestaquesTable.id })
+    .from(chamadasSftpDestaquesTable)
+    .where(eq(chamadasSftpDestaquesTable.fonte, "sftp"))
+    .limit(1);
   return Boolean(row);
+}
+
+// ---------------------------------------------------------------------------
+// Equipa Vida no Ringover (fonte "ringover")
+
+export interface ChamadaVidaNova {
+  ficheiro: string; // "ringover:<cdr_id>"
+  dataHora: Date;
+  telefone: string | null;
+  duracaoS: number | null;
+  colaborador: string;
+  agenteId: string;
+  gravacaoUrl: string | null;
+  estado: "pendente" | "curta";
+}
+
+/** Regista as chamadas novas; as que já existem ficam como estão. Devolve quantas entraram. */
+export async function registarChamadasVida(novas: ChamadaVidaNova[]): Promise<number> {
+  let n = 0;
+  for (let i = 0; i < novas.length; i += 500) {
+    const r = await db
+      .insert(chamadasSftpTable)
+      .values(novas.slice(i, i + 500).map((c) => ({ ...c, fonte: "ringover" as const })))
+      .onConflictDoNothing({ target: chamadasSftpTable.ficheiro })
+      .returning({ id: chamadasSftpTable.id });
+    n += r.length;
+  }
+  return n;
+}
+
+/** Chamadas Vida do Ringover ainda por avaliar (pendentes ou com erro), mais antigas primeiro. */
+export async function chamadasVidaPorAnalisar(desde: Date, limite: number): Promise<ChamadaSftp[]> {
+  return db
+    .select()
+    .from(chamadasSftpTable)
+    .where(
+      and(
+        eq(chamadasSftpTable.fonte, "ringover"),
+        inArray(chamadasSftpTable.estado, ["pendente", "erro"]),
+        gte(chamadasSftpTable.dataHora, desde),
+      ),
+    )
+    .orderBy(chamadasSftpTable.dataHora)
+    .limit(limite);
 }

@@ -1,4 +1,5 @@
 import { OpenRouterClient } from "@workspace/openrouter";
+import type { FonteChamada } from "@workspace/db";
 import { analisarChamada } from "../chamadas-sftp/analisar.js";
 import { bucket, lerJson, listar, PREFIXO_AUDIO, PREFIXO_TRANSCRICOES } from "../chamadas-sftp/bucket.js";
 import { conversaEmTexto, lerFicheiro, lerTranscricao, nomeBase, palavras } from "../chamadas-sftp/ficheiro.js";
@@ -64,7 +65,7 @@ export function emExecucao(): boolean {
   return aCorrer;
 }
 
-function clienteOpenRouter(): OpenRouterClient | null {
+export function clienteOpenRouter(): OpenRouterClient | null {
   const cfg = env();
   if (!cfg.OPENROUTER_API_KEY) return null;
   return new OpenRouterClient({
@@ -196,23 +197,27 @@ export async function processarChamadasSftp(opts: { limite?: number } = {}): Pro
   }
 }
 
-/** Reescreve os destaques dos últimos 7 dias (até hoje, em Lisboa). */
-export async function atualizarDestaques(client: OpenRouterClient, modelo: string): Promise<boolean> {
+/** Reescreve os destaques dos últimos 7 dias (até hoje, em Lisboa) de uma fonte. */
+export async function atualizarDestaques(
+  client: OpenRouterClient,
+  modelo: string,
+  fonte: FonteChamada = "sftp",
+): Promise<boolean> {
   const ate = diaLisboa(new Date());
   const de = new Date(Date.parse(`${ate}T12:00:00Z`) - 6 * 86_400_000).toISOString().slice(0, 10);
-  const atual = await carregarPeriodo(de, ate);
+  const atual = await carregarPeriodo(de, ate, fonte);
   if (atual.agregado.kpis.analisadas === 0) return false;
   const ant = periodoAnterior(de, ate);
-  const anterior = await carregarPeriodo(ant.de, ant.ate);
+  const anterior = await carregarPeriodo(ant.de, ant.ate, fonte);
   const r = await gerarDestaques(
     { de, ate, atual: atual.agregado, anterior: anterior.agregado, ...contexto(atual) },
     { client, modelo },
   );
   if (!r.ok) {
-    logger.warn({ erro: r.erro }, "chamadas-sftp: destaques falharam");
+    logger.warn({ erro: r.erro, fonte }, "chamadas-sftp: destaques falharam");
     return false;
   }
-  await guardarDestaques({ periodoDe: de, periodoAte: ate, conteudo: r.destaques, modelo });
+  await guardarDestaques({ periodoDe: de, periodoAte: ate, conteudo: r.destaques, modelo, fonte });
   return true;
 }
 
