@@ -47,6 +47,8 @@ export const CHANNELS: ChannelDef[] = [
   { key: "ALICE", deskValue: "", label: "Alice (assistente de voz)", color: "#db2777", subjectSearch: "*Alice*", subjectMatches: [/\bALICE\b/, /SIMULA/] },
   { key: "TELEFONE", deskValue: "Phone", label: "Telefone (simulação)", color: "#475569", customField: SIMULACAO },
   { key: "EMAIL", deskValue: "Email", label: "Email (simulação)", color: "#a16207", customField: SIMULACAO },
+  // Shop counter (Rui, 02/11/2026). "Emissão AP Lusitânia" = staff's own insurance, not a lead.
+  { key: "PRESENCIAL", deskValue: "PRESENCIAL", label: "Presencial (simulação)", color: "#65a30d", customField: SIMULACAO, excludeSubjectPrefix: "Emissão AP Lusitânia" },
 ];
 
 /** Case- and accent-insensitive, whitespace-collapsed. */
