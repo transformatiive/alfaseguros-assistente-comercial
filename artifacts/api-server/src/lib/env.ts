@@ -71,6 +71,14 @@ const envSchema = z.object({
   ZOHO_DESK_ORG_ID: z.string().optional(),
   /** Zoho Desk department for the /leads dashboard (Não Vida). Defaults to the known id. */
   ZOHO_DESK_NAOVIDA_DEPARTMENT_ID: z.string().default("367662000000006907"),
+  /**
+   * Zoho CRM (read leads) for the ASISA / Simulador and Caravela lead channels.
+   * Each one falls back to the matching ZOHO_DESK_* value when unset.
+   */
+  ZOHO_CRM_CLIENT_ID: z.string().optional(),
+  ZOHO_CRM_CLIENT_SECRET: z.string().optional(),
+  ZOHO_CRM_REFRESH_TOKEN: z.string().optional(),
+  ZOHO_CRM_API_BASE: z.string().default("https://www.zohoapis.com"),
   /** Bearer token that n8n uses to authenticate with /api/followups/* endpoints */
   FOLLOWUP_API_TOKEN: z.string().optional(),
   /** JSON object mapping Ringover numeric agent_id to email: {"23275677":"ana@alfa.pt"} */

@@ -1,4 +1,4 @@
-/** One lead, derived from a Zoho Desk ticket. */
+/** One lead, from a Zoho Desk ticket or, for the CRM-owned channels, a Zoho CRM lead. */
 export interface LeadRow {
   id: string;
   ticketNumber: string;
@@ -17,6 +17,8 @@ export interface LeadRow {
   assigneeName: string;
   /** True while the ticket is not closed (Supervisor Virtual's copy first, Desk second). */
   aberto: boolean;
+  /** Link to the record when it is not a Desk ticket (CRM leads). */
+  url?: string;
 }
 
 /** Resolved period for the dashboard (inclusive, YYYY-MM-DD, Lisbon days). */
