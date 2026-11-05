@@ -326,7 +326,7 @@ function leadsTable(v: LeadsView, base: string): string {
       return `<tr>
         <td style="white-space:nowrap">${esc(date)}</td>
         <td><span class="chip" style="background:${r.channelColor}">${esc(r.channelLabel)}</span></td>
-        <td class="hide-mobile"><a href="${DESK_TICKET_URL(r.id)}" target="_blank" rel="noopener">${esc(r.subject || "(sem assunto)")}</a></td>
+        <td class="hide-mobile"><a href="${esc(r.url ?? DESK_TICKET_URL(r.id))}" target="_blank" rel="noopener">${esc(r.subject || "(sem assunto)")}</a></td>
         <td>${esc(r.tipo)}</td>
         <td style="white-space:nowrap">${r.assigneeId ? esc(r.assigneeName) : '<span class="pill hi">Sem responsável</span>'}</td>
         <td>${esc(r.status)}</td>

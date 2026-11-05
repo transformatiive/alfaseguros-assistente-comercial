@@ -1,7 +1,8 @@
 /**
  * Data layer for the leads dashboard. Builds a Zoho Desk client from env,
- * caches the fetched ticket window in memory for 15 min, and applies a 10s
- * timeout per Desk request. No DB — everything is live (cached) from Desk.
+ * caches the fetched window in memory for 15 min, and applies a 10s timeout
+ * per request. The ASISA / Simulador and Caravela channels come from the Zoho
+ * CRM (see crm.ts), with the Desk as the fallback when the CRM is unreachable.
  */
 import { ZohoAuth, ZohoDeskClient } from "@workspace/zoho-desk";
 import { env } from "../lib/env.js";
@@ -10,6 +11,7 @@ import { CHANNELS, isLeadOf } from "./channels.js";
 import { dayLisbon } from "./compute.js";
 import { classifyTipo } from "./tipo.js";
 import { loadTicketStates } from "../storage/repo.js";
+import { CRM_CHANNEL_KEYS, fetchCrmLeadRows } from "./crm.js";
 import type { LeadRow } from "./types.js";
 
 export const SEM_RESPONSAVEL = "Sem responsável";
@@ -88,7 +90,7 @@ export async function fetchLeads(from: string, to: string): Promise<LeadRow[]> {
   // Fetch all channels concurrently — the slowest channel sets the wall-clock,
   // instead of the sum of all of them (cold loads were ~6x slower sequentially).
   // Each channel still paginates internally; 9 in flight is within Desk limits.
-  const [perChannel, names] = await Promise.all([
+  const [perChannel, names, crmRows] = await Promise.all([
     Promise.all(
       CHANNELS.map((ch) =>
         c.searchTicketsByChannel({
@@ -107,11 +109,17 @@ export async function fetchLeads(from: string, to: string): Promise<LeadRow[]> {
       logger.warn({ err: err instanceof Error ? err.message : String(err) }, "leads.agents_failed");
       return new Map<string, string>();
     }),
+    // CRM-owned channels. null = CRM unreachable: those channels keep the Desk count.
+    fetchCrmLeadRows(from, to, SEM_RESPONSAVEL).catch((err: unknown) => {
+      logger.warn({ err: err instanceof Error ? err.message : String(err) }, "leads.crm_failed");
+      return null;
+    }),
   ]);
 
   const byId = new Map<string, LeadRow>();
   let fetched = 0;
   CHANNELS.forEach((def, i) => {
+    if (crmRows && CRM_CHANNEL_KEYS.has(def.key)) return;
     for (const t of perChannel[i]) {
       fetched++;
       // Exclude tickets whose subject contains "APRIL" (case-insensitive) right
@@ -159,8 +167,8 @@ export async function fetchLeads(from: string, to: string): Promise<LeadRow[]> {
     logger.warn({ err: err instanceof Error ? err.message : String(err) }, "leads.db_states_failed");
   }
 
-  const rows = [...byId.values()];
+  const rows = [...byId.values(), ...(crmRows ?? [])];
   cache.set(key, { rows, fetchedAtMs: Date.now() });
-  logger.info({ from, to, fetched, leads: rows.length }, "leads.fetch");
+  logger.info({ from, to, fetched, crm: crmRows ? crmRows.length : "falhou", leads: rows.length }, "leads.fetch");
   return rows;
 }
