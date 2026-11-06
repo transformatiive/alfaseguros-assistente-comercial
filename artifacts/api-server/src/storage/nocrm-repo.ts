@@ -11,6 +11,7 @@ import {
 } from "@workspace/db";
 import type { EventoParsed, LeadRow } from "../nocrm/parse.js";
 import type { AgendaR, EventoR, LeadR } from "../vida/regras.js";
+import { ligarPorNome } from "../vida/ligar-por-nome.js";
 
 /**
  * Acesso à base de dados do espelho do noCRM. Por CLAUDE.md, o único sítio
@@ -71,7 +72,7 @@ export async function gravarUsers(users: { id: number; nome: string; email: stri
 
 /**
  * Liga cada colaborador da equipa Vida ao seu utilizador do noCRM pelo email
- * (sem diferença de maiúsculas). Só preenche quem ainda não tem ligação, para
+ * (sem diferença de maiúsculas) e, se o email não bater, pelo nome. Só preenche quem ainda não tem ligação, para
  * não desfazer uma correcção feita à mão. Devolve quantos ligou.
  */
 export async function ligarColaboradoresPorEmail(): Promise<number> {
@@ -85,7 +86,34 @@ export async function ligarColaboradoresPorEmail(): Promise<number> {
        AND u.email IS NOT NULL
        AND lower(trim(c.email)) = lower(trim(u.email))
   `);
-  return r.rowCount ?? 0;
+  return (r.rowCount ?? 0) + (await ligarColaboradoresPorNome());
+}
+
+/**
+ * Para quem o email não ligou: tenta pelo primeiro e último nome (ver
+ * `vida/ligar-por-nome.ts`). Devolve quantos ligou.
+ */
+async function ligarColaboradoresPorNome(): Promise<number> {
+  const [colabs, users, ligados] = await Promise.all([
+    db
+      .select({ id: colaboradoresTable.id, nome: colaboradoresTable.nome })
+      .from(colaboradoresTable)
+      .where(and(eq(colaboradoresTable.equipa, "vida"), isNull(colaboradoresTable.nocrmUserId))),
+    db.select({ id: nocrmUsersTable.id, nome: nocrmUsersTable.nome }).from(nocrmUsersTable),
+    db
+      .select({ nocrmUserId: colaboradoresTable.nocrmUserId })
+      .from(colaboradoresTable)
+      .where(sql`${colaboradoresTable.nocrmUserId} IS NOT NULL`),
+  ]);
+  const jaLigados = new Set(ligados.map((l) => Number(l.nocrmUserId)).filter((n) => Number.isInteger(n)));
+  const pares = ligarPorNome(colabs, users, jaLigados);
+  for (const p of pares) {
+    await db
+      .update(colaboradoresTable)
+      .set({ nocrmUserId: String(p.nocrmUserId) })
+      .where(and(eq(colaboradoresTable.id, p.colaboradorId), isNull(colaboradoresTable.nocrmUserId)));
+  }
+  return pares.length;
 }
 
 export async function gravarTags(tags: { nome: string; categoria: string | null }[]): Promise<void> {
