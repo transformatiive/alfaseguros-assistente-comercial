@@ -232,8 +232,14 @@
         // Only the token is genuinely required: without it nothing can be
         // minted. The URL has a default that the manifest pins anyway.
         if (!achado.widgetToken) return null;
+        // The saved agenteAppUrl is ignored on purpose. Desk keeps the value
+        // from the first install across updates, and the field is hidden, so
+        // after the move to a new domain (30/10/2026) installs still held the
+        // dead supervisor-production-f030 address and the panel failed with
+        // "Failed to fetch". The manifest's CSP only allows this one domain
+        // anyway, so any other value could never work.
         return {
-          agenteAppUrl: achado.agenteAppUrl || BASE_POR_OMISSAO,
+          agenteAppUrl: BASE_POR_OMISSAO,
           widgetToken: achado.widgetToken,
         };
       }
