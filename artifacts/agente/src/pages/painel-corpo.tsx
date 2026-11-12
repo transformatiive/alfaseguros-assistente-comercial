@@ -4,9 +4,11 @@ import { diaPorExtenso, haQuantoTempo, hora, primeiroNome, saudacao } from "@/li
 import { agruparNaFaixa, type GrupoNaFaixa, leituraCurta, posicaoNaFaixa, primeiraTarefa, resumoDoDia, semMarcas } from "@/lib/leitura";
 import { cn } from "@/lib/utils";
 import { BlocoCoaching } from "@/pages/blocos-acoes";
+import { CaixasDoTopo } from "@/pages/caixas";
 import { AEspera, ComecaPorAqui, Feitas, GrupoPorPrazo, SemTarefas } from "@/pages/tarefas";
 import {
   agruparPorPrazo,
+  caixasDisponiveis,
   coachingDisponivel,
   estaDisponivel,
   type AgentePainel,
@@ -83,6 +85,12 @@ export function CorpoDoPainel({
       />
 
       <LeituraCurta c={coaching} motivo={semCoaching?.motivo} />
+
+      {caixasDisponiveis(painel.caixas) ? (
+        <CaixasDoTopo caixas={painel.caixas} />
+      ) : (
+        painel.caixas && <Indisponivel motivo={painel.caixas.motivo} />
+      )}
 
       {falhas.length > 0 && (
         <div className="space-y-1.5">

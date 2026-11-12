@@ -167,6 +167,8 @@ export const zohoConversaSchema = z
       .optional(),
     isDescriptionThread: z.boolean().nullable().optional(),
     visibility: z.string().nullable().optional(),
+    hasAttach: z.boolean().nullable().optional(),
+    attachmentCount: z.union([z.string(), z.number()]).nullable().optional(),
   })
   .passthrough();
 
@@ -200,6 +202,14 @@ export interface ConversaNormalizada {
    * trabalho de IA e uma decisão à parte.
    */
   texto: string | null;
+  /**
+   * O email levou anexos. Só num thread; `null` quando o Desk não disse.
+   *
+   * É o sinal de que uma simulação saiu: a equipa envia-a em anexo. As caixas
+   * de simulações do painel leem isto. Conversas gravadas antes deste campo
+   * existir não o têm, e quem as lê tem de aceitar o `undefined`.
+   */
+  temAnexo?: boolean | null;
 }
 
 function nomeDe(a: { firstName?: string | null; lastName?: string | null; name?: string | null } | null | undefined): string | null {
@@ -231,5 +241,12 @@ export function normalizarConversa(c: ZohoConversa): ConversaNormalizada {
     autorTipo: autor?.type ?? null,
     autorNome: nomeDe(autor),
     texto: (tipo === "comment" ? c.content : c.summary) ?? null,
+    temAnexo: tipo === "thread" ? temAnexo(c) : null,
   };
+}
+
+function temAnexo(c: ZohoConversa): boolean | null {
+  if (typeof c.hasAttach === "boolean") return c.hasAttach;
+  const n = Number(c.attachmentCount);
+  return Number.isFinite(n) && c.attachmentCount != null ? n > 0 : null;
 }

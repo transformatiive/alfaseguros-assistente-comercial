@@ -4,6 +4,7 @@ import { Kpi, Faixa, Narrativa, TiraDeIndicadores } from "@/components/editorial
 import { obter } from "@/lib/api";
 import { diaPorExtenso, hora, porqueMe, telefone } from "@/lib/formatos";
 import { comDia, diaPedido } from "@/lib/dia";
+import { CaixasDoTopo } from "@/pages/caixas";
 import type { Devolucao, LinhaAgente, SupervisorPainel } from "@/lib/tipos";
 
 /**
@@ -67,6 +68,8 @@ export function VistaDaEquipa({
         <Kpi valor={data?.totais.ticketsEmRisco ?? "—"} rotulo="Pedidos +24h" tom={data?.totais.ticketsEmRisco ? "aviso" : "normal"} />
         <Kpi valor={data?.totais.followUps ?? "—"} rotulo="Seguimentos" />
       </TiraDeIndicadores>
+
+      {data?.caixas && <CaixasDoTopo caixas={data.caixas} comResponsavel />}
 
       {data && <Sugestao painel={data} />}
 
@@ -168,6 +171,22 @@ function LinhaCarga({ a, max }: { a: LinhaAgente; max: number }) {
           </>
         )}
       </p>
+
+      {a.caixas && (
+        <p className="mt-0.5 t-meta tabular-nums text-stone-400">
+          Simulações: {a.caixas.simulacoesPorEnviar.total} por enviar
+          {a.caixas.simulacoesPorEnviar.vermelhas > 0 && (
+            <span className="text-[#C8372D]"> ({a.caixas.simulacoesPorEnviar.vermelhas} fora do prazo)</span>
+          )}
+          {" · "}
+          {a.caixas.simulacoesSemSeguimento.total} sem seguimento
+          {a.caixas.simulacoesSemSeguimento.vermelhas > 0 && (
+            <span className="text-[#C8372D]"> ({a.caixas.simulacoesSemSeguimento.vermelhas} fora do prazo)</span>
+          )}
+          {" · "}
+          {a.caixas.rgpdEmFalta.total} RGPD em falta · {a.caixas.contactosMarcados.total} contactos marcados
+        </p>
+      )}
 
       {a.indisponiveis.length > 0 && (
         <p className="mt-1 t-meta text-amber-700">

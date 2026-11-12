@@ -4,6 +4,8 @@ import { logger } from "../lib/logger.js";
 import { lisbonDayBoundsISO, todayLisbon } from "../lib/dates.js";
 import { computeDevolucoes } from "../painel/devolucoes.js";
 import { upsertDevolucoes } from "../storage/devolucoes-repo.js";
+import { gravarChamadasRecentes } from "../storage/chamadas-recentes-repo.js";
+import { normalizarChamada } from "../analise-chamadas/normalizar.js";
 
 /**
  * Recompute "chamadas por devolver" for one Lisbon day and persist them.
@@ -27,6 +29,22 @@ export async function refreshDevolucoes(
   const candidatos = computeDevolucoes(calls, date);
   const pendentes = candidatos.filter((c) => c.estado === "pendente").length;
   await upsertDevolucoes(candidatos);
+
+  // As mesmas chamadas, guardadas para a caixa "Simulações sem seguimento"
+  // (uma chamada atendida tira a simulação da caixa). Uma falha aqui não
+  // pode estragar as devoluções, que já estão gravadas.
+  try {
+    const vistos = new Set<string>();
+    const linhas = calls.flatMap((c) => {
+      const l = normalizarChamada(c);
+      if (!l || l.dia !== date || vistos.has(l.cdrId)) return [];
+      vistos.add(l.cdrId);
+      return [l];
+    });
+    await gravarChamadasRecentes(linhas);
+  } catch (err) {
+    logger.warn({ err, date }, "painel: não foi possível guardar as chamadas do dia");
+  }
 
   logger.info(
     { date, chamadas: calls.length, candidatos: candidatos.length, pendentes },

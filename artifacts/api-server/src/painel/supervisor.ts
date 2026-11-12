@@ -8,6 +8,7 @@ import {
   type DevolucaoPainel,
 } from "./agente.js";
 import { listDevolucoesNaoAtribuidas } from "../storage/devolucoes-repo.js";
+import { juntarCaixas, type Caixas } from "./caixas.js";
 import { sugerirRedistribuicao, cargaPonderada, PESOS, LIMIAR_SOBRECARGA, type Sugestao } from "./redistribuicao.js";
 
 /**
@@ -30,12 +31,16 @@ export interface LinhaAgente {
   jaContadasComoTicket: number;
   /** Blocks that could not be built for this agent, by name. */
   indisponiveis: string[];
+  /** Quantas linhas tem em cada caixa do topo (e quantas a vermelho). */
+  caixas: Record<keyof Caixas, { total: number; vermelhas: number }> | null;
 }
 
 export interface SupervisorPainel {
   data: string;
   totais: { devolucoes: number; ticketsEmRisco: number; followUps: number };
   agentes: LinhaAgente[];
+  /** As caixas do topo, da equipa toda: as linhas de cada pessoa juntas. */
+  caixas: Caixas;
   /**
    * Missed calls with no agent attached — nobody answered and nobody called
    * back. Kept OUT of `totais`, which is the sum of the per-agent rows and must
@@ -69,6 +74,7 @@ export async function buildSupervisorPainel(data: string): Promise<SupervisorPai
     .from(colaboradoresTable)
     .where(and(eq(colaboradoresTable.equipa, "360"), eq(colaboradoresTable.ativo, true)));
 
+  const caixasPorAgente: Caixas[] = [];
   const linhas = await Promise.all(
     equipa.map(async (colaborador: Colaborador): Promise<LinhaAgente> => {
       const { painel, erros } = await buildAgentePainel(colaborador, data);
@@ -94,6 +100,8 @@ export async function buildSupervisorPainel(data: string): Promise<SupervisorPai
       const devolucoesJaContadas = Array.isArray(painel.devolucoes)
         ? painel.devolucoes.filter((x) => x.ticketId !== null && idsEmRisco.has(x.ticketId)).length
         : 0;
+      const cx = "disponivel" in painel.caixas ? null : painel.caixas;
+      if (cx) caixasPorAgente.push(cx);
       const indisponiveis = [
         ...(d.ok ? [] : ["devolucoes"]),
         ...(t.ok ? [] : ["ticketsEmRisco"]),
@@ -111,7 +119,18 @@ export async function buildSupervisorPainel(data: string): Promise<SupervisorPai
       // devoluções. Only the LOAD drops the overlap, because load is meant to
       // measure how much work there is, not how many places it appears in.
       const carga = cargaPonderada({ ...base, devolucoes: d.n - devolucoesJaContadas });
-      return { ...base, cargaPonderada: carga, jaContadasComoTicket: devolucoesJaContadas, indisponiveis };
+      const resumo = cx
+        ? (Object.fromEntries(
+            (Object.keys(cx) as (keyof Caixas)[]).map((k) => [k, { total: cx[k].total, vermelhas: cx[k].vermelhas }]),
+          ) as Record<keyof Caixas, { total: number; vermelhas: number }>)
+        : null;
+      return {
+        ...base,
+        cargaPonderada: carga,
+        jaContadasComoTicket: devolucoesJaContadas,
+        indisponiveis,
+        caixas: resumo,
+      };
     }),
   );
 
@@ -134,6 +153,7 @@ export async function buildSupervisorPainel(data: string): Promise<SupervisorPai
       followUps: linhas.reduce((s, l) => s + l.followUps, 0),
     },
     agentes: linhas,
+    caixas: juntarCaixas(caixasPorAgente),
     naoAtribuidas,
     sugestao: sugerirRedistribuicao(linhas),
     regra: { pesos: PESOS, limiarSobrecarga: LIMIAR_SOBRECARGA },
