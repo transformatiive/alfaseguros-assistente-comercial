@@ -257,6 +257,41 @@ export interface Frescura {
   analise: { data: string; quando: string } | null;
 }
 
+/* ── Caixas do topo: simulações, RGPD, contactos marcados ───────────────── */
+
+export interface LinhaCaixa {
+  ticketId: string;
+  ticketNumero: string | null;
+  assunto: string | null;
+  cliente: string | null;
+  telefone: string | null;
+  responsavel: string | null;
+  desde: string;
+  horas: number;
+  vermelha: boolean;
+  nota: string;
+  deskUrl: string;
+}
+
+export interface Caixa {
+  total: number;
+  vermelhas: number;
+  linhas: LinhaCaixa[];
+}
+
+export interface Caixas {
+  simulacoesPorEnviar: Caixa;
+  simulacoesSemSeguimento: Caixa;
+  rgpdEmFalta: Caixa;
+  contactosMarcados: Caixa;
+}
+
+export type ChaveCaixa = keyof Caixas;
+
+export function caixasDisponiveis(c: Caixas | BlocoIndisponivel | undefined): c is Caixas {
+  return !!c && !("disponivel" in c);
+}
+
 export interface AgentePainel {
   colaborador: { id: number; nome: string; papel: string; equipa: string };
   data: string;
@@ -273,6 +308,8 @@ export interface AgentePainel {
   frescura?: Frescura;
   /** Always unavailable today — scheduling lives in the CRM, which is not connected. */
   agendamentos: BlocoIndisponivel;
+  /** As caixas do topo. Ausente num servidor antigo. */
+  caixas?: Caixas | BlocoIndisponivel;
   atualizadoEm: string;
 }
 
@@ -285,12 +322,14 @@ export interface LinhaAgente {
   cargaPonderada: number;
   jaContadasComoTicket: number;
   indisponiveis: string[];
+  caixas?: Record<ChaveCaixa, { total: number; vermelhas: number }> | null;
 }
 
 export interface SupervisorPainel {
   data: string;
   totais: { devolucoes: number; ticketsEmRisco: number; followUps: number };
   agentes: LinhaAgente[];
+  caixas?: Caixas;
   naoAtribuidas: Bloco<Devolucao>;
   sugestao: {
     de: { colaboradorId: number; nome: string } | null;

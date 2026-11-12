@@ -85,6 +85,14 @@ describe("normalizarConversa", () => {
     expect(normalizarConversa(threadSemTipo).tipo).toBe("thread");
   });
 
+  it("guarda se o email levou anexos (é assim que a simulação sai)", () => {
+    expect(normalizarConversa({ ...THREAD_SAIDA, hasAttach: true }).temAnexo).toBe(true);
+    expect(normalizarConversa({ ...THREAD_SAIDA, hasAttach: false, attachmentCount: "0" }).temAnexo).toBe(false);
+    expect(normalizarConversa({ ...THREAD_SAIDA, attachmentCount: "6" }).temAnexo).toBe(true);
+    expect(normalizarConversa({ id: "y", type: "thread" }).temAnexo).toBeNull();
+    expect(normalizarConversa(COMENTARIO).temAnexo).toBeNull();
+  });
+
   it("um autor sem nome composto não inventa um nome", () => {
     const c = normalizarConversa({ id: "x", type: "thread", author: { type: "AGENT" } });
     expect(c.autorNome).toBeNull();

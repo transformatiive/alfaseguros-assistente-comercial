@@ -29,6 +29,8 @@ import {
   type TarefaFechada,
 } from "./tarefas.js";
 import { carregarContactos } from "./contactos.js";
+import { carregarCaixas } from "./caixas-query.js";
+import type { Caixas } from "./caixas.js";
 import { carregarEvidencias } from "./evidencia-query.js";
 import {
   carregarContextoDosFollowUps,
@@ -168,6 +170,11 @@ export interface AgentePainel {
   coaching: Coaching | BlocoIndisponivel;
   /** Os dois relógios: a sincronização frequente e a última leitura de conversas. */
   frescura: Frescura;
+  /**
+   * As caixas do topo: simulações por enviar, simulações sem seguimento,
+   * RGPD em falta e contactos marcados nos comentários. Ver `caixas.ts`.
+   */
+  caixas: Caixas | BlocoIndisponivel;
   /**
    * Always a `BlocoIndisponivel`, never an empty array. Scheduling data lives
    * in the CRM, and the CRM 360 migration has not happened — the UI must be
@@ -333,7 +340,7 @@ export async function buildAgentePainel(
 ): Promise<{ painel: AgentePainel; erros: unknown[] }> {
   const cfg = env();
 
-  const [devolucoesR, ticketsR, followUpsR, acoesR, coachingR, frescuraR, conversasR] =
+  const [devolucoesR, ticketsR, followUpsR, acoesR, coachingR, frescuraR, conversasR, caixasR] =
     await Promise.allSettled([
     listDevolucoesPendentes(colaborador.id, data),
 
@@ -376,10 +383,12 @@ export async function buildAgentePainel(
     colaborador.ringoverUserId
       ? teveConversas({ ringoverUserId: colaborador.ringoverUserId, data })
       : Promise.resolve(false),
+
+    colaborador.zid ? carregarCaixas(colaborador.zid) : Promise.resolve(null),
   ]);
 
   const erros: unknown[] = [];
-  for (const r of [devolucoesR, ticketsR, followUpsR, acoesR, coachingR]) {
+  for (const r of [devolucoesR, ticketsR, followUpsR, acoesR, coachingR, caixasR]) {
     if (r.status === "rejected") erros.push(r.reason);
   }
 
@@ -482,6 +491,12 @@ export async function buildAgentePainel(
       agendamentos: indisponivel(
         "Os agendamentos ainda não estão disponíveis — vivem no CRM, que ainda não está ligado a este painel.",
       ),
+      caixas:
+        caixasR.status === "rejected"
+          ? indisponivel("Não foi possível carregar as caixas de simulações e RGPD.")
+          : caixasR.value === null
+            ? indisponivel("Ainda não está associado a uma conta do Zoho Desk. Fala com o Nuno para ficar ligado.")
+            : caixasR.value,
       atualizadoEm: new Date().toISOString(),
       frescura:
         frescuraR.status === "fulfilled"
